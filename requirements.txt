@@ -2,3 +2,4 @@ django==3.2.6
 djangorestframework==3.12.4
 django-debug-toolbar==3.2.1
 memcache==0.8.0
+deepface==0.0.67

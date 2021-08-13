@@ -8,6 +8,7 @@ import subprocess
 from datetime import datetime
 from typing import List
 import os
+from .detector import get_age_ethnic
 
 
 def repackage(path: Path):
@@ -124,7 +125,6 @@ def generate_thumbnail(
             thumbnail_ss = int(vid_duration / 2)
         else:
             thumbnail_ss = 5
-        print(f"ss: {thumbnail_ss}")
         process = subprocess.Popen(
             [
                 "ffmpeg",
@@ -152,17 +152,23 @@ def generate_thumbnail(
             stderr=subprocess.PIPE,
         )
         process.wait()
-        ffmpeg.input(video, ss=20).filter("scale", width, -1).output(
-            out_path, vframes=1
-        ).overwrite_output().run(capture_stdout=True, capture_stderr=True)
     return out_filename
 
 
-def add_labels(video_row: Videos, labels: List[Labels], video_path: Path):
+def add_labels_by_path(video_row: Videos, labels: List[Labels], video_path: Path):
     for part in video_path.parts:
         for label in labels:
             if label.label.lower() in part.lower():
                 video_row.labels.add(label)
+
+
+def add_additional_labels(video_data: dict, video_row: Videos, race: str = None):
+    if video_data["dim_height"] >= 720:
+        hd_label = Labels.objects.filter(label="HD").first()
+        video_row.labels.add(hd_label)
+    if race:
+        race_label = Labels.objects.filter(label=race.lower()).first()
+        video_row.labels.add(race_label)
 
 
 def process_videos(thumbnail_dir, preview_dir):
@@ -197,7 +203,10 @@ def process_videos(thumbnail_dir, preview_dir):
                 video_row.preview = generate_preview(video, frames, preview_dir)
                 video_row.processed = True
                 video_row.save()
-                add_labels(video_row, labels, video)
+                age, race = get_age_ethnic(preview_dir / video_row.preview)
+                add_labels_by_path(video_row, labels, video)
+                add_additional_labels(video_data, video_row, race)
+                video_row.actor_age = age
                 video_row.save()
                 return {"finished": False, "video": last_video}
             else:

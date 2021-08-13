@@ -24,6 +24,7 @@ class Videos(models.Model):
     favorite = models.BooleanField(default=False)
     labels = models.ManyToManyField(Labels)
     inserted_at = models.DateField(default=django.utils.timezone.now)
+    actor_age = models.IntegerField(null=True)
 
 
 class Images(models.Model):
