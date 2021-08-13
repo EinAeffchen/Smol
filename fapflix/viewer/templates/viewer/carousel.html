@@ -1,0 +1,76 @@
+{% load static %}
+{% load custom_filters %}
+<h2 class='rowHeader'>
+    <span class='rowTitle'>
+        <div class="row-header-title">
+            {{ title }}
+        </div>
+    </span>
+</h2>
+<div id="{{id}}" class="carousel slide carousel-fade">
+    {% if result_videos|length > 0 %}
+    <div class="carouselSW-inner">
+        <div class="carouselSW-item">
+            <div id='carouselSW-container-{{id}}' class="carouselSW-container">
+                {% for video in result_videos %}
+                <div id='carouselSW-content-{{id}}' class="imgSW-preview">
+                    <a href="{% url 'viewer:video' video.id %}">
+                        <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
+                            preview="{% static 'viewer/images/previews/' %}{{video.preview}}"
+                            thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
+                            class="car-preview-img video-preview" dataframes="100" name='preview-{{video.id}}'
+                            alt="{{video.filename}}" style="width:100%;">
+                    </a>
+                    <div class="img-overlay">
+                        <p>{{video.filename|truncatechars:35}}</p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        <a class="carousel-control-prev" car_id="{{id}}" id="prev-{{id}}" page=0>
+            <span class="carousel-control-prev-icon" aria-hidden="true"></span>
+            <span class="sr-only">Previous</span>
+        </a>
+        <a class="carousel-control-next" car_id="{{id}}" id="next-{{id}}" page=0>
+            <span class="carousel-control-next-icon" aria-hidden="true"></span>
+            <span class="sr-only">Next</span>
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+{% block script %}
+<script type="text/javascript">
+    var width = 0;
+    $(document).ready(function () {
+        $(".imgSW-preview").off("mouseenter").on("mouseenter", function () {
+            var self = this.querySelector("img");
+            console.log(self)
+            frames = parseFloat(self.attributes.dataframes.nodeValue);
+            self.src = self.attributes.preview.nodeValue;
+            width = self.width;
+            var i = 1;
+            self.style.left = -i * width;
+            self.style.width = self.width * frames + 50;
+            self.style.position = "absolute";
+            self.style.overflow = "hidden";
+            iid = setInterval(function () {
+                if (i == frames) {
+                    i = 1;
+                }
+                self.style.left = -i * width;
+                i = i + 1;
+            }, 250);
+            console.log(iid);
+        }).off("mouseleave").on("mouseleave", function () {
+            var self = this.querySelector("img");
+            iid && clearInterval(iid);
+            self.style.position = "relative";
+            self.style.width = "100%";
+            self.style.left = null;
+            self.src = self.attributes.thumbnail.nodeValue;
+        });
+    });
+</script>
+{% endblock %}

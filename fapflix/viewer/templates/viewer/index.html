@@ -1,0 +1,9 @@
+{% extends 'viewer/base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    {% include "viewer/carousel.html" with id="carousel1" title="Best Rating:" result_videos=result_videos1 %}
+    {% include "viewer/carousel.html" with id="carousel2" title="Newest:" result_videos=result_videos2 %}
+    {% include "viewer/carousel.html" with id="carousel3" title="Favorites:" result_videos=result_videos3 %}
+</div>
+{% endblock %}

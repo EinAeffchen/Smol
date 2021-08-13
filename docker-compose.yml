@@ -1,0 +1,20 @@
+version: "3.2"
+services:
+  postgres:
+    container_name: postgresql
+    hostname: postgresql
+    image: postgres:13.3-alpine
+    environment:
+      - POSTGRES_DB=fapflix
+      - POSTGRES_HOST_AUTH_METHOD=trust
+    ports:
+      - "5432:5432"
+    volumes:
+      - type: bind
+        source: db-data
+        target: /var/lib/postgresql/data
+    shm_size: '1gb'
+    restart: always
+
+volumes: 
+  db-data:
