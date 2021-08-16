@@ -9,6 +9,7 @@ class Labels(models.Model):
     class Meta:
         ordering = ["label"]
 
+
 class Videos(models.Model):
     path = models.TextField(unique=True)
     filename = models.TextField()
@@ -43,3 +44,18 @@ class Images(models.Model):
     favorite = models.BooleanField()
     inserted_at = models.DateField(default=django.utils.timezone.now)
     labels = models.ManyToManyField(Labels)
+
+
+class Actors(models.Model):
+    forename = models.TextField()
+    surname = models.TextField()
+    birth_year = models.IntegerField()
+    nationality = models.TextField()
+    labels = models.ManyToManyField(Labels)
+    videos = models.ManyToManyField(Videos)
+    images = models.ManyToManyField(Images)
+    avatar = models.TextField(unique=True)
+
+    def age(self):
+        today = datetime.now().date()
+        return today.year-self.birth_year
