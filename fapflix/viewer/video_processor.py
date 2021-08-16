@@ -8,6 +8,7 @@ import subprocess
 from datetime import datetime
 from typing import List
 import os
+import cv2
 from .detector import get_age_ethnic
 
 
@@ -82,10 +83,29 @@ def read_video_info(path: Path) -> dont_write_bytecode:
     return video_data
 
 
-def generate_preview(path: Path, frames: int, preview_dir: Path) -> Path:
-    nth_frame = int(int(frames) / 100)
+def calculate_distance(width: int, height: int) -> int:
+    ratio = width / height
+    tgt_height = 380
+    tgt_width = int(tgt_height * ratio)
+    print(f"tgt width: {tgt_width}")
+    padding = (582 - tgt_width)
+    print(f"Padding: {padding}")
+    if padding <0:
+        return 0
+    return padding/2
+
+
+def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) -> Path:
+    nth_frame = int(int(frames) / 50)
     out_filename = f"{path.stem}.png"
     out_path = preview_dir / out_filename
+    dist = calculate_distance(width, height)
+    if nth_frame > 25:
+        nth_frame = 25
+    if dist > 0:
+        pad = f",pad=582:390:{dist}:0:black"
+    else:
+        pad = ""
     if not out_path.is_file():
         process = subprocess.Popen(
             [
@@ -104,7 +124,7 @@ def generate_preview(path: Path, frames: int, preview_dir: Path) -> Path:
                 "-c:v",
                 "mjpeg",
                 "-vf",
-                f"select=not(mod(n\,{nth_frame})),scale=-1:240,tile=100x1",
+                f"select=not(mod(n\,{nth_frame})),scale=-1:380:force_original_aspect_ratio=decrease{pad},tile=50x1",
                 str(out_path),
             ],
             stdout=subprocess.PIPE,
@@ -115,9 +135,7 @@ def generate_preview(path: Path, frames: int, preview_dir: Path) -> Path:
     return out_filename
 
 
-def generate_thumbnail(
-    video: Path, width: int, thumbnail_dir: Path, vid_duration: int
-) -> Path:
+def generate_thumbnail(video: Path, thumbnail_dir: Path, vid_duration: int) -> Path:
     out_filename = f"{video.stem}.png"
     out_path = thumbnail_dir / out_filename
     if not out_path.is_file():
@@ -140,12 +158,12 @@ def generate_thumbnail(
                 "-frames",
                 "1",
                 "-q:v",
-                "5",
+                "0",
                 "-an",
                 "-c:v",
                 "mjpeg",
                 "-vf",
-                "scale=-1:240",
+                "scale=-2:380:force_original_aspect_ratio=increase",
                 str(out_path),
             ],
             stdout=subprocess.PIPE,
@@ -198,17 +216,24 @@ def process_videos(thumbnail_dir, preview_dir):
                 frames = video_data.pop("frames")
                 video_row = Videos(**video_data)
                 video_row.thumbnail = generate_thumbnail(
-                    video, 480, thumbnail_dir, video_data["duration"]
+                    video, thumbnail_dir, video_data["duration"]
                 )
-                video_row.preview = generate_preview(video, frames, preview_dir)
+                video_row.preview = generate_preview(
+                    video,
+                    frames,
+                    preview_dir,
+                    video_data["dim_width"],
+                    video_data["dim_height"],
+                )
                 video_row.processed = True
                 video_row.save()
-                age, race = get_age_ethnic(preview_dir / video_row.preview)
+                try:
+                    age, race = get_age_ethnic(preview_dir / video_row.preview)
+                    add_additional_labels(video_data, video_row, race)
+                    video_row.actor_age = age
+                except cv2.error as e:
+                    print("Couldn't detect age and race due to {e}")
                 add_labels_by_path(video_row, labels, video)
-                add_additional_labels(video_data, video_row, race)
-                video_row.actor_age = age
                 video_row.save()
                 return {"finished": False, "video": last_video}
-            else:
-                print(f"{video} already in db!")
     return {"finished": True}
