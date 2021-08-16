@@ -13,6 +13,7 @@ urlpatterns = [
     path("load/", views.DataLoader.as_view(), name="load"),
     path("loadData/", views.load_data, name="load-data"),
     path("rateVideo/", views.rate_video, name="rate-video"),
+    path("changeAge/", views.change_age, name="change-age"),
     path("remfav/<int:videoid>", views.rem_favorite, name="rem_favorites"),
     path("remvid/<int:videoid>", views.rem_video, name="rem_video"),
     path("search/", views.SearchView.as_view(), name="search"),
