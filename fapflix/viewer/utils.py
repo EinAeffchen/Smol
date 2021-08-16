@@ -8,7 +8,7 @@ def split_image(path: Path, parts: int = 100):
     images = []
     im = Image.open(path)
     imgwidth, imgheight = im.size
-    crop_width = int(imgwidth / 100)
+    crop_width = int(imgwidth / parts)
     for i in range(0, imgwidth-crop_width, crop_width):
         box = (i, 0, i+crop_width, imgheight)
         a = im.crop(box)
