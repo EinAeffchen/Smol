@@ -502,5 +502,26 @@
       "fields": {
         "label": "nudist"
       }
+    },
+    {
+      "model": "viewer.labels",
+      "pk": 72,
+      "fields": {
+        "label": "brunette"
+      }
+    },
+    {
+      "model": "viewer.labels",
+      "pk": 73,
+      "fields": {
+        "label": "blonde"
+      }
+    },
+    {
+      "model": "viewer.labels",
+      "pk": 74,
+      "fields": {
+        "label": "black hair"
+      }
     }
   ]
