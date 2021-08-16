@@ -45,12 +45,18 @@ class IndexView(generic.ListView):
             videos = videos.filter(dim_height__gte=context["quality"])
         # Add in a QuerySet of all the videos
         if context["order"]:
-            if context["order"] == "quality":
+            if context["order"] == "quality asc":
+                order = "dim_height"
+            elif context["order"] == "quality desc":
                 order = "-dim_height"
-            if context["order"] == "age":
+            elif context["order"] == "age asc":
                 order = "actor_age"
-            else:
-                order = context["order"]
+            elif context["order"] == "age desc":
+                order = "-actor_age"
+            elif context["order"] == "duration asc":
+                order = "duration"
+            elif context["order"] == "duration desc":
+                order = "-duration"
             rating_order = (order, "-rating")
             inserted_order = (order, "-inserted_at")
         else:
