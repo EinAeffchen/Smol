@@ -32,9 +32,12 @@
             <div class="form__group col-lg-1 col-md-12  field">
                 <label for="order" class="form__label">Order</label>
                 <select id="video-filter-order" class="video-filter-obj form__field" name="order" value="{{order}}">
-                    <option {% if order == "duration" %} selected {% endif %}>duration</option>
-                    <option {% if order == "quality" %} selected {% endif %}>quality</option>
-                    <option {% if order == "age" %} selected {% endif %}>age</option>
+                    <option {% if order == "duration asc" %} selected {% endif %}>duration asc</option>
+                    <option {% if order == "duration desc" %} selected {% endif %}>duration desc</option>
+                    <option {% if order == "quality asc" %} selected {% endif %}>quality asc</option>
+                    <option {% if order == "quality desc" %} selected {% endif %}>quality desc</option>
+                    <option {% if order == "age asc" %} selected {% endif %}>age asc</option>
+                    <option {% if order == "age desc" %} selected {% endif %}>age desc</option>
                 </select>
             </div>
             <div class="col-lg-2">
