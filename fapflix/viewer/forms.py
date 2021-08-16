@@ -12,4 +12,4 @@ class FilterForm(forms.Form):
     filter_videos = forms.ChoiceField(choices=FILTERS)
 
 class LabelForm(forms.Form):
-    label = forms.CharField(label="Label",widget=forms.TextInput(attrs={'placeholder': 'Add'}), max_length=100)
+    label = forms.CharField(label="Label", max_length=100)
