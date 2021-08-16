@@ -9,25 +9,36 @@
 </h2>
 <div id="{{id}}" class="carousel slide carousel-fade">
     {% if result_videos|length > 0 %}
-    <div class="carouselSW-inner">
+    <div class="carouselSW-inner hide-scrollbar">
         <div class="carouselSW-item">
-            <div id='carouselSW-container-{{id}}' class="carouselSW-container">
+            <div id='carouselSW-container-{{id}}' class="carouselSW-container hide-scrollbar">
                 {% for video in result_videos %}
                 <div id='carouselSW-content-{{id}}' class="imgSW-preview">
                     <a href="{% url 'viewer:video' video.id %}">
                         <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
                             preview="{% static 'viewer/images/previews/' %}{{video.preview}}"
                             thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
-                            class="car-preview-img video-preview" dataframes="100" name='preview-{{video.id}}'
+                            class="car-preview-img video-preview" dataframes="50" name='preview-{{video.id}}'
                             alt="{{video.filename}}" style="width:100%;">
                     </a>
                     <div class="img-overlay">
                         <p>{{video.filename|truncatechars:35}}</p>
                     </div>
+                    <div class="info-overlay">
+
+                        {% if video.actor_age %}
+                        <div class="age">{{video.actor_age}}yrs</div>
+                        {% endif %}
+                        <div class="duration">duration: {{video.duration|human_duration}}</div>
+                        <div class="quality">{{video.dim_height}}p</div>
+                        <div class="rating">{{video.rating}}<i class="far fa-star"></i></div>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
         </div>
+
+        {% if result_videos|length > 6 %}
         <a class="carousel-control-prev" car_id="{{id}}" id="prev-{{id}}" page=0>
             <span class="carousel-control-prev-icon" aria-hidden="true"></span>
             <span class="sr-only">Previous</span>
@@ -36,6 +47,9 @@
             <span class="carousel-control-next-icon" aria-hidden="true"></span>
             <span class="sr-only">Next</span>
         </a>
+        {% endif %}
+
+
     </div>
     {% endif %}
 </div>
@@ -48,11 +62,11 @@
             var self = this.querySelector("img");
             console.log(self)
             frames = parseFloat(self.attributes.dataframes.nodeValue);
-            self.src = self.attributes.preview.nodeValue;
             width = self.width;
+            self.src = self.attributes.preview.nodeValue;
             var i = 1;
             self.style.left = -i * width;
-            self.style.width = self.width * frames + 50;
+            self.style.width = self.width * frames;
             self.style.position = "absolute";
             self.style.overflow = "hidden";
             iid = setInterval(function () {
@@ -61,7 +75,7 @@
                 }
                 self.style.left = -i * width;
                 i = i + 1;
-            }, 250);
+            }, 350);
             console.log(iid);
         }).off("mouseleave").on("mouseleave", function () {
             var self = this.querySelector("img");

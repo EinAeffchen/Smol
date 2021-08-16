@@ -39,42 +39,37 @@
                     </select>
                 </div>
             </div>
-            <div class="row justify-content-between">
+            <div class="row justify-content-between video-infos">
                 <div class="col-lg-2 no-padding-left">
-                    <a class='btn btn-danger' id='rem-vid' onclick=remvid(this) href="/">Delete File <i
-                            class="fas fa-trash"></i></i></a>
+                    <a class='btn btn-danger video-info-obj' id='rem-vid' onclick=remvid(this) href="/">
+                        <span>Delete File</span> <i class="fas fa-trash"></i></i></a>
                 </div>
                 <div class="col-lg-1">
                     {% if video.favorite %}
-                    <a class='btn btn-danger float-left' id='rem-fav' onclick=remfav(this)><i
+                    <a class='btn btn-danger float-left video-info-obj' id='rem-fav' onclick=remfav(this)><i
                             class="fas fa-heart"></i></a>
                     {% else %}
-                    <a class='btn btn-danger float-left' id='add-fav' onclick=addfav(this)><i
+                    <a class='btn btn-danger float-left video-info-obj' id='add-fav' onclick=addfav(this)><i
                             class="far fa-heart"></i></a>
                     {% endif %}
                 </div>
-                <div class="col-lg-4 offset-lg-5">
-                    <div class="text-center float-right">
-                        <fieldset class="rating"> <input type="radio" id="star5" name="rating" value="5" /><label
-                                class="full" for="star5" title="Awesome - 5 stars"></label> <input type="radio"
-                                id="star4half" name="rating" value="4.5" /><label class="half" for="star4half"
-                                title="Pretty good - 4.5 stars"></label> <input type="radio" id="star4" name="rating"
-                                value="4" /><label class="full" for="star4" title="Pretty good - 4 stars"></label>
-                            <input type="radio" id="star3half" name="rating" value="3.5" /><label class="half"
-                                for="star3half" title="Meh - 3.5 stars"></label> <input type="radio" id="star3"
-                                name="rating" value="3" /><label class="full" for="star3" title="Meh - 3 stars"></label>
-                            <input type="radio" id="star2half" name="rating" value="2.5" /><label class="half"
-                                for="star2half" title="Kinda bad - 2.5 stars"></label> <input type="radio" id="star2"
-                                name="rating" value="2" /><label class="full" for="star2"
-                                title="Kinda bad - 2 stars"></label> <input type="radio" id="star1half" name="rating"
-                                value="1.5" /><label class="half" for="star1half" title="Meh - 1.5 stars"></label>
-                            <input type="radio" id="star1" name="rating" value="1" /><label class="full" for="star1"
-                                title="Sucks big time - 1 star"></label> <input type="radio" id="starhalf" name="rating"
-                                value="0.5" /><label class="half" for="starhalf"
-                                title="Sucks big time - 0.5 stars"></label> <input type="radio" class="reset-option"
-                                name="rating" value="reset" />
-                        </fieldset>
-                    </div>
+                <div class="col-lg-1 form__group field" style="margin-top:0;">
+                    <label for="age" class="form__label">Age</label>
+                    <input id="video-info-age" class="video-filter-obj form__field" type="number" size="6" name="age"
+                        max="99" value="{{age}}">
+                </div>
+                <div class="col-lg-4 offset-lg-4">
+                    <fieldset class="rating">
+                        <input type="radio" id="star5" name="rating" value="5" /><label for="star5"
+                            title="Hot!"></label>
+                        <input type="radio" id="star4" name="rating" value="4" /><label for="star4"
+                            title="Pretty good"></label>
+                        <input type="radio" id="star3" name="rating" value="3" /><label for="star3" title="Meh"></label>
+                        <input type="radio" id="star2" name="rating" value="2" /><label for="star2"
+                            title="Kinda bad"></label>
+                        <input type="radio" id="star1" name="rating" value="1" /><label for="star1"
+                            title="Sucks big time"></label>
+                    </fieldset>
                 </div>
             </div>
 
@@ -103,8 +98,7 @@
         </div>
         {% if recommendations|length >= 14 %}
         <div>
-            {% include "viewer/Carousel.html" with id="carousel1" title="Further recommendations:"
-            result_videos=recommendations|slice:"8:32" %}
+            {% include "viewer/carousel.html" with id="carousel1" result_videos=recommendations|slice:"8:32" %}
         </div>
         {% endif %}
         {% else %}
@@ -128,7 +122,7 @@
         </div>
         {% if rvideos|length >= 14 %}
         <div>
-            {% include "search/Carousel.html" with id="carousel1" title="Further recommendations:"
+            {% include "search/carousel.html" with id="carousel1" title="Further recommendations:"
             result_videos=rvideos|slice:"8:32" %}
         </div>
         {% endif %}
@@ -179,18 +173,20 @@
     }
     $(document).ready(function () {
         rating_val = parseFloat("{{video.rating}}")
-        if (rating_val>0) {
+        if (rating_val > 0) {
             if (rating_val % 1 != 0) {
                 final = "half";
                 rating_val = parseInt(rating_val);
             } else {
                 final = "";
             }
-            rat_selector = "#star"+rating_val+final;
+            rat_selector = "#star" + rating_val + final;
             $(rat_selector).prop("checked", true);
         }
-        $(".full, .half").on("click", function () {
-            rating = $(this).prev().val();
+        $(".rating input").on("click", function () {
+            rating = $(this).val();
+            console.log(rating)
+            console.log(this)
             $.ajax({
                 url: "{% url 'viewer:rate-video' %}",
                 method: "POST",
@@ -200,6 +196,18 @@
                 }
             })
         });
+        document.getElementById("video-info-age").onchange = function () {
+            age = $(this).val();
+            console.log(age)
+            $.ajax({
+                url: "{% url 'viewer:change-age' %}",
+                method: "POST",
+                data: {
+                    age: age,
+                    video_id: "{{video.id}}"
+                }
+            })
+        };
         document.getElementById("label-choice").onchange = function () {
             var chosen_label = $(this).val();
             $.ajax({

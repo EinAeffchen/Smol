@@ -1,9 +1,66 @@
 {% extends 'viewer/base.html' %}
-
+{% load custom_filters %}
 {% block content %}
 <div class="container-fluid">
+    <form action="/">
+        <div class="row">
+
+            <div class="col-lg-1  form__group field">
+                <label for="age" class="form__label">Age</label>
+                <input id="video-filter-age" class="video-filter-obj form__field" type="number" size="6" name="age"
+                    max="99" value="{{age}}">
+            </div>
+            <div class="form__group col-lg-1  field">
+                <label for="quality" class="form__label">Quality</label>
+                <select id="video-filter-quality" class="video-filter-obj form__field" name="quality"
+                    value="{{quality}}">
+                    <option {% if quality == "480" %} selected {% endif %}>480</option>
+                    <option {% if quality == "720" %} selected {% endif %}>720</option>
+                    <option {% if quality == "1080" %} selected {% endif %}>1080</option>
+                    <option {% if quality == "2160" %} selected {% endif %}>2160</option>
+                </select>
+            </div>
+            <div class="form__group col-lg-1 col-md-12 video-filter-duration  field">
+                <label for="h" class="form__label">Duration</label>
+                <input id='h' name='h' type='number' class="form__field video-filter-obj" min='0' max='24'
+                    value="{{duration|hours}}">
+                <label for='h'>h</label>
+                <input id='m' name='m' type='number' class="form__field video-filter-obj" min='0' max='59'
+                    value="{{duration|minutes}}">
+                <label for='m'>m</label>
+            </div>
+            <div class="form__group col-lg-1 col-md-12  field">
+                <label for="order" class="form__label">Order</label>
+                <select id="video-filter-order" class="video-filter-obj form__field" name="order" value="{{order}}">
+                    <option {% if order == "duration" %} selected {% endif %}>duration</option>
+                    <option {% if order == "quality" %} selected {% endif %}>quality</option>
+                    <option {% if order == "age" %} selected {% endif %}>age</option>
+                </select>
+            </div>
+            <div class="col-lg-2">
+                <button type="submit" class="nflx-button">
+                    <div class="nflx-button-icon"><i class="fas fa-filter"></i></div>
+                    <div style="width: 1rem;"></div>
+                    <span class="nflx-button-text">Filter</span>
+                </button>
+            </div>
+        </div>
+    </form>
+    {% if result_videos1 %}
     {% include "viewer/carousel.html" with id="carousel1" title="Best Rating:" result_videos=result_videos1 %}
+    {% endif %}
+    {% if result_videos2 %}
     {% include "viewer/carousel.html" with id="carousel2" title="Newest:" result_videos=result_videos2 %}
+    {% endif %}
+    {% if result_videos3 %}
     {% include "viewer/carousel.html" with id="carousel3" title="Favorites:" result_videos=result_videos3 %}
+    {% endif %}
+
+
+
+    {% for key, dataset in label_videos.items %}
+    {% include "viewer/carousel.html" with id="carousel1" title=key result_videos=dataset %}
+    {% endfor %}
+
 </div>
 {% endblock %}

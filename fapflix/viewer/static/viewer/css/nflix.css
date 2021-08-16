@@ -1,6 +1,21 @@
+:root {
+    --primary: #a5070f;
+    --secondary: #e50914;
+    --white: #fff;
+    --gray: #9b9b9b;
+}
+
 html {
     scroll-behavior: smooth;
     font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}
+
+.hide-scrollbar {
+    overflow: auto;
+    -ms-overflow-style: none;
+    /* IE 11 */
+    scrollbar-width: none;
+    /* Firefox 64 */
 }
 
 .footer-title {
@@ -118,6 +133,65 @@ h2 {
     margin: 0 0 50px 0;
 }
 
+.form__group {
+    position: relative;
+    padding: 15px 0 0;
+}
+
+.form__field {
+    font-family: inherit;
+    width: 90%;
+    border: 0;
+    border-bottom: 2px solid var(--gray);
+    outline: 0;
+    font-size: 1.3rem;
+    color: var(--white);
+    padding: 7px 0;
+    background: transparent;
+    transition: border-color 0.2s;
+}
+
+.form__field::placeholder {
+    color: transparent;
+}
+
+.form__field:placeholder-shown~.form__label {
+    font-size: 1.3rem;
+    cursor: text;
+    top: 20px;
+}
+
+.form__field:focus {
+    padding-bottom: 6px;
+    font-weight: 700;
+    border-width: 3px;
+    border-image: linear-gradient(to right, var(--primary), var(--secondary));
+    border-image-slice: 1;
+}
+
+.form__field:focus~.form__label {
+    position: absolute;
+    top: 0;
+    display: block;
+    transition: 0.2s;
+    font-size: 1rem;
+    color: var(--primary);
+    font-weight: 700;
+}
+
+.form__field:required, .form__field:invalid {
+    box-shadow: none;
+}
+
+.form__label {
+    position: absolute;
+    top: 0;
+    display: block;
+    transition: 0.2s;
+    font-size: 1rem;
+    color: var(--gray);
+}
+
 /* New Carousel for swipe  */
 
 .carouselSW-container {
@@ -134,12 +208,17 @@ h2 {
     min-width: 16%;
     width: 16%;
     /* max-height: 190px; */
-    padding: 0 2px;
-    margin: 0 2px;
+    margin: 0 10px;
     cursor: pointer;
     height: 190px;
     background-color: black;
     overflow: hidden;
+    position: relative;
+}
+
+.video-filter-duration input {
+    font: inherit;
+    width: 4ch;
 }
 
 .video-block {
@@ -150,11 +229,16 @@ h2 {
     margin-bottom: 20px;
 }
 
+.search .form__field {
+    width: 70%;
+}
+
 .carouselSW-item .imgSW-preview:hover~.imgSW-preview {
     transform: translate3d(35px, 0, 0);
     transition-duration: 400ms;
     transition-delay: 40ms;
     z-index: 0;
+    ;
 }
 
 .carouselSW-item .imgSW-preview:hover {
@@ -222,7 +306,7 @@ h2 {
 }
 
 .delete-icon {
-    margin-left: 17px;
+    align-self: center;
 }
 
 .datablock-data {
@@ -247,6 +331,44 @@ h2 {
     transform: translate(-50%, -80%);
     background-image: linear-gradient(to bottom, rgba(0, 0, 0, 0), rgba(0, 0, 0, 1.5));
     display: none;
+}
+
+.info-overlay:hover {
+    display: none;
+}
+
+.info-overlay {
+    position: relative;
+    transform: translate(-0%, -100%);
+}
+
+.info-overlay .rating {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+}
+
+.info-overlay .duration {
+    position: absolute;
+    bottom: 20;
+    right: 0;
+}
+
+.info-overlay .age {
+    position: absolute;
+    bottom: 20;
+    left: 0;
+}
+
+.info-overlay .quality {
+    position: absolute;
+    bottom: 0;
+    right: 0;
+}
+
+.info-overlay p {
+    max-height: 30px;
+    background-color: rgba(0, 0, 0, 0.5);
 }
 
 .img-overlay p {
@@ -399,28 +521,96 @@ a {
     background: #141414;
 }
 
+.nflx-button {
+    background-color: white;
+    color: black;
+    -moz-box-align: center;
+    align-items: center;
+    appearance: none;
+    border: 0px none;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    -moz-box-pack: center;
+    justify-content: center;
+    opacity: 1;
+    padding: 0.8rem;
+    padding-right: 0.8rem;
+    padding-left: 0.8rem;
+    position: relative;
+    user-select: none;
+    will-change: background-color, color;
+    word-break: break-word;
+    white-space: nowrap;
+}
+
+.nflx-button:focus {
+    outline: currentColor none medium;
+}
+
+.nflx-button:hover {
+    background-color: rgba(255, 255, 255, 0.75);
+}
+
+.nflx-button-icon {
+    line-height: 0;
+    -moz-box-align: center;
+    align-items: center;
+    -moz-box-pack: center;
+    justify-content: center;
+}
+
+.nflx-button-icon.color-primary {
+    color: black;
+}
+
+.nflx-button-text {
+    font-family: "Netflix Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    display: block;
+    font-size: 1.2rem;
+    font-weight: bold;
+    line-height: 2rem;
+}
+
+.video-filter-obj {
+    min-height: 100%;
+}
+
+.video-info-obj {
+    display: flex;
+    align-content: center;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 100%;
+}
+
 .car-preview-img {
     width: 100%;
     max-height: 190px;
     height: 190px;
+    object-fit: contain;
 }
 
-#close-ad {
-    position: absolute;
-    left: 25.5%;
-    top: 30%;
-    z-index: 5000;
-    font-size: 20px;
+.car-preview-img:hover {
+    object-fit: fill;
 }
 
-.ad-overlay {
-    position: absolute;
-    left: 25%;
-    top: 30%;
+.label-block {
+    display: flex;
+    flex-wrap: wrap-reverse;
+    flex-flow: row wrap;
+    flex-direction: row;
+    flex-basis: 3;
+    align-items: center;
+    justify-content: flex-start;
+    max-height: 500px;
+    padding-bottom: 5px;
 }
 
-.ad-parent {}
-
+.label-block .video-label {
+    min-width: 32%;
+    flex-grow: 1;
+}
 @media only screen and (max-width:610px) {
     .main-header {
         padding: 0 4%;
@@ -577,7 +767,9 @@ a {
 }
 
 .video-label {
-    display: inline-block;
+    display: flex;
+    justify-content: space-between;
+    align-content: space-around;
     height: 21px;
     margin: 0 10px 0 0;
     padding: 0 7px 0 14px;
@@ -599,11 +791,13 @@ a {
     max-width: 100px;
 }
 
+.fa-star {
+    color: #FFD700;
+}
+
 /* 5 star rating */
 
-
-fieldset,
-label {
+fieldset, label {
     margin: 0;
     padding: 0
 }
@@ -611,7 +805,6 @@ label {
 .rating {
     border: none;
 }
-
 
 .rating>[id^="star"] {
     display: none
@@ -633,19 +826,14 @@ label {
 .rating>label {
     color: #ddd;
     float: right;
-    font-size: 0.4rem;
+    font-size: 0.6rem;
 }
 
-.rating>[id^="star"]:checked~label,
-.rating:not(:checked)>label:hover,
-.rating:not(:checked)>label:hover~label {
+.rating>[id^="star"]:checked~label, .rating:not(:checked)>label:hover, .rating:not(:checked)>label:hover~label {
     color: #FFD700
 }
 
-.rating>[id^="star"]:checked+label:hover,
-.rating>[id^="star"]:checked~label:hover,
-.rating>label:hover~[id^="star"]:checked~label,
-.rating>[id^="star"]:checked~label:hover~label {
+.rating>[id^="star"]:checked+label:hover, .rating>[id^="star"]:checked~label:hover, .rating>label:hover~[id^="star"]:checked~label, .rating>[id^="star"]:checked~label:hover~label {
     color: #FFED85
 }
 

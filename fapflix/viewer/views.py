@@ -1,5 +1,5 @@
 from django.db import IntegrityError
-from django.db.models import Q
+from django.db.models import Q, F
 from django.db.models.fields import CharField, IntegerField
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import render, redirect
@@ -11,6 +11,7 @@ from .models import Labels, Videos
 from pathlib import Path
 from .video_processor import process_videos
 from django.conf.urls.static import static
+import random
 
 
 class IndexView(generic.ListView):
@@ -24,12 +25,52 @@ class IndexView(generic.ListView):
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
+        videos = Videos.objects.all()
+        context["age"] = self.request.GET.get("age", [])
+        context["quality"] = self.request.GET.get("quality", [])
+        context["order"] = self.request.GET.get("order")
+        context["duration"] = 0
+        if self.request.GET.get("h"):
+            h = self.request.GET.get("h")
+            context["duration"] += int(h) * 60 * 60
+        if self.request.GET.get("m"):
+            m = self.request.GET.get("m")
+            context["duration"] += int(m) * 60
+        if context["age"]:
+            videos = videos.filter(actor_age__lte=context["age"])
+        if context["duration"]:
+            videos = videos.filter(duration__gte=context["duration"])
+        if context["quality"]:
+            print(f"q {context['quality']}")
+            videos = videos.filter(dim_height__gte=context["quality"])
         # Add in a QuerySet of all the videos
-        context["result_videos1"] = Videos.objects.order_by("-rating")[:30]
-        context["result_videos2"] = Videos.objects.order_by("-inserted_at")[:30]
-        context["result_videos3"] = Videos.objects.filter(favorite=True).order_by(
-            "-favorite"
-        )[:30]
+        if context["order"]:
+            if context["order"] == "quality":
+                order = "-dim_height"
+            if context["order"] == "age":
+                order = "actor_age"
+            else:
+                order = context["order"]
+            rating_order = (order, "-rating")
+            inserted_order = (order, "-inserted_at")
+        else:
+            rating_order = ["-rating"]
+            inserted_order = ["-inserted_at"]
+        context["result_videos1"] = videos.order_by(*rating_order)[:30]
+        context["result_videos2"] = videos.order_by(*inserted_order)[:30]
+        context["result_videos3"] = videos.filter(favorite=True)[:30]
+        if not self.request.GET:
+            context["label_videos"] = dict()
+            active_labels = [
+                (label.id, label.label)
+                for label in Labels.objects.filter(videos__isnull=False).distinct()
+            ]
+            label_lists = random.sample(active_labels, 5)
+            for label in label_lists:
+                context["label_videos"][label[1]] = Videos.objects.filter(
+                    labels=label[0]
+                )
+
         return context
 
 
@@ -42,6 +83,7 @@ class LabelView(FormView, generic.ListView):
     def post(self, request, *args, **kwargs):
         form = LabelForm(request.POST)
         context = dict()
+        print(request.POST)
         if form.is_valid():
             try:
                 label = request.POST["label"].lower()
@@ -49,7 +91,7 @@ class LabelView(FormView, generic.ListView):
                 label_obj.save()
             except IntegrityError:
                 context["error"] = f"Label {label} already exists!"
-        labels = Labels.objects.all()[:20]
+        labels = Labels.objects.order_by("label")
         context["object_list"] = labels
         context["form"] = self.form_class
         return render(request, "viewer/labels.html", context)
@@ -108,10 +150,12 @@ class VideoView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super(generic.DetailView, self).get_context_data(**kwargs)
         video = context["object"]
-        context["labels"] = Labels.objects.all()
+        context["labels"] = Labels.objects.all().order_by("label")
         context["video"] = video
-        context["recommendations"] = Videos.objects.filter(
-            labels__in=video.labels.all()
+        context["recommendations"] = (
+            Videos.objects.filter(labels__in=video.labels.all())
+            .exclude(id=video.id)
+            .distinct()
         )
         return context
 
@@ -156,14 +200,26 @@ class VideoList(generic.ListView):
 
 
 class SearchView(VideoList):
+    template_name = "viewer/index.html"
+
     def get_queryset(self):
         search_query = self.request.GET["query"]
-        title = Videos.objects.filter()
+        title = Videos.objects.filter(labels__label__in=search_query)
         return title
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["search"] = self.request.GET["query"]
+        search_query = self.request.GET["query"]
+        print(search_query)
+        videos = Videos.objects.filter(
+            Q(labels__label__in=search_query) | Q(filename=search_query)
+        )
+        print(videos)
+        context["result_videos1"] = videos.order_by(F("rating").desc(nulls_last=True))
+        context["result_videos2"] = videos.order_by(
+            F("inserted_at").desc(nulls_last=True)
+        )
+        context["result_videos3"] = videos.order_by(F("rating").desc(nulls_last=True))
         return context
 
 
@@ -200,6 +256,16 @@ def rate_video(request):
         rating = request.POST["rating"]
         video_obj = Videos.objects.filter(id=video_id).first()
         video_obj.rating = rating
+        video_obj.save()
+    return HttpResponse("OK")
+
+
+def change_age(request):
+    if request.method == "POST":
+        video_id = request.POST["video_id"]
+        age = request.POST["age"]
+        video_obj = Videos.objects.filter(id=video_id).first()
+        video_obj.actor_age = age
         video_obj.save()
     return HttpResponse("OK")
 

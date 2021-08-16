@@ -3,20 +3,12 @@
 {% block content %}
 <div class="container">
     <div class="row">
-        <div class="col-8">
-            <table class="table table-dark">
-                <tbody>
-                    <tr>
-                        {% for label in object_list %}
-                        <td><a href="/label/{{label.id}}/"><p>{{label.label}}</p></a><a href="{% url 'viewer:label-delete' label.id %}"><i class="fas fa-trash-alt"></i></a></td>
-                        {% endfor %}
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-        <div class="col-4">
-            <form method="post">{% csrf_token %}
-                {{ form.as_p }}
+        <div class="col-12">
+            <form method="post" class="col-lg-2  form__group field ">{% csrf_token %}
+                <label for="age" class="form__label">Label</label>
+                <input id="{{ form.label.id_for_label }}" class="video-filter-obj form__field" type="text"
+                    name="{{ form.label.name }}" maxlength="{{ form.label.field.max_length }}" placeholder="add"
+                    {% if form.label.value != None %}value="{{ form.label.value|stringformat:'s' }}" {% endif %} {% if form.label.field.required %}required{% endif %}>
                 <input type="submit" value="Add label">
             </form>
             {% if error %}
@@ -24,9 +16,20 @@
                 {{error}}
             </div>
             {% endif %}
-
-
         </div>
+        <div class="col-12 label-block">
+            {% for label in object_list %}
+            <div class="video-label">
+                <a href="/label/{{label.id}}/">
+                    <span>{{label.label}}</span>
+                </a>
+                <a href="{% url 'viewer:label-delete' label.id %}" class="delete-icon">
+                    <i class="fas fa-trash-alt"></i>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+
     </div>
 
 

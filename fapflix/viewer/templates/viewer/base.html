@@ -124,9 +124,10 @@
                 </li>
                 {% endif %}
             </ul>
-            <form action="{% url 'viewer:index' %}" class="form-inline my-2 my-lg-0" method="get">
-                <input class="form-control mr-sm-2" name="query" type="search" id="site-search" placeholder="Search"
-                    aria-label="Search" size="30">
+            <form action="{% url 'viewer:search' %}" class="form-inline my-2 my-lg-0 form__group search" method="get">
+                <!-- <label for="search" class="form__label">Search</label> -->
+                <input id="site-search" name="query" type='search' class="form__field video-filter-obj"
+                    placeholder="filenames, labels, etc." aria-label="Search" size="30">
                 <button class="btn btn-primary my-2 my-sm-0" type="submit">Search</button>
             </form>
         </div>
@@ -138,23 +139,8 @@
     {% block script %}
 
     {% endblock %}
-    <!-- <div class='footer-wrapper'>
-        <h2 class='footer-title'>The porn site mankind was waiting for</h2>
-        <div class='footer-description'>I am continously working to provide a big variety of amateur videos united in
-            one
-            website.
-            Fapflix is the unification of various porn tube sites, offering a multi website search and unique ranking
-            algorithm to offer you only the best in the world of porn.</div>
-    </div>
-</body>
-<footer class="footer font-small pt-4">
-    <div class="footer-copyright text-center py-3">© {% now "Y" %} Copyright:
-        Fapflix - When you're just not in the mood for Netflix and chill. - <a href="/disclaimer">Terms of Service</a>
-        <br>
-        <a href='/clear_cookie'>Clear my cookies</a>
-    </div>
-</footer> -->
 
 
-</html>
-{% endautoescape %}
+
+    </html>
+    {% endautoescape %}
