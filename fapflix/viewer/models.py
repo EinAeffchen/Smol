@@ -6,6 +6,8 @@ import django
 class Labels(models.Model):
     label = models.TextField(unique=True)
 
+    class Meta:
+        ordering = ["label"]
 
 class Videos(models.Model):
     path = models.TextField(unique=True)
@@ -23,7 +25,7 @@ class Videos(models.Model):
     rating = models.FloatField(default=0)
     favorite = models.BooleanField(default=False)
     labels = models.ManyToManyField(Labels)
-    inserted_at = models.DateField(default=django.utils.timezone.now)
+    inserted_at = models.DateTimeField(default=django.utils.timezone.now)
     actor_age = models.IntegerField(null=True)
 
 
