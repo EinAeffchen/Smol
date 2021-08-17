@@ -9,6 +9,7 @@ urlpatterns = [
         "actor_delete/<int:pk>/", views.DeleteActorView.as_view(), name="delete-actor"
     ),
     path("actor/<int:pk>/", views.ActorView.as_view(), name="actor"),
+    path("update-actor/", views.updateActor, name="actor-add-content"),
     path("actors/", views.ActorsView.as_view(), name="actors"),
     path("addVideoLabel/", views.add_video_label, name="label-video-add"),
     path("changeAge/", views.change_age, name="change-age"),

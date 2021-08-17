@@ -119,6 +119,20 @@ class CreateActorView(CreateView):
             actor.save()
         return JsonResponse({"actor-id": actor.id})
 
+def updateActor(request):
+    if request.method == "POST":
+        actor_id = request.POST.get("actor")
+        actor_obj = Actors.objects.filter(id=actor_id).first()
+        print(f"name: {actor_obj.avatar.name}")
+        print(f"path: {actor_obj.avatar.path}")
+        related_videos, face = get_videos_containing_actor(Path(actor_obj.avatar.path))
+        print(f"related videos: {related_videos}")
+        if related_videos and face:
+            related_video_objs = Videos.objects.filter(preview__in=related_videos).all()
+            [actor_obj.videos.add(video_obj.id) for video_obj in related_video_objs]
+            actor_obj.save()
+        return JsonResponse({"actor-id": actor_obj.id})
+
 
 class DeleteActorView(DeleteView):
     model = Actors

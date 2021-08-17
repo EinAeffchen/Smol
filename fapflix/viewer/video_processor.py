@@ -5,7 +5,7 @@ from datetime import datetime
 from operator import sub
 from pathlib import Path
 from sys import dont_write_bytecode
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, Union
 
 import cv2
 import ffmpeg
@@ -25,14 +25,18 @@ def clean_recognize_pkls():
         pkl_file.unlink()
 
 
-def get_videos_containing_actor(filename: str) -> Tuple[Set[str], str]:
+def get_videos_containing_actor(filename: Union[str, Path]) -> Tuple[Set[str], str]:
     clean_recognize_pkls()
-    filename_stem = filename.split(".")[0]
-    faces = [
-        str(face_file)
-        for face_file in face_path.iterdir()
-        if filename_stem in str(face_file)
-    ]
+    if isinstance(filename, str):
+        filename_stem = filename.split(".")[0]
+        faces = [
+            str(face_file)
+            for face_file in face_path.iterdir()
+            if filename_stem in str(face_file)
+        ]
+    else:
+        faces = [str(filename)]
+    print(faces)
     video_results = recognizer(faces, face_path)
     if isinstance(video_results, DataFrame) and not video_results.empty:
         matched_videos = set()

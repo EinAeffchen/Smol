@@ -87,7 +87,10 @@
             {% include "viewer/carousel.html" with id="carousel1" result_videos=object.videos.all %}
             {% endif %}
         </div>
-        <div class="col-lg-1 offset-lg-10">
+        <div class="col-lg-1 offset-lg-9">
+            <a class="btn btn-primary my-2 my-sm-0 float-right" onclick="addContent(this)">Load related content</a>
+        </div>
+        <div class="col-lg-1">
             <a class="btn btn-primary my-2 my-sm-0 float-right" href="{% url 'viewer:edit-actor' object.id %}">Edit</a>
         </div>
         <div class="col-lg-1">
@@ -98,4 +101,21 @@
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block script %}
+<script type="text/javascript">
+    function addContent(button) {
+        $("#load-icon").show();
+        $.ajax({
+            url: "{% url 'viewer:actor-add-content' %}",
+            method: "POST",
+            data: {
+                actor: "{{object.id}}"
+            }, success: function (data) {
+                id = data["actor-id"];
+                window.location = "/actor/" + id + "/"
+            }
+        })
+    }</script>
 {% endblock %}
