@@ -1,17 +1,22 @@
+import random
+from pathlib import Path
+
+from django.conf.urls.static import static
+from django.core.files import File
 from django.db import IntegrityError
-from django.db.models import Q, F
+from django.db.models import F, Q
 from django.db.models.fields import CharField, IntegerField
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
-from django.shortcuts import render, redirect
+from django.shortcuts import redirect, render
+from django.urls import reverse, reverse_lazy
 from django.views import generic
-from django.views.generic.edit import FormView
-from django.urls import reverse_lazy, reverse
-from .forms import FilterForm, LabelForm
-from .models import Labels, Videos
-from pathlib import Path
-from .video_processor import process_videos
-from django.conf.urls.static import static
-import random
+from django.views.generic.edit import (CreateView, DeleteView, FormView,
+                                       UpdateView)
+from PIL.Image import Image
+
+from .forms import ActorForm, FilterForm, ImageForm, LabelForm
+from .models import Actors, Labels, Videos
+from .video_processor import get_videos_containing_actor, process_videos
 
 
 class IndexView(generic.ListView):
@@ -71,13 +76,53 @@ class IndexView(generic.ListView):
                 (label.id, label.label)
                 for label in Labels.objects.filter(videos__isnull=False).distinct()
             ]
-            label_lists = random.sample(active_labels, 5)
-            for label in label_lists:
-                context["label_videos"][label[1]] = Videos.objects.filter(
-                    labels=label[0]
-                )
+            if len(active_labels) >= 5:
+                label_lists = random.sample(active_labels, 5)
+                for label in label_lists:
+                    context["label_videos"][label[1]] = Videos.objects.filter(
+                        labels=label[0]
+                    )
 
         return context
+
+
+class EditActorView(UpdateView, generic.DetailView):
+    template_name = "viewer/edit_actor.html"
+    form_class = ActorForm
+    success_url = "/actors/"
+    model = Actors
+
+    def form_valid(self, form):
+        # This method is called when valid form data has been POSTed.
+        # It should return an HttpResponse.
+        form.save()
+        print(self.request.POST)
+        return super().form_valid(form)
+
+
+class CreateActorView(CreateView):
+    model = Actors
+    fields = ["videos"]
+
+    def form_valid(self, form):
+        actor = form.save()
+        video_id = self.request.POST.get("videos[]")
+        video_obj = Videos.objects.filter(id=video_id).first()
+        video_preview_path = video_obj.preview
+        related_videos, face = get_videos_containing_actor(video_preview_path)
+        print(f"related videos: {related_videos}")
+        if related_videos and face:
+            related_video_objs = Videos.objects.filter(preview__in=related_videos).all()
+            [actor.videos.add(video_obj.id) for video_obj in related_video_objs]
+            face_filename = Path(face).name
+            actor.avatar.save(face_filename, File(open(face, "rb")))
+            actor.save()
+        return JsonResponse({"actor-id": actor.id})
+
+
+class DeleteActorView(DeleteView):
+    model = Actors
+    success_url = reverse_lazy("viewer:actors")
 
 
 class LabelView(FormView, generic.ListView):
@@ -138,6 +183,16 @@ def delete_video_label(request):
     return HttpResponse("OK")
 
 
+def delete_actor_label(request):
+    if request.method == "POST":
+        actor_id = request.POST["actor_id"]
+        label_id = request.POST["label_id"]
+        label_obj = Labels.objects.filter(id=label_id).first()
+        actor_obj = Actors.objects.filter(id=actor_id).first()
+        actor_obj.labels.remove(label_obj)
+    return HttpResponse("OK")
+
+
 class DataLoader(generic.ListView):
     template_name = "viewer/loader.html"
     model = Videos
@@ -166,6 +221,49 @@ class VideoView(generic.DetailView):
         return context
 
 
+class ActorView(generic.DetailView):
+    model = Actors
+    template_name = "viewer/actor.html"
+
+    def post(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        form = ImageForm(request.POST, request.FILES, instance=self.object)
+        print(request.POST)
+        if form.is_valid():
+            # Write Your Logic here
+            form.save()
+            img_obj = form.instance
+            context = super(ActorView, self).get_context_data(**kwargs)
+            context["img_obj"] = img_obj
+            context["form"] = ImageForm
+            context["delete_form"] = DeleteActorView
+            return self.render_to_response(context=context)
+        else:
+            self.object = self.get_object()
+            context = super(ActorView, self).get_context_data(**kwargs)
+            context["form"] = form
+            context["delete_form"] = DeleteActorView
+            return self.render_to_response(context=context)
+
+    def get(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        context = self.get_context_data(object=self.object)
+        context["form"] = ImageForm
+        context["delete_form"] = DeleteActorView
+        return self.render_to_response(context)
+
+    def get_context_data(self, **kwargs):
+        context = super(generic.DetailView, self).get_context_data(**kwargs)
+        actor = context["object"]
+        context["best_rated"] = actor.videos.order_by("-rating").first()
+        return context
+
+
+class ActorsView(generic.ListView):
+    model = Actors
+    template_name = "viewer/actors.html"
+
+
 class LabelResultView(generic.DetailView):
     model = Labels
     template_name = "viewer/index.html"
@@ -182,6 +280,7 @@ class LabelResultView(generic.DetailView):
         context["result_videos3"] = Videos.objects.filter(labels=label).order_by(
             "-favorite"
         )[:30]
+        context["actors"] = label.actors_set.all()
         return context
 
 
@@ -240,6 +339,12 @@ def load_data(request):
         preview_dir.mkdir()
     last = process_videos(thumbnail_dir, preview_dir)
     return JsonResponse(last)
+
+
+def add_actor(request):
+    actor = Actors()
+    actor.save()
+    return redirect(reverse("viewer:actor", args=[actor.id]))
 
 
 def add_favorite(request, videoid):

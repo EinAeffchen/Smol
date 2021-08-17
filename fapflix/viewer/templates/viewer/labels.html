@@ -4,8 +4,8 @@
 <div class="container">
     <div class="row">
         <div class="col-12">
-            <form method="post" class="col-lg-2  form__group field ">{% csrf_token %}
-                <label for="age" class="form__label">Label</label>
+            <form method="post" class="col-lg-2  form__group">{% csrf_token %}
+                <label for="{{ form.label.name }}" class="form__label">Label</label>
                 <input id="{{ form.label.id_for_label }}" class="video-filter-obj form__field" type="text"
                     name="{{ form.label.name }}" maxlength="{{ form.label.field.max_length }}" placeholder="add"
                     {% if form.label.value != None %}value="{{ form.label.value|stringformat:'s' }}" {% endif %} {% if form.label.field.required %}required{% endif %}>

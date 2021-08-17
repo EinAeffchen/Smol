@@ -56,9 +56,20 @@
                 <div class="col-lg-1 form__group field" style="margin-top:0;">
                     <label for="age" class="form__label">Age</label>
                     <input id="video-info-age" class="video-filter-obj form__field" type="number" size="6" name="age"
-                        max="99" value="{{age}}">
+                        max="99" value="{{video.actor_age}}">
                 </div>
-                <div class="col-lg-4 offset-lg-4">
+                <div class="col-lg-2 form__group field" style="margin-top:0;">
+                    <label class="form__label">Actors</label>
+
+                    {% for actor in video.actors_set.all %}
+                    <a href="{% url 'viewer:actor' actor.id %}">{{actor.forename}} {{actor.surename}}</a>
+                    {% endfor %}
+
+                </div>
+                <div class="col-lg-2 form__group field" style="margin-top:0;">
+                    <a class='btn btn-danger video-info-obj' onclick="generateActor(this)">Generate actor</a>
+                </div>
+                <div class="col-lg-4">
                     <fieldset class="rating">
                         <input type="radio" id="star5" name="rating" value="5" /><label for="star5"
                             title="Hot!"></label>
@@ -71,6 +82,7 @@
                             title="Sucks big time"></label>
                     </fieldset>
                 </div>
+                <div class="col-lg-12"><p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i> Running face recognition. Depening on your library size, this might take a while</p></div>
             </div>
 
         </div>
@@ -122,8 +134,7 @@
         </div>
         {% if rvideos|length >= 14 %}
         <div>
-            {% include "search/carousel.html" with id="carousel1" title="Further recommendations:"
-            result_videos=rvideos|slice:"8:32" %}
+            {% include "viewer/carousel.html" with id="carousel1" title="Further recommendations:" result_videos=rvideos|slice:"8:32" %}
         </div>
         {% endif %}
 
@@ -144,6 +155,19 @@
         button.setAttribute("onClick", "remfav(this)");
         button.setAttribute("id", "rem-fav");
         $(button).children()[0].setAttribute("class", "fas fa-heart");
+    }
+    function generateActor(button) {
+        $("#load-icon").show();
+        $.ajax({
+            url: "{% url 'viewer:generate-actor' %}",
+            method: "POST",
+            data: {
+                videos: ["{{video.id}}"]
+            }, success: function (data) {
+                id = data["actor-id"];
+                window.location = "/actor/"+id+"/"
+            }
+        })
     }
     function remfav(button) {
         const Http = new XMLHttpRequest();

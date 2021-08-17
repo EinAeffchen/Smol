@@ -305,6 +305,10 @@ h2 {
     font-size: 40px;
 }
 
+#load-icon {
+    font-size: 30px;
+}
+
 .delete-icon {
     align-self: center;
 }
@@ -610,6 +614,41 @@ a {
 .label-block .video-label {
     min-width: 32%;
     flex-grow: 1;
+}
+
+.actor-mini-profile .actor-profile-img {
+    height:300px;
+    object-fit: cover;
+}
+.actor-profile-img {
+    width: 100%;
+    height: 300px;
+    object-fit: cover;
+    margin-bottom: 10px;
+}
+.actor-media-box {
+    border: 1px solid white;
+    padding: 10px;
+}
+.actor-card {
+    background-color: rgba(165, 7, 15, 0.7);
+    -webkit-box-shadow: 1px 1px 15px 0px rgba(229, 9, 20, 0.5);
+    box-shadow: 1px 1px 15px 0px rgb(229, 9, 20, 0.5);
+    margin: 5px;
+    min-width: 16%;
+    max-width: 32%;
+}
+.actor-video {
+    width: 100%;
+    height: 300px;
+}
+.actor-video img {
+    object-fit: contain;
+    height: 300px;
+    max-height: 300px;
+}
+.actor-video img:hover {
+    object-fit: contain;
 }
 @media only screen and (max-width:610px) {
     .main-header {

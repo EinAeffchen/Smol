@@ -1,16 +1,49 @@
-from operator import sub
-from pathlib import Path
-from django.conf import settings
-from sys import dont_write_bytecode
-import ffmpeg
-from .models import Videos, Labels
+import os
+import re
 import subprocess
 from datetime import datetime
-from typing import List
-import os
-import cv2
-from .detector import get_age_ethnic
+from operator import sub
+from pathlib import Path
+from sys import dont_write_bytecode
+from typing import List, Set, Tuple
 
+import cv2
+import ffmpeg
+import pandas as pd
+from django.conf import settings
+from pandas.core.frame import DataFrame
+
+from .detector import get_age_ethnic, recognizer
+from .models import Labels, Videos
+
+face_path = Path(settings.MEDIA_ROOT) / "images/faces"
+face_path.mkdir(exist_ok=True)
+
+
+def clean_recognize_pkls():
+    for pkl_file in face_path.glob("*.pkl"):
+        pkl_file.unlink()
+
+
+def get_videos_containing_actor(filename: str) -> Tuple[Set[str], str]:
+    clean_recognize_pkls()
+    filename_stem = filename.split(".")[0]
+    faces = [
+        str(face_file)
+        for face_file in face_path.iterdir()
+        if filename_stem in str(face_file)
+    ]
+    video_results = recognizer(faces, face_path)
+    if isinstance(video_results, DataFrame) and not video_results.empty:
+        matched_videos = set()
+        print(video_results)
+        face = video_results.iloc[0]["identity"]
+        for index, row in video_results.iterrows():
+            video = re.sub("_\d+\.jpg", ".jpg", Path(row["identity"]).name)
+            matched_videos.add(video)
+        print(matched_videos)
+        return matched_videos, face
+    return None, None
 
 def repackage(path: Path):
     print(f"Missing video info for {path}. Trying to repackage...")
@@ -87,18 +120,27 @@ def calculate_distance(width: int, height: int) -> int:
     ratio = width / height
     tgt_height = 380
     tgt_width = int(tgt_height * ratio)
-    print(f"tgt width: {tgt_width}")
-    padding = (582 - tgt_width)
-    print(f"Padding: {padding}")
-    if padding <0:
+    padding = 582 - tgt_width
+    if padding < 0:
         return 0
-    return padding/2
+    return padding / 2
 
+def update_preview_name(filename: str, preview_dir: Path):
+    counter = 1
+    out_filename = f"{filename}_{counter}.jpg"
+    out_path = preview_dir / out_filename
+    while out_path.is_file():
+        counter += 1
+        out_filename = f"{filename}_{counter}.jpg"
+        out_path = preview_dir / out_filename
+    return out_path, out_filename
 
 def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) -> Path:
     nth_frame = int(int(frames) / 50)
-    out_filename = f"{path.stem}.png"
+    out_filename = f"{path.stem}.jpg"
     out_path = preview_dir / out_filename
+    if out_path.is_file():
+        out_path, out_filename = update_preview_name(path.stem, preview_dir)
     dist = calculate_distance(width, height)
     if nth_frame > 25:
         nth_frame = 25
@@ -106,38 +148,39 @@ def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) 
         pad = f",pad=582:390:{dist}:0:black"
     else:
         pad = ""
-    if not out_path.is_file():
-        process = subprocess.Popen(
-            [
-                "ffmpeg",
-                "-hwaccel",
-                "cuda",
-                "-loglevel",
-                "panic",
-                "-y",
-                "-i",
-                str(path),
-                "-frames",
-                "1",
-                "-q:v",
-                "5",
-                "-c:v",
-                "mjpeg",
-                "-vf",
-                f"select=not(mod(n\,{nth_frame})),scale=-1:380:force_original_aspect_ratio=decrease{pad},tile=50x1",
-                str(out_path),
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        process.wait()
-        # process.terminate()
+    process = subprocess.Popen(
+        [
+            "ffmpeg",
+            "-hwaccel",
+            "cuda",
+            "-loglevel",
+            "panic",
+            "-y",
+            "-i",
+            str(path),
+            "-frames",
+            "1",
+            "-q:v",
+            "5",
+            "-c:v",
+            "mjpeg",
+            "-vf",
+            f"select=not(mod(n\,{nth_frame})),scale=-1:380:force_original_aspect_ratio=decrease{pad},tile=50x1",
+            str(out_path),
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    process.wait()
+    # process.terminate()
     return out_filename
 
 
 def generate_thumbnail(video: Path, thumbnail_dir: Path, vid_duration: int) -> Path:
-    out_filename = f"{video.stem}.png"
+    out_filename = f"{video.stem}.jpg"
     out_path = thumbnail_dir / out_filename
+    if out_path.is_file():
+        out_path, out_filename = update_preview_name(video.stem, thumbnail_dir)
     if not out_path.is_file():
         if vid_duration:
             thumbnail_ss = int(vid_duration / 2)
@@ -205,7 +248,7 @@ def process_videos(thumbnail_dir, preview_dir):
             ".webm",
         ]:
             if not Videos.objects.filter(path=str(video)):
-                last_video = str(video.parts[-1])
+                last_video = str(video.name)
                 video_data = read_video_info(video)
                 video = Path(video_data.pop("filepath"))
                 video_data["size"] = video.stat().st_size

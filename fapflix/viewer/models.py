@@ -9,6 +9,12 @@ class Labels(models.Model):
     class Meta:
         ordering = ["label"]
 
+    def __unicode__(self):
+        return f"{self.label}"
+
+    def __str__(self):
+        return f"{self.label}"
+
 
 class Videos(models.Model):
     path = models.TextField(unique=True)
@@ -29,6 +35,9 @@ class Videos(models.Model):
     inserted_at = models.DateTimeField(default=django.utils.timezone.now)
     actor_age = models.IntegerField(null=True)
 
+    def __str__(self):
+        return f"{self.filename}"
+
 
 class Images(models.Model):
     path = models.TextField(unique=True)
@@ -45,17 +54,27 @@ class Images(models.Model):
     inserted_at = models.DateField(default=django.utils.timezone.now)
     labels = models.ManyToManyField(Labels)
 
+    def __str__(self):
+        return f"{self.filename}"
 
 class Actors(models.Model):
-    forename = models.TextField()
-    surname = models.TextField()
-    birth_year = models.IntegerField()
-    nationality = models.TextField()
-    labels = models.ManyToManyField(Labels)
-    videos = models.ManyToManyField(Videos)
-    images = models.ManyToManyField(Images)
-    avatar = models.TextField(unique=True)
+    forename = models.TextField(null=True)
+    surname = models.TextField(null=True)
+    birth_year = models.IntegerField(null=True)
+    nationality = models.TextField(null=True)
+    labels = models.ManyToManyField(Labels, blank=True)
+    videos = models.ManyToManyField(Videos, blank=True)
+    images = models.ManyToManyField(Images, blank=True)
+    avatar = models.ImageField(
+        upload_to="images/actor_profiles/", null=True, blank=True
+    )
 
     def age(self):
         today = datetime.now().date()
-        return today.year-self.birth_year
+        if self.birth_year:
+            return today.year - self.birth_year
+        else:
+            return
+
+    def __str__(self):
+        return f"{self.forename} - {self.surname} - {self.birth_year}"

@@ -1,0 +1,30 @@
+{% extends 'viewer/base.html' %}
+{% load custom_filters %}
+{% block content %}
+<div class="container">
+    <a href="{% url 'viewer:new-actor' %}">add new actor</a>
+    <div class="card-deck">
+        {% for actor in object_list %}
+        {% include "viewer/actor_card.html" with actor=actor %}
+        {% endfor %}
+    </div>
+</div>
+
+
+{% endblock %}
+
+
+{% block script %}
+<script type="text/javascript">
+    function remActorLabel(button) {
+        $(button).parent().hide();
+        $.ajax({
+            url: "{% url 'viewer:label-actor-delete' %}",
+            method: "POST",
+            data: {
+                label_id: $(button).attr("label-id"),
+                actor_id: $(button).attr("actor-id"),
+            }
+        })
+    }</script>
+{% endblock %}

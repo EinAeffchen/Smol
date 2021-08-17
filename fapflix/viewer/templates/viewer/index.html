@@ -65,5 +65,14 @@
     {% include "viewer/carousel.html" with id="carousel1" title=key result_videos=dataset %}
     {% endfor %}
 
+    {% if actors %}
+    <h2>Actors:</h2>
+    <div class="card-deck">
+        {% for actor in actors %}
+        {% include "viewer/actor_card.html" with actor=actor %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
 </div>
 {% endblock %}
