@@ -4,7 +4,7 @@ from pathlib import Path
 from django.conf.urls.static import static
 from django.core.files import File
 from django.db import IntegrityError
-from django.db.models import F, Q
+from django.db.models import Count, F, Q
 from django.db.models.fields import CharField, IntegerField
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
@@ -72,17 +72,14 @@ class IndexView(generic.ListView):
         context["result_videos3"] = videos.filter(favorite=True)[:30]
         if not self.request.GET:
             context["label_videos"] = dict()
-            active_labels = [
-                (label.id, label.label)
-                for label in Labels.objects.filter(videos__isnull=False).distinct()
-            ]
+            active_labels = [(label.id, label.label) for label in Labels.objects.annotate(video_count=Count('videos')).filter(videos__isnull=False).filter(video_count__gte=6).distinct()]
             if len(active_labels) >= 5:
                 label_lists = random.sample(active_labels, 5)
                 for label in label_lists:
                     context["label_videos"][label[1]] = Videos.objects.filter(
                         labels=label[0]
                     )
-
+        context["actors"] = Actors.objects.all()
         return context
 
 
@@ -319,7 +316,7 @@ class VideoList(generic.ListView):
 
 
 class SearchView(VideoList):
-    template_name = "viewer/index.html"
+    template_name = "viewer/search.html"
 
     def get_queryset(self):
         search_query = self.request.GET["query"]
@@ -329,16 +326,9 @@ class SearchView(VideoList):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         search_query = self.request.GET["query"]
-        print(search_query)
-        videos = Videos.objects.filter(
-            Q(labels__label__in=search_query) | Q(filename=search_query)
-        )
-        print(videos)
-        context["result_videos1"] = videos.order_by(F("rating").desc(nulls_last=True))
-        context["result_videos2"] = videos.order_by(
-            F("inserted_at").desc(nulls_last=True)
-        )
-        context["result_videos3"] = videos.order_by(F("rating").desc(nulls_last=True))
+        context["videos"] = Videos.objects.filter(filename__contains=search_query)
+        context["labels"] = Labels.objects.filter(label__contains=search_query)
+        context["actors"] = Actors.objects.filter(Q(forename__contains=search_query) | Q(surname__contains=search_query))
         return context
 
 
