@@ -60,8 +60,6 @@ def repackage(path: Path):
             "panic",
             "-i",
             str(path),
-            "-c:a",
-            "copy",
             str(out_path),
         ],
         stdout=subprocess.PIPE,
@@ -104,7 +102,7 @@ def read_video_info(path: Path) -> dont_write_bytecode:
     if audio_stream:
         video_data["audiocodec"] = audio_stream["codec_name"]
     video_data["duration"] = get_duration(video_stream)
-    if (not video_data["duration"] and not "_new" in path.stem) or video_data["videocodec"] != "h264":
+    if (not video_data["duration"] and not "_new" in path.stem) or not ".mp4" in path.name:
         new_path = repackage(path)
         if new_path:
             return read_video_info(new_path)
