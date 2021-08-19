@@ -14,6 +14,9 @@
                 <label for="quality" class="form__label">Quality</label>
                 <select id="video-filter-quality" class="video-filter-obj form__field" name="quality"
                     value="{{quality}}">
+                    <option {% if quality == "190" %} selected {% endif %}>190</option>
+                    <option {% if quality == "240" %} selected {% endif %}>240</option>
+                    <option {% if quality == "360" %} selected {% endif %}>360</option>
                     <option {% if quality == "480" %} selected {% endif %}>480</option>
                     <option {% if quality == "720" %} selected {% endif %}>720</option>
                     <option {% if quality == "1080" %} selected {% endif %}>1080</option>
