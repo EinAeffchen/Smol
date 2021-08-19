@@ -15,9 +15,9 @@
                 {% for video in result_videos %}
                 <div id='carouselSW-content-{{id}}' class="imgSW-preview">
                     <a href="{% url 'viewer:video' video.id %}">
-                        <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
-                            preview="{% static 'viewer/images/previews/' %}{{video.preview}}"
-                            thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
+                        <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail|urlencode}}"
+                            preview="{% static 'viewer/images/previews/' %}{{video.preview|urlencode}}"
+                            thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail|urlencode}}"
                             class="car-preview-img video-preview" dataframes="50" name='preview-{{video.id}}'
                             alt="{{video.filename}}" style="width:100%;">
                     </a>
