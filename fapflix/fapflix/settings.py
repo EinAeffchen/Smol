@@ -52,7 +52,7 @@ MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
     # 'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     # 'django.middleware.cache.FetchFromCacheMiddleware'
@@ -92,7 +92,7 @@ DATABASES = {
         "NAME": "postgres",
         "USER": "postgres",
         "PASSWORD": "",
-        "HOST": "localhost",
+        "HOST": os.environ.get("POSTGRES_HOST", "localhost"),
         "PORT": "5432",
     }
 }
