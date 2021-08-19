@@ -1,0 +1,21 @@
+{% extends 'viewer/base.html' %}
+{% load custom_filters %}
+{% block content %}
+<div class="container-fluid">
+    {% if videos %}
+    {% include "viewer/carousel.html" with id="carousel1" title="Videos" result_videos=videos %}
+    {% endif %}
+    {% if labels %}
+    {% include "viewer/carousel.html" with id="carousel2" title="Labels" result_videos=labels %}
+    {% endif %}
+
+    {% if actors %}
+    <div class="card-deck">
+        {% for actor in actors %}
+        {% include "viewer/actor_card.html" with actor=actor %}
+        {% endfor %}
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
