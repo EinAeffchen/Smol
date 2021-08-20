@@ -1,4 +1,5 @@
 import random
+from datetime import datetime
 from pathlib import Path
 
 from django.conf.urls.static import static
@@ -67,9 +68,9 @@ class IndexView(generic.ListView):
         else:
             rating_order = ["-rating"]
             inserted_order = ["-inserted_at"]
-        context["result_videos1"] = videos.order_by(*rating_order)[:30]
-        context["result_videos2"] = videos.order_by(*inserted_order)[:30]
-        context["result_videos3"] = videos.filter(favorite=True)[:30]
+        context["result_videos1"] = videos.order_by(*rating_order)[:60]
+        context["result_videos2"] = videos.order_by(*inserted_order)[:60]
+        context["result_videos3"] = videos.filter(favorite=True)[:60]
         if not self.request.GET:
             context["label_videos"] = dict()
             active_labels = [(label.id, label.label) for label in Labels.objects.annotate(video_count=Count('videos')).filter(videos__isnull=False).filter(video_count__gte=6).distinct()]
@@ -108,9 +109,20 @@ class CreateActorView(CreateView):
         video_preview_path = video_obj.preview
         related_videos, face = get_videos_containing_actor(video_preview_path)
         print(f"related videos: {related_videos}")
-        if related_videos and face:
+        if related_videos:
             related_video_objs = Videos.objects.filter(preview__in=related_videos).all()
-            [actor.videos.add(video_obj.id) for video_obj in related_video_objs]
+            ages = list()
+            labels = list()
+            for video_obj in related_video_objs:
+                actor.videos.add(video_obj.id)
+                if video_obj.actor_age:
+                    ages.append(video_obj.actor_age)
+                labels += [label.id for label in video_obj.labels.all()]
+            labels = list(set(labels))
+            [actor.labels.add(label) for label in labels]
+            if not actor.birth_year and ages:
+                actor.birth_year = datetime.now().year - min(ages)
+        if face:
             face_filename = Path(face).name
             actor.avatar.save(face_filename, File(open(face, "rb")))
             actor.save()
@@ -126,7 +138,17 @@ def updateActor(request):
         print(f"related videos: {related_videos}")
         if related_videos and face:
             related_video_objs = Videos.objects.filter(preview__in=related_videos).all()
-            [actor_obj.videos.add(video_obj.id) for video_obj in related_video_objs]
+            ages = list()
+            labels = list()
+            for video_obj in related_video_objs:
+                actor_obj.videos.add(video_obj.id)
+                if video_obj.actor_age:
+                    ages.append(video_obj.actor_age)
+                labels += [label.id for label in video_obj.labels.all()]
+            labels = list(set(labels))
+            [actor_obj.labels.add(label) for label in labels]
+            if not actor_obj.birth_year and ages:
+                actor_obj.birth_year = datetime.now().year - min(ages)
             actor_obj.save()
         return JsonResponse({"actor-id": actor_obj.id})
 
@@ -326,9 +348,9 @@ class SearchView(VideoList):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         search_query = self.request.GET["query"]
-        context["videos"] = Videos.objects.filter(filename__contains=search_query)
-        context["labels"] = Labels.objects.filter(label__contains=search_query)
-        context["actors"] = Actors.objects.filter(Q(forename__contains=search_query) | Q(surname__contains=search_query))
+        context["videos"] = Videos.objects.filter(filename__icontains=search_query)
+        context["labels"] = Labels.objects.filter(label__icontains=search_query)
+        context["actors"] = Actors.objects.filter(Q(forename__icontains=search_query) | Q(surname__icontains=search_query))
         return context
 
 

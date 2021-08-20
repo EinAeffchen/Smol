@@ -7,7 +7,7 @@
         </div>
     </span>
 </h2>
-<div id="{{id}}" class="carousel slide carousel-fade">
+<div id="{{id}}" class="carousel slide carousel-fade" data-ride="carousel">
     {% if result_videos|length > 0 %}
     <div class="carouselSW-inner hide-scrollbar">
         <div class="carouselSW-item">
@@ -18,7 +18,7 @@
                         <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail|urlencode}}"
                             preview="{% static 'viewer/images/previews/' %}{{video.preview|urlencode}}"
                             thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail|urlencode}}"
-                            class="car-preview-img video-preview" dataframes="50" name='preview-{{video.id}}'
+                            class="car-preview-img video-preview d-block w-20" dataframes="70" name='preview-{{video.id}}'
                             alt="{{video.filename}}" style="width:100%;">
                     </a>
                     <div class="img-overlay">
@@ -29,7 +29,10 @@
                         {% if video.actor_age %}
                         <div class="age">{{video.actor_age}}yrs</div>
                         {% endif %}
+
+                        {% if video.duration %}
                         <div class="duration">duration: {{video.duration|human_duration}}</div>
+                        {% endif %}
                         <div class="quality">{{video.dim_height}}p</div>
                         <div class="rating">{{video.rating}}<i class="far fa-star"></i></div>
                     </div>
@@ -39,11 +42,13 @@
         </div>
 
         {% if result_videos|length > 6 %}
-        <a class="carousel-control-prev" car_id="{{id}}" id="prev-{{id}}" page=0>
+        <a class="carousel-control-prev" href="#{{id}}" role="button" car_id="{{id}}" id="prev-{{id}}"
+            data-slide="prev">
             <span class="carousel-control-prev-icon" aria-hidden="true"></span>
             <span class="sr-only">Previous</span>
         </a>
-        <a class="carousel-control-next" car_id="{{id}}" id="next-{{id}}" page=0>
+        <a class="carousel-control-next" href="#{{id}}" role="button" car_id="{{id}}" id="next-{{id}}"
+            data-slide="next">
             <span class="carousel-control-next-icon" aria-hidden="true"></span>
             <span class="sr-only">Next</span>
         </a>

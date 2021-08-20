@@ -191,7 +191,6 @@ h2 {
     font-size: 1rem;
     color: var(--gray);
 }
-
 /* New Carousel for swipe  */
 
 .carouselSW-container {
@@ -650,6 +649,11 @@ a {
 .actor-video img:hover {
     object-fit: contain;
 }
+
+.index-actor-preview .card-deck .actor-card {
+    max-width: 16%;
+}
+
 @media only screen and (max-width:610px) {
     .main-header {
         padding: 0 4%;

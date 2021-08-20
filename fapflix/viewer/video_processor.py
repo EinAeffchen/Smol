@@ -13,7 +13,7 @@ import pandas as pd
 from django.conf import settings
 from django.db.utils import DataError
 from pandas.core.frame import DataFrame
-
+from .utils import base64_encode, base64_decode
 from .detector import get_age_ethnic, recognizer
 from .models import Labels, Videos
 
@@ -38,16 +38,19 @@ def get_videos_containing_actor(filename: Union[str, Path]) -> Tuple[Set[str], s
     else:
         faces = [str(filename)]
     print(faces)
-    video_results = recognizer(faces, face_path)
-    if isinstance(video_results, DataFrame) and not video_results.empty:
-        matched_videos = set()
-        print(video_results)
-        face = video_results.iloc[0]["identity"]
-        for index, row in video_results.iterrows():
-            video = re.sub("_\d+\.jpg", ".jpg", Path(row["identity"]).name)
-            matched_videos.add(video)
-        print(matched_videos)
-        return matched_videos, face
+    if faces:
+        video_results = recognizer(faces, face_path)
+        if isinstance(video_results, DataFrame) and not video_results.empty:
+            matched_videos = set()
+            print(video_results)
+            face = video_results.iloc[0]["identity"]
+            for index, row in video_results.iterrows():
+                video = re.sub("_\d+\.jpg", ".jpg", Path(row["identity"]).name)
+                matched_videos.add(video)
+            print(matched_videos)
+            return matched_videos, face
+    else:
+        print("No faces detected for video!")
     return None, None
 
 def repackage(path: Path):
@@ -57,6 +60,8 @@ def repackage(path: Path):
         [
             "ffmpeg",
             "-loglevel",
+            # "-hwaccel",
+            # "opencl",
             "panic",
             "-i",
             str(path),
@@ -142,14 +147,15 @@ def update_preview_name(filename: str, preview_dir: Path):
     return out_path, out_filename
 
 def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) -> Path:
+    stem = base64_encode(path.stem)
     if frames:
-        nth_frame = int(int(frames) / 50)
+        nth_frame = int(int(frames) / 70)
     else:
         nth_frame = 25
-    out_filename = f"{path.stem}.jpg"
+    out_filename = f"{stem}.jpg"
     out_path = preview_dir / out_filename
     if out_path.is_file():
-        out_path, out_filename = update_preview_name(path.stem, preview_dir)
+        out_path, out_filename = update_preview_name(stem, preview_dir)
     dist = calculate_distance(width, height)
     if nth_frame > 25:
         nth_frame = 25
@@ -161,7 +167,7 @@ def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) 
         [
             "ffmpeg",
             # "-hwaccel",
-            # "cuda",
+            # "opencl",
             "-loglevel",
             "panic",
             "-y",
@@ -174,7 +180,7 @@ def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) 
             "-c:v",
             "mjpeg",
             "-vf",
-            f"select=not(mod(n\,{nth_frame})),scale=-1:380:force_original_aspect_ratio=decrease{pad},tile=50x1",
+            f"select=not(mod(n\,{nth_frame})),scale=-1:380:force_original_aspect_ratio=decrease{pad},tile=70x1",
             str(out_path),
         ],
         stdout=subprocess.PIPE,
@@ -186,10 +192,11 @@ def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) 
 
 
 def generate_thumbnail(video: Path, thumbnail_dir: Path, vid_duration: int) -> Path:
-    out_filename = f"{video.stem}.jpg"
+    stem = base64_encode(video.stem)
+    out_filename = f"{stem}.jpg"
     out_path = thumbnail_dir / out_filename
     if out_path.is_file():
-        out_path, out_filename = update_preview_name(video.stem, thumbnail_dir)
+        out_path, out_filename = update_preview_name(stem, thumbnail_dir)
     if not out_path.is_file():
         if vid_duration:
             thumbnail_ss = int(vid_duration / 2)
@@ -201,7 +208,7 @@ def generate_thumbnail(video: Path, thumbnail_dir: Path, vid_duration: int) -> P
                 "-ss",
                 str(thumbnail_ss),
                 # "-hwaccel",
-                # "cuda",
+                # "opencl",
                 "-loglevel",
                 "panic",
                 "-y",
@@ -262,39 +269,38 @@ def process_videos(thumbnail_dir, preview_dir):
                 if not Videos.objects.filter(path=str(video)):
                     last_video = str(video.name)
                     video_data = read_video_info(video)
-                    if video_data:
-                        video = Path(video_data.pop("filepath"))
-                        video_data["size"] = video.stat().st_size
-                        video_data["path"] = str(video)
-                        video_data["filename"] = str(video).replace(
-                            os.path.commonprefix([str(video_dir), str(video)]), ""
-                        )
-                        frames = video_data.pop("frames")
-                        video_row = Videos(**video_data)
-                        video_row.thumbnail = generate_thumbnail(
-                            video, thumbnail_dir, video_data["duration"]
-                        )
-                        video_row.preview = generate_preview(
-                            video,
-                            frames,
-                            preview_dir,
-                            video_data["dim_width"],
-                            video_data["dim_height"],
-                        )
-                        video_row.processed = True
-                        try:
-                            video_row.save()
-                        except DataError:
-                            print(video_row)
-                            raise
-                        try:
-                            age, race = get_age_ethnic(preview_dir / video_row.preview)
-                            add_additional_labels(video_data, video_row, race)
-                            video_row.actor_age = age
-                        except cv2.error as e:
-                            print(f"Couldn't detect age and race due to {e}")
-                        add_labels_by_path(video_row, labels, video)
+                    video = Path(video_data.pop("filepath"))
+                    video_data["size"] = video.stat().st_size
+                    video_data["path"] = str(video)
+                    video_data["filename"] = str(video).replace(
+                        os.path.commonprefix([str(video_dir), str(video)]), ""
+                    )
+                    frames = video_data.pop("frames")
+                    video_row = Videos(**video_data)
+                    video_row.thumbnail = generate_thumbnail(
+                        video, thumbnail_dir, video_data["duration"]
+                    )
+                    video_row.preview = generate_preview(
+                        video,
+                        frames,
+                        preview_dir,
+                        video_data["dim_width"],
+                        video_data["dim_height"],
+                    )
+                    video_row.processed = True
+                    try:
                         video_row.save()
+                    except DataError:
+                        print(video_row)
+                        raise
+                    try:
+                        age, race = get_age_ethnic(preview_dir / video_row.preview)
+                        add_additional_labels(video_data, video_row, race)
+                        video_row.actor_age = age
+                    except cv2.error as e:
+                        print(f"Couldn't detect age and race due to {e}")
+                    add_labels_by_path(video_row, labels, video)
+                    video_row.save()
                     return {"finished": False, "video": last_video}
         except OSError as e:
             print(f"Detected error on {video} due to {e}")

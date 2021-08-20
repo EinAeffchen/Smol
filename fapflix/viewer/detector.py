@@ -7,7 +7,7 @@ import numpy as np
 from deepface import DeepFace
 from django.conf import settings
 from typing import Dict, List
-from .utils import split_image
+from .utils import split_image, base64_encode
 from pandas import DataFrame
 import pandas as pd
 
@@ -27,30 +27,30 @@ def recognizer(image_files: List[str], face_path: Path) -> DataFrame:
         result = DeepFace.find(
             image_files,
             str(face_path),
-            model_name="Facenet512",
+            model_name="Facenet",
             distance_metric="euclidean_l2",
-            enforce_detection=True,
-            detector_backend="ssd",
+            enforce_detection=False,
+            detector_backend="retinaface",
             prog_bar=False,
+            normalization="Facenet"
         )
         if isinstance(result, list):
-            result = pd.concat(result)
-        # print(result)
-        result = result[result["Facenet512_euclidean_l2"] < 0.4]
-        print(result)
+            result = pd.concat(result).sort_values(by=['Facenet_euclidean_l2'])
+        print(result.head(30))
+        result = result[result["Facenet_euclidean_l2"] < 0.75] #1.02
         return result
-    except (ValueError, AttributeError):
-        pass
-
+    except (ValueError, AttributeError) as e:
+        print(e)
 
 def get_age_ethnic(image_file: Path, debug=False):
     print(image_file)
-    images = split_image(image_file, 50)
+    images = split_image(image_file, 70)
     ages = []
     age = None
     ethnicities = []
     ethnicity = None
     start = time.time()
+    face_counter = 0
     with tempfile.TemporaryDirectory() as tmp_dir_name:
         for i, image in enumerate(images):
             image_path = Path(tmp_dir_name) / "tmp_file.jpg"
@@ -60,11 +60,13 @@ def get_age_ethnic(image_file: Path, debug=False):
                     img_path=str(image_path),
                     actions=["age", "race"],
                     enforce_detection=True,
-                    detector_backend="ssd",
+                    detector_backend="retinaface",
                     prog_bar=False,
                 )
-                filename = image_file.stem
-                image.save(face_path / f"{filename}_{i}.jpg")
+                if face_counter <= 5:
+                    filename = image_file.stem
+                    image.save(face_path / f"{filename}_{i}.jpg")
+                    face_counter += 1
                 if debug:
                     open_cv_image = cv2.imread(str(image_path))
                     open_cv_image = open_cv_image[:, :, ::-1].copy()
@@ -86,7 +88,7 @@ def get_age_ethnic(image_file: Path, debug=False):
             except ValueError:
                 pass
         if ages:
-            age = average(ages)
+            age = min(ages)
         if ethnicities:
             ethnicity = most_common(ethnicities)
         print(age, ethnicity)

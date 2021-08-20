@@ -14,13 +14,13 @@
                 <label for="quality" class="form__label">Quality</label>
                 <select id="video-filter-quality" class="video-filter-obj form__field" name="quality"
                     value="{{quality}}">
-                    <option {% if quality == "190" %} selected {% endif %}>190</option>
-                    <option {% if quality == "240" %} selected {% endif %}>240</option>
-                    <option {% if quality == "360" %} selected {% endif %}>360</option>
-                    <option {% if quality == "480" %} selected {% endif %}>480</option>
-                    <option {% if quality == "720" %} selected {% endif %}>720</option>
-                    <option {% if quality == "1080" %} selected {% endif %}>1080</option>
-                    <option {% if quality == "2160" %} selected {% endif %}>2160</option>
+                    <option {% ifequal quality "190" %} selected {% endifequal %}>190</option>
+                    <option {% ifequal quality "240" %} selected {% endifequal %}>240</option>
+                    <option {% ifequal quality "360" %} selected {% endifequal %}>360</option>
+                    <option {% ifequal quality "480" %} selected {% endifequal %}>480</option>
+                    <option {% ifequal quality "720" %} selected {% endifequal %}>720</option>
+                    <option {% ifequal quality "1080" %} selected {% endifequal %}>1080</option>
+                    <option {% ifequal quality "2160" %} selected {% endifequal %}>2160</option>
                 </select>
             </div>
             <div class="form__group col-lg-1 col-md-12 video-filter-duration  field">
@@ -35,12 +35,12 @@
             <div class="form__group col-lg-1 col-md-12  field">
                 <label for="order" class="form__label">Order</label>
                 <select id="video-filter-order" class="video-filter-obj form__field" name="order" value="{{order}}">
-                    <option {% if order == "duration asc" %} selected {% endif %}>duration asc</option>
-                    <option {% if order == "duration desc" %} selected {% endif %}>duration desc</option>
-                    <option {% if order == "quality asc" %} selected {% endif %}>quality asc</option>
-                    <option {% if order == "quality desc" %} selected {% endif %}>quality desc</option>
-                    <option {% if order == "age asc" %} selected {% endif %}>age asc</option>
-                    <option {% if order == "age desc" %} selected {% endif %}>age desc</option>
+                    <option {% ifequal order 'duration asc' %} selected {% endifequal %}>duration asc</option>
+                    <option {% ifequal order 'duration desc' %} selected {% endifequal %}>duration desc</option>
+                    <option {% ifequal order 'quality asc' %} selected {% endifequal %}>quality asc</option>
+                    <option {% ifequal order 'quality desc' %} selected {% endifequal %}>quality desc</option>
+                    <option {% ifequal order 'age asc' %} selected {% endifequal %}>age asc</option>
+                    <option {% ifequal order 'age desc' %} selected {% endifequal %}>age desc</option>
                 </select>
             </div>
             <div class="col-lg-2">
@@ -69,11 +69,13 @@
     {% endfor %}
 
     {% if actors %}
-    <h2>Actors:</h2>
-    <div class="card-deck">
-        {% for actor in actors %}
-        {% include "viewer/actor_card.html" with actor=actor %}
-        {% endfor %}
+    <div class="index-actor-preview">
+        <h2>Actors:</h2>
+        <div class="card-deck">
+            {% for actor in actors %}
+            {% include "viewer/actor_card.html" with actor=actor %}
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
 
