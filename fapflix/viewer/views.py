@@ -237,8 +237,10 @@ def actor_remove_video(request):
     if request.method == "POST":
         actor_id = request.POST["actor_id"]
         video_id = request.POST["video_id"]
-        actor_obj = Actors.object.filter(id=actor_id)
-        actor_obj.videos.remove(video_id)
+        actor_obj = Actors.objects.filter(id=actor_id).first()
+        video_obj = Videos.objects.filter(id=video_id).first()
+        actor_obj.videos.remove(video_obj)
+    return HttpResponse("OK")
 
 class DataLoader(generic.ListView):
     template_name = "viewer/loader.html"
