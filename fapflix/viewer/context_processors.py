@@ -3,7 +3,7 @@ import random
 
 
 def random_video(request):
-    rvideos = Videos.objects.all()
+    rvideos = Videos.objects.order_by('?')[:33]
     if rvideos:
         rvideo = random.choice(rvideos)
     else:
