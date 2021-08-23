@@ -38,6 +38,9 @@ class Videos(models.Model):
     def __str__(self):
         return f"{self.filename}"
 
+    class Meta:
+        ordering = ["-inserted_at"]
+
 
 class Images(models.Model):
     path = models.TextField(unique=True)
