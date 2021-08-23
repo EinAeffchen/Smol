@@ -36,6 +36,9 @@
                         <div class="quality">{{video.dim_height}}p</div>
                         <div class="rating">{{video.rating}}<i class="far fa-star"></i></div>
                     </div>
+                    <div class="video-delete" style="display: none">
+                        <a onclick=removeVideo(this) video-id="{{video.id}}"" actor-id="{{actor_id}}">Remove <i class="fas fa-trash-alt"></i></a>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
@@ -58,38 +61,3 @@
     </div>
     {% endif %}
 </div>
-
-{% block script %}
-<script type="text/javascript">
-    var width = 0;
-    $(document).ready(function () {
-        $(".imgSW-preview").off("mouseenter").on("mouseenter", function () {
-            var self = this.querySelector("img");
-            console.log(self)
-            frames = parseFloat(self.attributes.dataframes.nodeValue);
-            width = self.width;
-            self.src = self.attributes.preview.nodeValue;
-            var i = 1;
-            self.style.left = -i * width;
-            self.style.width = self.width * frames;
-            self.style.position = "absolute";
-            self.style.overflow = "hidden";
-            iid = setInterval(function () {
-                if (i == frames) {
-                    i = 1;
-                }
-                self.style.left = -i * width;
-                i = i + 1;
-            }, 350);
-            console.log(iid);
-        }).off("mouseleave").on("mouseleave", function () {
-            var self = this.querySelector("img");
-            iid && clearInterval(iid);
-            self.style.position = "relative";
-            self.style.width = "100%";
-            self.style.left = null;
-            self.src = self.attributes.thumbnail.nodeValue;
-        });
-    });
-</script>
-{% endblock %}

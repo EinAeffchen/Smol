@@ -82,9 +82,9 @@
             </div>
             <div class="col-lg-12"></div>
         </div>
-        <div class="col-lg-12">
+        <div class="col-lg-12 actor-carousel">
             {% if object.videos.all %}
-            {% include "viewer/carousel.html" with id="carousel1" result_videos=object.videos.all %}
+            {% include "viewer/carousel.html" with id="carousel1" actor_id=object.id result_videos=object.videos.all %}
             {% endif %}
         </div>
         <div class="col-lg-1 offset-lg-9">
@@ -99,13 +99,27 @@
                 <button class="btn btn-primary my-2 my-sm-0 float-right" type="submit">Delete</button>
             </form>
         </div>
-        <div class="col-lg-12"><p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i> Running face recognition. Depening on your library size, this might take a while</p></div>
+        <div class="col-lg-12">
+            <p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i> Running face recognition.
+                Depening on your library size, this might take a while</p>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block script %}
 <script type="text/javascript">
+    function removeVideo(button) {
+        $(button).parent().hide();
+        $.ajax({
+            url: "{% url 'viewer:actor-video-delete' %}",
+            method: "POST",
+            data: {
+                video_id: $(button).attr("video-id"),
+                actor_id: $(button).attr("actor-id")
+            }
+        })
+    };
     function addContent(button) {
         $("#load-icon").show();
         $.ajax({
@@ -116,6 +130,17 @@
             }, success: function (data) {
                 id = data["actor-id"];
                 window.location = "/actor/" + id + "/"
+            }
+        })
+    };
+    function remActorLabel(button) {
+        $(button).parent().hide();
+        $.ajax({
+            url: "{% url 'viewer:label-actor-delete' %}",
+            method: "POST",
+            data: {
+                label_id: $(button).attr("label-id"),
+                actor_id: "{{object.id}}"
             }
         })
     }</script>

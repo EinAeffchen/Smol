@@ -2,67 +2,67 @@ import os
 import re
 import subprocess
 from datetime import datetime
-from operator import sub
 from pathlib import Path
 from sys import dont_write_bytecode
 from typing import List, Set, Tuple, Union
 
 import cv2
 import ffmpeg
-import pandas as pd
 from django.conf import settings
-from django.db.utils import DataError
 from pandas.core.frame import DataFrame
-from .utils import base64_encode, base64_decode
 from .detector import get_age_ethnic, recognizer
 from .models import Labels, Videos
 
 face_path = Path(settings.MEDIA_ROOT) / "images/faces"
+full_face_path = Path(settings.MEDIA_ROOT) / "images/full_faces"
 face_path.mkdir(exist_ok=True)
+full_face_path.mkdir(exist_ok=True)
 
+VIDEO_SUFFIXES =[".mp4", ".mov", ".wmv", ".avi", ".flv", ".mkv", ".webm", ".gp3", ".ts", ".mpeg"]
 
 def clean_recognize_pkls():
     for pkl_file in face_path.glob("*.pkl"):
         pkl_file.unlink()
 
 
-def get_videos_containing_actor(filename: Union[str, Path]) -> Tuple[Set[str], str]:
-    clean_recognize_pkls()
-    if isinstance(filename, str):
-        filename_stem = filename.split(".")[0]
+def get_videos_containing_actor(video_id: Union[int, Path]) -> Set[str]:
+    # clean_recognize_pkls()
+    if isinstance(video_id, int):
         faces = [
             str(face_file)
             for face_file in face_path.iterdir()
-            if filename_stem in str(face_file)
+            if str(video_id) == face_file.name.split("_")[0]
         ]
     else:
-        faces = [str(filename)]
-    print(faces)
+        faces = [str(video_id)]
+    print(f"faces: {faces}")
     if faces:
         video_results = recognizer(faces, face_path)
         if isinstance(video_results, DataFrame) and not video_results.empty:
             matched_videos = set()
             print(video_results)
-            face = video_results.iloc[0]["identity"]
             for index, row in video_results.iterrows():
-                video = re.sub("_\d+\.jpg", ".jpg", Path(row["identity"]).name)
-                matched_videos.add(video)
+                video_id = Path(row["identity"]).name.split("_")[0]
+                matched_videos.add(video_id)
             print(matched_videos)
-            return matched_videos, face
+            return matched_videos
     else:
         print("No faces detected for video!")
-    return None, None
+    return None
 
-def repackage(path: Path):
-    print(f"Missing video info for {path}. Trying to repackage...")
+
+def repackage(path: Path) -> Path:
+    """Converts a video to mp4 and returns the new file path"""
+
+    print(f"Video {path} not in mp4 format, reformatting...")
     out_path = path.with_name(path.stem + "_new.mp4")
     process = subprocess.Popen(
         [
             "ffmpeg",
             "-loglevel",
-            # "-hwaccel",
-            # "opencl",
             "panic",
+            # "-hwaccel",
+            # "cuda",
             "-i",
             str(path),
             str(out_path),
@@ -107,13 +107,6 @@ def read_video_info(path: Path) -> dont_write_bytecode:
     if audio_stream:
         video_data["audiocodec"] = audio_stream["codec_name"]
     video_data["duration"] = get_duration(video_stream)
-    if (not video_data["duration"] and not "_new" in path.stem) or not ".mp4" in path.name:
-        new_path = repackage(path)
-        if new_path:
-            return read_video_info(new_path)
-        else:
-            print("Couldn't fix metadata")
-    video_data["filepath"] = path
     video_data["bitrate"] = video_stream.get("bit_rate")
     video_data["frames"] = video_stream.get(
         "nb_frames", video_stream.get("tags", {}).get("NUMBER_OF_FRAMES-eng")
@@ -127,14 +120,17 @@ def read_video_info(path: Path) -> dont_write_bytecode:
     return video_data
 
 
-def calculate_distance(width: int, height: int) -> int:
+def calculate_padding(width: int, height: int) -> str:
     ratio = width / height
     tgt_height = 380
     tgt_width = int(tgt_height * ratio)
     padding = 582 - tgt_width
-    if padding < 0:
-        return 0
-    return padding / 2
+    if padding / 2 > 0:
+        pad = f",pad=582:390:{padding/2}:0:black"
+    else:
+        pad = ""
+    return pad
+
 
 def update_preview_name(filename: str, preview_dir: Path):
     counter = 1
@@ -146,33 +142,31 @@ def update_preview_name(filename: str, preview_dir: Path):
         out_path = preview_dir / out_filename
     return out_path, out_filename
 
-def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) -> Path:
-    stem = base64_encode(path.stem)
+
+def generate_preview(
+    video: Videos, frames: int, preview_dir: Path, video_path: Path
+) -> Path:
     if frames:
         nth_frame = int(int(frames) / 70)
     else:
         nth_frame = 25
-    out_filename = f"{stem}.jpg"
+    out_filename = f"{video.id}.jpg"
     out_path = preview_dir / out_filename
     if out_path.is_file():
-        out_path, out_filename = update_preview_name(stem, preview_dir)
-    dist = calculate_distance(width, height)
-    if nth_frame > 25:
-        nth_frame = 25
-    if dist > 0:
-        pad = f",pad=582:390:{dist}:0:black"
-    else:
-        pad = ""
+        return out_filename
+    pad = calculate_padding(video.dim_width, video.dim_height)
+    if nth_frame > 50:
+        nth_frame = 50
     process = subprocess.Popen(
         [
             "ffmpeg",
             # "-hwaccel",
-            # "opencl",
+            # "cuda",
             "-loglevel",
             "panic",
             "-y",
             "-i",
-            str(path),
+            str(video_path),
             "-frames",
             "1",
             "-q:v",
@@ -191,15 +185,14 @@ def generate_preview(path: Path, frames: int, preview_dir: Path, width, height) 
     return out_filename
 
 
-def generate_thumbnail(video: Path, thumbnail_dir: Path, vid_duration: int) -> Path:
-    stem = base64_encode(video.stem)
-    out_filename = f"{stem}.jpg"
+def generate_thumbnail(video: Videos, thumbnail_dir: Path, video_path: Path) -> Path:
+    out_filename = f"{video.id}.jpg"
     out_path = thumbnail_dir / out_filename
     if out_path.is_file():
-        out_path, out_filename = update_preview_name(stem, thumbnail_dir)
+        return out_filename
     if not out_path.is_file():
-        if vid_duration:
-            thumbnail_ss = int(vid_duration / 2)
+        if video.duration:
+            thumbnail_ss = int(video.duration / 2)
         else:
             thumbnail_ss = 5
         process = subprocess.Popen(
@@ -208,12 +201,12 @@ def generate_thumbnail(video: Path, thumbnail_dir: Path, vid_duration: int) -> P
                 "-ss",
                 str(thumbnail_ss),
                 # "-hwaccel",
-                # "opencl",
+                # "cuda",
                 "-loglevel",
                 "panic",
                 "-y",
                 "-i",
-                str(video),
+                str(video_path),
                 "-frames",
                 "1",
                 "-q:v",
@@ -240,7 +233,7 @@ def add_labels_by_path(video_row: Videos, labels: List[Labels], video_path: Path
 
 
 def add_additional_labels(video_data: dict, video_row: Videos, race: str = None):
-    if video_data["dim_height"] >= 720:
+    if video_data.dim_height >= 720:
         hd_label = Labels.objects.filter(label="HD").first()
         video_row.labels.add(hd_label)
     if race:
@@ -248,60 +241,48 @@ def add_additional_labels(video_data: dict, video_row: Videos, race: str = None)
         video_row.labels.add(race_label)
 
 
-def process_videos(thumbnail_dir, preview_dir):
+def post_process_videos(preview_dir: Path, video: Videos):
+    try:
+        age, race = get_age_ethnic(video, preview_dir)
+        add_additional_labels(video, video, race)
+        video.actor_age = age
+        video.processed = True
+        video.save()
+        print(f"Finished processing {video.filename}")
+    except cv2.error as e:
+        print(f"Couldn't detect age and race due to {e}")
+    return {"finished": False, "video": video.filename}
+
+
+def generate_previews_thumbnails(thumbnail_dir, preview_dir):
     path = Path(__file__).resolve().parent
     video_dir = path / "static/viewer/ext_videos"
     labels = Labels.objects.all()
     for video in video_dir.rglob("*"):
-        try:
-            if video.is_file() and video.suffix in [
-                ".mp4",
-                ".mov",
-                ".mkv",
-                ".flv",
-                ".f4v",
-                ".wmv",
-                ".avi",
-                ".webm",
-                ".3gp",
-                ".ts"
-            ]:
-                if not Videos.objects.filter(path=str(video)):
-                    last_video = str(video.name)
-                    video_data = read_video_info(video)
-                    video = Path(video_data.pop("filepath"))
-                    video_data["size"] = video.stat().st_size
-                    video_data["path"] = str(video)
-                    video_data["filename"] = str(video).replace(
-                        os.path.commonprefix([str(video_dir), str(video)]), ""
-                    )
-                    frames = video_data.pop("frames")
-                    video_row = Videos(**video_data)
-                    video_row.thumbnail = generate_thumbnail(
-                        video, thumbnail_dir, video_data["duration"]
-                    )
-                    video_row.preview = generate_preview(
-                        video,
-                        frames,
-                        preview_dir,
-                        video_data["dim_width"],
-                        video_data["dim_height"],
-                    )
-                    video_row.processed = True
-                    try:
-                        video_row.save()
-                    except DataError:
-                        print(video_row)
-                        raise
-                    try:
-                        age, race = get_age_ethnic(preview_dir / video_row.preview)
-                        add_additional_labels(video_data, video_row, race)
-                        video_row.actor_age = age
-                    except cv2.error as e:
-                        print(f"Couldn't detect age and race due to {e}")
-                    add_labels_by_path(video_row, labels, video)
-                    video_row.save()
-                    return {"finished": False, "video": last_video}
-        except OSError as e:
-            print(f"Detected error on {video} due to {e}")
+        if video.name == ".gitignore":
+            continue
+        if video.is_file() and video.suffix in VIDEO_SUFFIXES:
+            if video.suffix != ".mp4" and video.name != ".gitignore":
+                video = repackage(video)
+            if not Videos.objects.filter(path=str(video)):
+                last_video = str(video.name)
+                video_data = read_video_info(video)
+                video_data["size"] = video.stat().st_size
+                video_data["path"] = str(video)
+                video_data["filename"] = str(video).replace(
+                    os.path.commonprefix([str(video_dir), str(video)]), ""
+                )
+                frames = video_data.pop("frames")
+                video_row = Videos(**video_data)
+                video_row.processed = False
+                video_row.save()
+                video_row.thumbnail = generate_thumbnail(
+                    video_row, thumbnail_dir, video
+                )
+                video_row.preview = generate_preview(
+                    video_row, frames, preview_dir, video
+                )
+                add_labels_by_path(video_row, labels, video)
+                video_row.save()
+                return {"finished": False, "video": last_video}
     return {"finished": True}

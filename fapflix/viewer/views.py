@@ -7,6 +7,7 @@ from django.core.files import File
 from django.db import IntegrityError
 from django.db.models import Count, F, Q
 from django.db.models.fields import CharField, IntegerField
+from django.db.models.query import Prefetch
 from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
@@ -17,9 +18,14 @@ from PIL.Image import Image
 
 from .forms import ActorForm, FilterForm, ImageForm, LabelForm
 from .models import Actors, Labels, Videos
-from .video_processor import get_videos_containing_actor, process_videos
+from django.conf import settings
+from .video_processor import get_videos_containing_actor, generate_previews_thumbnails, post_process_videos, clean_recognize_pkls
 
-
+path = Path(__file__).resolve().parent
+path = path / "static/viewer/images"
+THUMBNAIL_DIR = path / "thumbnails"
+PREVIEW_DIR = path / "previews"
+FULL_FACE_PATH = Path(settings.MEDIA_ROOT) / "images/full_faces"
 class IndexView(generic.ListView):
     template_name = "viewer/index.html"
     model = Videos
@@ -104,13 +110,17 @@ class CreateActorView(CreateView):
 
     def form_valid(self, form):
         actor = form.save()
+        actor.forename = "unknown"
+        actor.surname = "unknown"
+        actor.save()
         video_id = self.request.POST.get("videos[]")
         video_obj = Videos.objects.filter(id=video_id).first()
-        video_preview_path = video_obj.preview
-        related_videos, face = get_videos_containing_actor(video_preview_path)
+        print(f"id: {video_obj.id}")
+        related_videos = get_videos_containing_actor(video_obj.id)
         print(f"related videos: {related_videos}")
         if related_videos:
-            related_video_objs = Videos.objects.filter(preview__in=related_videos).all()
+            face = FULL_FACE_PATH/f"{list(related_videos)[0]}_face.jpg"
+            related_video_objs = Videos.objects.filter(id__in=related_videos).all()
             ages = list()
             labels = list()
             for video_obj in related_video_objs:
@@ -122,21 +132,19 @@ class CreateActorView(CreateView):
             [actor.labels.add(label) for label in labels]
             if not actor.birth_year and ages:
                 actor.birth_year = datetime.now().year - min(ages)
-        if face:
-            face_filename = Path(face).name
-            actor.avatar.save(face_filename, File(open(face, "rb")))
-            actor.save()
+            if face:
+                face_filename = Path(face).name
+                actor.avatar.save(face_filename, File(open(face, "rb")))
+                actor.save()
         return JsonResponse({"actor-id": actor.id})
 
 def updateActor(request):
     if request.method == "POST":
         actor_id = request.POST.get("actor")
         actor_obj = Actors.objects.filter(id=actor_id).first()
-        print(f"name: {actor_obj.avatar.name}")
-        print(f"path: {actor_obj.avatar.path}")
-        related_videos, face = get_videos_containing_actor(Path(actor_obj.avatar.path))
+        related_videos = get_videos_containing_actor(Path(actor_obj.avatar.path))
         print(f"related videos: {related_videos}")
-        if related_videos and face:
+        if related_videos:
             related_video_objs = Videos.objects.filter(preview__in=related_videos).all()
             ages = list()
             labels = list()
@@ -225,6 +233,12 @@ def delete_actor_label(request):
         actor_obj.labels.remove(label_obj)
     return HttpResponse("OK")
 
+def actor_remove_video(request):
+    if request.method == "POST":
+        actor_id = request.POST["actor_id"]
+        video_id = request.POST["video_id"]
+        actor_obj = Actors.object.filter(id=actor_id)
+        actor_obj.videos.remove(video_id)
 
 class DataLoader(generic.ListView):
     template_name = "viewer/loader.html"
@@ -337,6 +351,11 @@ class VideoList(generic.ListView):
         return context
 
 
+class VideoOverview(generic.ListView):
+    paginate_by = 16
+    model = Videos
+    template_name = "viewer/overview.html"
+
 class SearchView(VideoList):
     template_name = "viewer/search.html"
 
@@ -349,23 +368,27 @@ class SearchView(VideoList):
         context = super().get_context_data(**kwargs)
         search_query = self.request.GET["query"]
         context["videos"] = Videos.objects.filter(filename__icontains=search_query)
-        context["labels"] = Labels.objects.filter(label__icontains=search_query)
+        context["labels"] = Videos.objects.filter(labels__label__icontains=search_query)
         context["actors"] = Actors.objects.filter(Q(forename__icontains=search_query) | Q(surname__icontains=search_query))
         return context
 
 
 def load_data(request):
-    path = Path(__file__).resolve().parent
-    path = path / "static/viewer/images"
-    thumbnail_dir = path / "thumbnails"
-    preview_dir = path / "previews"
-    if not thumbnail_dir.is_dir():
-        thumbnail_dir.mkdir()
-    if not preview_dir.is_dir():
-        preview_dir.mkdir()
-    last = process_videos(thumbnail_dir, preview_dir)
+    clean_recognize_pkls()
+    if not THUMBNAIL_DIR.is_dir():
+        THUMBNAIL_DIR.mkdir()
+    if not PREVIEW_DIR.is_dir():
+        PREVIEW_DIR.mkdir()
+    last = generate_previews_thumbnails(THUMBNAIL_DIR, PREVIEW_DIR)
     return JsonResponse(last)
 
+def post_process_video_controller(request):
+    videos = Videos.objects.filter(processed=False).all()
+    if not videos:
+        return JsonResponse({"finished": True})
+    result = post_process_videos(PREVIEW_DIR, videos[0])
+    result["unprocessed"] = len(videos)-1
+    return JsonResponse(result)
 
 def add_actor(request):
     actor = Actors()

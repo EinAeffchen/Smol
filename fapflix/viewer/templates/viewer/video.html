@@ -67,7 +67,9 @@
 
                 </div>
                 <div class="col-lg-2 form__group field" style="margin-top:0;">
+                    {% if video.processed %}
                     <a class='btn btn-danger video-info-obj' onclick="generateActor(this)">Generate actor</a>
+                    {% endif %}
                 </div>
                 <div class="col-lg-4">
                     <fieldset class="rating">
@@ -82,7 +84,10 @@
                             title="Sucks big time"></label>
                     </fieldset>
                 </div>
-                <div class="col-lg-12"><p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i> Running face recognition. Depening on your library size, this might take a while</p></div>
+                <div class="col-lg-12">
+                    <p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i> Running face
+                        recognition. Depening on your library size, this might take a while</p>
+                </div>
             </div>
 
         </div>
@@ -115,7 +120,7 @@
         {% endif %}
         {% else %}
         <div class='col-lg-4 col-md-12'>
-            <h3 style='font-size:2rem'>Most popular:</h3>
+            <h3 style='font-size:2rem'>Other videos:</h3>
             <div class='border'>
                 <div class="row">
                     {% for video in rvideos|slice:":8" %}
@@ -165,7 +170,7 @@
                 videos: ["{{video.id}}"]
             }, success: function (data) {
                 id = data["actor-id"];
-                window.location = "/actor/"+id+"/"
+                window.location = "/actor/" + id + "/"
             }
         })
     }

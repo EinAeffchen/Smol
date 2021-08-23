@@ -116,6 +116,9 @@
                     <a class="nav-link" href="{% url 'viewer:labels' %}">Labels</a>
                 </li>
                 <li class="nav-item">
+                    <a class="nav-link" href="{% url 'viewer:video-overview' %}">Videos</a>
+                </li>
+                <li class="nav-item">
                     <a class="nav-link" href="{% url 'viewer:actors' %}">Actors</a>
                 </li>
                 <li class="nav-item">
@@ -131,14 +134,45 @@
                 <!-- <label for="search" class="form__label">Search</label> -->
                 <input id="site-search" name="query" type='search' class="form__field video-filter-obj"
                     placeholder="filenames, labels, etc." aria-label="Search" size="30">
-                <button class="btn btn-primary my-2 my-sm-0" type="submit">Search</button>
+                <button class="btn btn-primary my-2 my-sm-0 nflx-button" type="submit">Search</button>
             </form>
         </div>
     </nav>
     {% block content %}
 
     {% endblock %}
-
+    <script type="text/javascript">
+        var width = 0;
+        $(document).ready(function () {
+            $(".imgSW-preview").off("mouseenter").on("mouseenter", function () {
+                var self = this.querySelector("img");
+                console.log(self)
+                frames = parseFloat(self.attributes.dataframes.nodeValue);
+                width = self.width;
+                self.src = self.attributes.preview.nodeValue;
+                var i = 1;
+                self.style.left = -i * width;
+                self.style.width = self.width * frames;
+                self.style.position = "absolute";
+                self.style.overflow = "hidden";
+                iid = setInterval(function () {
+                    if (i == frames) {
+                        i = 1;
+                    }
+                    self.style.left = -i * width;
+                    i = i + 1;
+                }, 350);
+                console.log(iid);
+            }).off("mouseleave").on("mouseleave", function () {
+                var self = this.querySelector("img");
+                iid && clearInterval(iid);
+                self.style.position = "relative";
+                self.style.width = "100%";
+                self.style.left = null;
+                self.src = self.attributes.thumbnail.nodeValue;
+            });
+        });
+    </script>
     {% block script %}
 
     {% endblock %}
