@@ -45,7 +45,7 @@ def recognizer(image_files: List[str], face_path: Path) -> DataFrame:
         result = pd.concat(result).sort_values(by=["Facenet_euclidean_l2"])
     result["identity"] = result["identity"].apply(lambda x: x.split("_")[0])
     print(result.head(60))
-    result = result[result["Facenet_euclidean_l2"] < 0.8]  # 1.02
+    result = result[result["Facenet_euclidean_l2"] < 0.4]  # 1.02
     return result
 
 
