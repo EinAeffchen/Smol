@@ -26,7 +26,7 @@ SECRET_KEY = "k&ndet-+-&(yxp_hih^k9y*$hbe2p=$vzeryfj$x*&$#+0-$sx"
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ["fap.flix", "192.168.178.22", "localhost", "127.0.0.1"]
 DEFAULT_CHARSET = "utf-8"
 
 
@@ -144,7 +144,7 @@ def always_true(request):
 
 
 SHOW_TOOLBAR_CALLBACK = always_true
-INTERNAL_IPS = ["127.0.0.1", "localhost", "192.168.99.100"]
+INTERNAL_IPS = ["127.0.0.1", "localhost", "192.168.99.22", "192.168.178.22", "fap.flix"]
 
 SITE_ID = 1
 
