@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 from sys import dont_write_bytecode
 from typing import List, Set, Tuple, Union
-
 import cv2
 import ffmpeg
 from django.conf import settings
@@ -18,32 +17,53 @@ full_face_path = Path(settings.MEDIA_ROOT) / "images/full_faces"
 face_path.mkdir(exist_ok=True)
 full_face_path.mkdir(exist_ok=True)
 
-VIDEO_SUFFIXES =[".mp4", ".mov", ".wmv", ".avi", ".flv", ".mkv", ".webm", ".gp3", ".ts", ".mpeg"]
+VIDEO_SUFFIXES = [
+    ".mp4",
+    ".mov",
+    ".wmv",
+    ".avi",
+    ".flv",
+    ".mkv",
+    ".webm",
+    ".gp3",
+    ".ts",
+    ".mpeg",
+]
+
 
 def clean_recognize_pkls():
     for pkl_file in face_path.glob("*.pkl"):
         pkl_file.unlink()
 
 
-def get_videos_containing_actor(video_id: Union[int, Path]) -> Set[str]:
+def get_videos_containing_actor(video_ids: Union[int, list, Path]) -> Set[str]:
     # clean_recognize_pkls()
-    if isinstance(video_id, int):
+    faces = []
+    print(f"transferred: {video_ids}")
+    if isinstance(video_ids, Path):
+        faces = [str(video_ids)]
+    elif isinstance(video_ids, int):
+        video_ids = [str(video_ids)]
+    if not faces:
         faces = [
             str(face_file)
             for face_file in face_path.iterdir()
-            if str(video_id) == face_file.name.split("_")[0]
+            if face_file.name.split("_")[0] in video_ids
         ]
-    else:
-        faces = [str(video_id)]
     print(f"faces: {faces}")
     if faces:
         video_results = recognizer(faces, face_path)
         if isinstance(video_results, DataFrame) and not video_results.empty:
-            matched_videos = set()
+            matched_videos = dict()
             print(video_results)
             for index, row in video_results.iterrows():
                 video_id = Path(row["identity"]).name.split("_")[0]
-                matched_videos.add(video_id)
+                video_id = int(video_id)
+                if matched_videos.get(video_id) == None:
+                    matched_videos[video_id] = row["Facenet512_euclidean_l2"]
+                elif row["Facenet512_euclidean_l2"] < matched_videos[video_id]:
+                    print("Found smaller value")
+                    matched_videos[video_id] = row["Facenet512_euclidean_l2"]
             print(matched_videos)
             return matched_videos
     else:
