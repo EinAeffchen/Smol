@@ -39,7 +39,7 @@ class Videos(models.Model):
         return f"{self.filename}"
 
     class Meta:
-        ordering = ["-inserted_at"]
+        ordering = ["?"]
 
 
 class Images(models.Model):
