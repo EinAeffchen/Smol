@@ -36,6 +36,10 @@ def urlencode(value):
     return quote(value)
 
 @register.filter
+def connect(first, second):
+    return str(first)+str(second)
+
+@register.filter
 def get_type(value):
     mime_mapping = {
         ".avi": "video/x-msvideo",
