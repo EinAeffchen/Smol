@@ -18,6 +18,7 @@
         {% if actor.birth_year %}
         <small class="text-muted float-right">Born {{actor.birth_year}}</small>
         {% endif %}
+        <small class="text-muted float-left">Videos: {{actor.videos.all|length}}</small>
     </div>
 
 </div>

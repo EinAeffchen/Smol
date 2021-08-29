@@ -5,12 +5,12 @@
     <form action="/">
         <div class="row">
 
-            <div class="col-lg-1  form__group field">
+            <div class="col-lg-1 col-sm-12 form__group field">
                 <label for="age" class="form__label">Age</label>
                 <input id="video-filter-age" class="video-filter-obj form__field" type="number" size="6" name="age"
                     max="99" value="{{age}}">
             </div>
-            <div class="form__group col-lg-1  field">
+            <div class="form__group col-lg-1 col-sm-12 field">
                 <label for="quality" class="form__label">Quality</label>
                 <select id="video-filter-quality" class="video-filter-obj form__field" name="quality"
                     value="{{quality}}">
@@ -43,7 +43,7 @@
                     <option {% ifequal order 'age desc' %} selected {% endifequal %}>age desc</option>
                 </select>
             </div>
-            <div class="col-lg-2">
+            <div class="col-lg-2 no-padding-left">
                 <button type="submit" class="nflx-button">
                     <div class="nflx-button-icon"><i class="fas fa-filter"></i></div>
                     <div style="width: 1rem;"></div>
@@ -53,19 +53,18 @@
         </div>
     </form>
     {% if result_videos1 %}
-    {% include "viewer/carousel.html" with id="carousel1" title="Best Rating:" result_videos=result_videos1 %}
+    {% include "viewer/carousel.html" with id="carousel7" title="Best Rating:" result_videos=result_videos1 %}
     {% endif %}
     {% if result_videos2 %}
-    {% include "viewer/carousel.html" with id="carousel2" title="Newest:" result_videos=result_videos2 %}
+    {% include "viewer/carousel.html" with id="carousel8" title="Newest:" result_videos=result_videos2 %}
     {% endif %}
     {% if result_videos3 %}
-    {% include "viewer/carousel.html" with id="carousel3" title="Favorites:" result_videos=result_videos3 %}
+    {% include "viewer/carousel.html" with id="carousel9" title="Favorites:" result_videos=result_videos3 %}
     {% endif %}
-
 
 
     {% for key, dataset in label_videos.items %}
-    {% include "viewer/carousel.html" with id="carousel1" title=key result_videos=dataset %}
+    {% include "viewer/carousel.html" with id="carousel"|connect:forloop.counter title=key result_videos=dataset %}
     {% endfor %}
 
     {% if actors %}

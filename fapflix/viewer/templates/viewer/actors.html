@@ -2,7 +2,7 @@
 {% load custom_filters %}
 {% block content %}
 <div class="container">
-    <a href="{% url 'viewer:new-actor' %}">add new actor</a>
+    <a class="btn btn-danger" href="{% url 'viewer:new-actor' %}">add new actor</a>
     <div class="card-deck">
         {% for actor in object_list %}
         {% include "viewer/actor_card.html" with actor=actor %}
