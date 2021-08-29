@@ -19,7 +19,7 @@ from .models import Videos
 face_path = Path(__file__).parent.parent / "media/images/faces"
 full_face_path = Path(__file__).parent.parent / "media/images/full_faces"
 full_face_path.mkdir(exist_ok=True)
-model = DeepFace.build_model('Facenet')
+model = DeepFace.build_model('Facenet512')
 
 def average(lst):
     return sum(lst) / len(lst)
@@ -33,19 +33,18 @@ def recognizer(image_files: List[str], face_path: Path) -> DataFrame:
     result = DeepFace.find(
         image_files,
         str(face_path),
-        model_name="Facenet",
+        model_name="Facenet512",
         model = model,
         distance_metric="euclidean_l2",
         enforce_detection=True,
         detector_backend="skip",
         prog_bar=False,
-        normalization="Facenet"
     )
     if isinstance(result, list):
-        result = pd.concat(result).sort_values(by=["Facenet_euclidean_l2"])
+        result = pd.concat(result).sort_values(by=["Facenet512_euclidean_l2"])
     result["identity"] = result["identity"].apply(lambda x: x.split("_")[0])
     print(result.head(60))
-    result = result[result["Facenet_euclidean_l2"] < 0.4]  # 1.02
+    result = result[result["Facenet512_euclidean_l2"] < 0.3]  # 1.02
     return result
 
 
@@ -87,7 +86,7 @@ def get_age_ethnic(video: Videos, video_preview: Path, debug=False):
                 img_path=str(face_image_path),
                 actions=["age", "race"],
                 enforce_detection=True,
-                detector_backend="mtcnn",
+                detector_backend="retinaface",
                 prog_bar=False, 
             )
             print(time.time() - start) 
