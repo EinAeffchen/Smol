@@ -12,20 +12,26 @@ from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views import generic
-from django.views.generic.edit import (CreateView, DeleteView, FormView,
-                                       UpdateView)
+from django.views.generic.edit import CreateView, DeleteView, FormView, UpdateView
 from PIL.Image import Image
 
 from .forms import ActorForm, FilterForm, ImageForm, LabelForm
 from .models import Actors, Labels, Videos
 from django.conf import settings
-from .video_processor import get_videos_containing_actor, generate_previews_thumbnails, post_process_videos, clean_recognize_pkls
+from .video_processor import (
+    get_videos_containing_actor,
+    generate_previews_thumbnails,
+    post_process_videos,
+    clean_recognize_pkls,
+)
 
 path = Path(__file__).resolve().parent
 path = path / "static/viewer/images"
 THUMBNAIL_DIR = path / "thumbnails"
 PREVIEW_DIR = path / "previews"
 FULL_FACE_PATH = Path(settings.MEDIA_ROOT) / "images/full_faces"
+
+
 class IndexView(generic.ListView):
     template_name = "viewer/index.html"
     model = Videos
@@ -79,14 +85,20 @@ class IndexView(generic.ListView):
         context["result_videos3"] = videos.filter(favorite=True)[:60]
         if not self.request.GET:
             context["label_videos"] = dict()
-            active_labels = [(label.id, label.label) for label in Labels.objects.annotate(video_count=Count('videos')).filter(videos__isnull=False).filter(video_count__gte=6).distinct()]
+            active_labels = [
+                (label.id, label.label)
+                for label in Labels.objects.annotate(video_count=Count("videos"))
+                .filter(videos__isnull=False)
+                .filter(video_count__gte=6)
+                .distinct()
+            ]
             if len(active_labels) >= 5:
                 label_lists = random.sample(active_labels, 5)
                 for label in label_lists:
                     context["label_videos"][label[1]] = Videos.objects.filter(
                         labels=label[0]
                     )
-        context["actors"] = Actors.objects.all()
+        context["actors"] = Actors.objects.all()[:6]
         return context
 
 
@@ -117,9 +129,16 @@ class CreateActorView(CreateView):
         video_obj = Videos.objects.filter(id=video_id).first()
         print(f"id: {video_obj.id}")
         related_videos = get_videos_containing_actor(video_obj.id)
-        print(f"related videos: {related_videos}")
         if related_videos:
-            face = FULL_FACE_PATH/f"{list(related_videos)[0]}_face.jpg"
+            related_videos = {
+                k: v
+                for k, v in sorted(related_videos.items(), key=lambda item: item[1])
+            }
+            print(f"related videos: {related_videos}")
+            related_videos = list(related_videos)
+            print(f"related videos: {related_videos}")
+            face = FULL_FACE_PATH / f"{related_videos[0]}_face.jpg"
+            print(f"Found face: {face}")
             related_video_objs = Videos.objects.filter(id__in=related_videos).all()
             ages = list()
             labels = list()
@@ -138,14 +157,26 @@ class CreateActorView(CreateView):
                 actor.save()
         return JsonResponse({"actor-id": actor.id})
 
+
 def updateActor(request):
     if request.method == "POST":
         actor_id = request.POST.get("actor")
         actor_obj = Actors.objects.filter(id=actor_id).first()
+        videos = [str(video.id) for video in actor_obj.videos.all()]
         related_videos = get_videos_containing_actor(Path(actor_obj.avatar.path))
+        related_videos2 = get_videos_containing_actor(videos)
+
+        if related_videos and related_videos2:
+            related_videos = list(related_videos)
+            related_videos2 = list(related_videos2)
+            related_videos += related_videos2
+        elif related_videos2:
+            related_videos2 = list(related_videos2)
+            related_videos = related_videos2
         print(f"related videos: {related_videos}")
         if related_videos:
-            related_video_objs = Videos.objects.filter(preview__in=related_videos).all()
+            related_videos = list(related_videos)
+            related_video_objs = Videos.objects.filter(id__in=related_videos).all()
             ages = list()
             labels = list()
             for video_obj in related_video_objs:
@@ -233,6 +264,7 @@ def delete_actor_label(request):
         actor_obj.labels.remove(label_obj)
     return HttpResponse("OK")
 
+
 def actor_remove_video(request):
     if request.method == "POST":
         actor_id = request.POST["actor_id"]
@@ -241,6 +273,7 @@ def actor_remove_video(request):
         video_obj = Videos.objects.filter(id=video_id).first()
         actor_obj.videos.remove(video_obj)
     return HttpResponse("OK")
+
 
 class DataLoader(generic.ListView):
     template_name = "viewer/loader.html"
@@ -357,6 +390,8 @@ class VideoOverview(generic.ListView):
     paginate_by = 16
     model = Videos
     template_name = "viewer/overview.html"
+    ordering = ["-inserted_at"]
+
 
 class SearchView(VideoList):
     template_name = "viewer/search.html"
@@ -371,7 +406,9 @@ class SearchView(VideoList):
         search_query = self.request.GET["query"]
         context["videos"] = Videos.objects.filter(filename__icontains=search_query)
         context["labels"] = Videos.objects.filter(labels__label__icontains=search_query)
-        context["actors"] = Actors.objects.filter(Q(forename__icontains=search_query) | Q(surname__icontains=search_query))
+        context["actors"] = Actors.objects.filter(
+            Q(forename__icontains=search_query) | Q(surname__icontains=search_query)
+        )
         return context
 
 
@@ -384,13 +421,15 @@ def load_data(request):
     last = generate_previews_thumbnails(THUMBNAIL_DIR, PREVIEW_DIR)
     return JsonResponse(last)
 
+
 def post_process_video_controller(request):
     videos = Videos.objects.filter(processed=False).all()
     if not videos:
         return JsonResponse({"finished": True})
     result = post_process_videos(PREVIEW_DIR, videos[0])
-    result["unprocessed"] = len(videos)-1
+    result["unprocessed"] = len(videos) - 1
     return JsonResponse(result)
+
 
 def add_actor(request):
     actor = Actors()
