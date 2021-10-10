@@ -139,8 +139,7 @@
         </div>
         {% if rvideos|length >= 14 %}
         <div>
-            {% include "viewer/carousel.html" with id="carousel1" title="Further recommendations:"
-            result_videos=rvideos|slice:"8:32" %}
+            {% include "viewer/carousel.html" with id="carousel1" title="Further recommendations:" result_videos=rvideos|slice:"8:32" %}
         </div>
         {% endif %}
 

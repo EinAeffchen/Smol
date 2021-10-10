@@ -99,6 +99,7 @@
                 Depening on your library size, this might take a while</p>
         </div>
         <div class="col-lg-12 actor-carousel">
+            <h3>Videos ({{object.videos.all|length}}):</h3>
             {% if object.videos.all %}
             <div class="row">
                 {% for video in object.videos.all %}
@@ -118,6 +119,28 @@
                 {% endfor %}
             </div>
             {% endif %}
+            <h3>Images ({{object.images.all|length}}):</h3>
+            {% if object.images.all %}
+            <div class="row">
+                {% for image in object.images.all %}
+                <div class="col-lg-3 image-overview-card">
+                    <a href="{% static 'viewer/ext_videos/' %}{{image.filename|urlencode}}">
+                        <img src="{% static 'viewer/ext_videos/' %}{{image.filename|urlencode}}" id="{{image.id}}"
+                            class="image-preview" alt="{{image.filename}}">
+                    </a>
+                    <div class="image-delete">
+                        <a onclick=removeImage(this) image-id="{{image.id}}" actor-id="{{object.id}}">
+                            Remove <i class="fas fa-trash-alt"></i></a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- {% for face in faces %}
+            <img src="/viewer/images/images/full_faces/{{face}}" class="image-preview">
+            {% endfor %} -->
+
         </div>
     </div>
 </div>
@@ -127,12 +150,24 @@
 <script type="text/javascript">
     function removeVideo(button) {
         $(button).parent().hide();
-        $("#"+$(button).attr("video-id")).hide();
+        $("#" + $(button).attr("video-id")).hide();
         $.ajax({
             url: "{% url 'viewer:actor-video-delete' %}",
             method: "POST",
             data: {
                 video_id: $(button).attr("video-id"),
+                actor_id: $(button).attr("actor-id")
+            }
+        })
+    };
+    function removeImage(button) {
+        $(button).parent().hide();
+        $("#" + $(button).attr("image-id")).hide();
+        $.ajax({
+            url: "{% url 'viewer:actor-image-delete' %}",
+            method: "POST",
+            data: {
+                image_id: $(button).attr("image-id"),
                 actor_id: $(button).attr("actor-id")
             }
         })

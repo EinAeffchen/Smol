@@ -640,6 +640,11 @@ a {
     color: #FFD700;
 }
 
+.fa-heart {
+    font-size: 30px;
+    color: var(--primary);
+}
+
 /* 5 star rating */
 
 fieldset, label {
@@ -695,6 +700,16 @@ fieldset, label {
 
 .mt-100 {
     margin-top: 100px
+}
+
+.image-preview {
+    height: 350px;
+    width: 100%;
+    object-fit: contain;
+}
+
+.image-overview-card {
+    margin: 0 0 15 0;
 }
 
 @media only screen and (max-width:610px) {
@@ -816,10 +831,6 @@ fieldset, label {
         margin: 10 0;
     }
 
-    .fa-heart {
-        font-size: 30px;
-        color: var(--primary);
-    }
 }
 
 @media (min-width: 610px) and (max-width: 1024px) {

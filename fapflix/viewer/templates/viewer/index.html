@@ -53,18 +53,18 @@
         </div>
     </form>
     {% if result_videos1 %}
-    {% include "viewer/carousel.html" with id="carousel7" title="Best Rating:" result_videos=result_videos1 %}
+    {% include "viewer/carousel.html" with id="carousel7" title="Best Rating:" result_set=result_videos1 type="videos" %}
     {% endif %}
     {% if result_videos2 %}
-    {% include "viewer/carousel.html" with id="carousel8" title="Newest:" result_videos=result_videos2 %}
+    {% include "viewer/carousel.html" with id="carousel8" title="Newest:" result_set=result_videos2 type="videos" %}
     {% endif %}
     {% if result_videos3 %}
-    {% include "viewer/carousel.html" with id="carousel9" title="Favorites:" result_videos=result_videos3 %}
+    {% include "viewer/carousel.html" with id="carousel9" title="Favorites:" result_set=result_videos3 type="videos" %}
     {% endif %}
 
 
     {% for key, dataset in label_videos.items %}
-    {% include "viewer/carousel.html" with id="carousel"|connect:forloop.counter title=key result_videos=dataset %}
+    {% include "viewer/carousel.html" with id="carousel"|connect:forloop.counter title=key result_set=dataset type="videos" %}
     {% endfor %}
 
     {% if actors %}

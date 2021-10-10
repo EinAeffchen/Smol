@@ -3,10 +3,13 @@
 {% block content %}
 <div class="container-fluid">
     {% if videos %}
-    {% include "viewer/carousel.html" with id="carousel1" title="Videos" result_videos=videos %}
+    {% include "viewer/carousel.html" with id="carousel1" title="Videos" result_set=videos type="videos" %}
     {% endif %}
     {% if labels %}
-    {% include "viewer/carousel.html" with id="carousel2" title="Labels" result_videos=labels %}
+    {% include "viewer/carousel.html" with id="carousel2" title="Labels" result_set=labels type="videos" %}
+    {% endif %}
+    {% if images %}
+    {% include "viewer/carousel.html" with id="carousel3" title="Images" result_set=images type="images" %}
     {% endif %}
 
     {% if actors %}

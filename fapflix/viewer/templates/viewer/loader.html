@@ -25,7 +25,7 @@
     </div>
     <div class="datablock loader-info">
         <p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i>Loading</p>
-        <p id="video-info"></p>
+        <p id="file-info"></p>
     </div>
 </div>
 
@@ -36,7 +36,7 @@
     var loaded = false;
     var processed = false;
     $(document).ready(function () {
-        function load_video() {
+        function load_file() {
             if (loaded == false) {
                 console.log("Processing next video!")
                 $("#load-icon").show();
@@ -45,45 +45,63 @@
                     type: 'GET',
                     success: function (msg) {
                         if (msg["finished"] == false) {
-                            current_video_count = parseInt($("#video-count").text());
-                            new_video_count = current_video_count + 1;
-                            $("#video-count").html(new_video_count);
-                            $("#video-info").html(msg["video"] + " loaded sucessfully!")
-                            load_video();
+                            if (msg["type"] == "image") {
+                                current_image_count = parseInt($("#image-count").text());
+                                new_image_count = current_image_count + 1;
+                                $("#image-count").html(new_image_count);
+                            } else if (msg["type"] == "video") {
+                                current_video_count = parseInt($("#video-count").text());
+                                new_video_count = current_video_count + 1;
+                                $("#video-count").html(new_video_count);
+                            }
+                            $("#file-info").html(msg["file"] + " loaded sucessfully!")
+                            load_file();
                         }
                         if (msg["finished"] == true) {
                             $("#load-icon").hide();
-                            $("#video-info").html("Finished loading all videos, starting Post Processing!")
+                            $("#file-info").html("Finished loading all files, starting Post Processing!")
                             loaded = true;
-                            load_video();
+                            load_file();
                         }
                     }
                 });
             }
             else if (processed == false) {
                 $.ajax({
-                    url: "{% url 'viewer:load-post' %}",
+                    url: "{% url 'viewer:load-post-video' %}",
                     type: 'GET',
                     success: function (msg) {
                         if (msg["finished"] == false) {
-                            $("#video-info").html(msg["video"] + " processed sucessfully! <br>" + msg["unprocessed"] + " left for processing.")
-                            load_video();
+                            $("#file-info").html(msg["file"] + " processed sucessfully!")
+                            load_file();
                         }
                         if (msg["finished"] == true) {
-                            $("#load-icon").hide();
-                            $("#video-info").html("Finished processing all videos! Enjoy!")
-                            processed = true;
+                            $.ajax({
+                                url: "{% url 'viewer:load-post-image' %}",
+                                type: 'GET',
+                                success: function (msg) {
+                                    if (msg["finished"] == false) {
+                                        $("#file-info").html(msg["file"] + " processed sucessfully!")
+                                        load_file();
+                                    }
+                                    if (msg["finished"] == true) {
+                                        $("#load-icon").hide();
+                                        $("#file-info").html("Finished processing all files! Enjoy!")
+                                        processed = true;
+                                    }
+                                }
+                            });
                         }
                     }
                 });
             }
             else {
-                $("#video-info").html("Everything processed already! Stop clicking the button already.")
+                $("#file-info").html("Everything processed already! Stop clicking the button already.")
             }
         };
         $("#add-files").click(function () {
             console.log("Click!");
-            load_video();
+            load_file();
         });
     });
 </script>

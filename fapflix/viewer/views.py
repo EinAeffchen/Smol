@@ -16,12 +16,13 @@ from django.views.generic.edit import CreateView, DeleteView, FormView, UpdateVi
 from PIL.Image import Image
 
 from .forms import ActorForm, FilterForm, ImageForm, LabelForm
-from .models import Actors, Labels, Videos
+from .models import Actors, Labels, Videos, Images
 from django.conf import settings
 from .video_processor import (
     get_videos_containing_actor,
     generate_previews_thumbnails,
     post_process_videos,
+    post_process_images,
     clean_recognize_pkls,
 )
 
@@ -128,15 +129,12 @@ class CreateActorView(CreateView):
         video_id = self.request.POST.get("videos[]")
         video_obj = Videos.objects.filter(id=video_id).first()
         print(f"id: {video_obj.id}")
-        related_videos = get_videos_containing_actor(video_obj.id)
+        related_videos, related_images = get_videos_containing_actor(
+            video_obj.id, "videos"
+        )
         if related_videos:
-            related_videos = {
-                k: v
-                for k, v in sorted(related_videos.items(), key=lambda item: item[1])
-            }
             print(f"related videos: {related_videos}")
-            related_videos = list(related_videos)
-            print(f"related videos: {related_videos}")
+            print(f"video: {related_videos[0]}")
             face = FULL_FACE_PATH / f"{related_videos[0]}_face.jpg"
             print(f"Found face: {face}")
             related_video_objs = Videos.objects.filter(id__in=related_videos).all()
@@ -155,6 +153,16 @@ class CreateActorView(CreateView):
                 face_filename = Path(face).name
                 actor.avatar.save(face_filename, File(open(face, "rb")))
                 actor.save()
+        if related_images:
+            face = FULL_FACE_PATH / f"image_{related_images[0]}_face.jpg"
+            print(f"related images: {related_images}")
+            related_image_objs = Images.objects.filter(id__in=related_images).all()
+            for image_obj in related_image_objs:
+                actor.images.add(image_obj.id)
+            if face:
+                face_filename = Path(face).name
+                actor.avatar.save(face_filename, File(open(face, "rb")))
+            actor.save()
         return JsonResponse({"actor-id": actor.id})
 
 
@@ -163,17 +171,24 @@ def updateActor(request):
         actor_id = request.POST.get("actor")
         actor_obj = Actors.objects.filter(id=actor_id).first()
         videos = [str(video.id) for video in actor_obj.videos.all()]
-        related_videos = get_videos_containing_actor(Path(actor_obj.avatar.path))
-        related_videos2 = get_videos_containing_actor(videos)
+        images = [str(image.id) for image in actor_obj.images.all()]
+        print("Matches by videos:")
+        related_videos, related_images = get_videos_containing_actor(videos, "videos")
+        print("Matches by images:")
+        related_videos2, related_images2 = get_videos_containing_actor(images, "images")
 
-        if related_videos and related_videos2:
-            related_videos = list(related_videos)
-            related_videos2 = list(related_videos2)
-            related_videos += related_videos2
-        elif related_videos2:
-            related_videos2 = list(related_videos2)
-            related_videos = related_videos2
+        print(f"Actor has avater: {bool(actor_obj.avatar)}")
+        if not actor_obj.avatar:
+            face = FULL_FACE_PATH / f"{related_videos[0]}_face.jpg"
+            print(f"Found face: {face}")
+            face_filename = Path(face).name
+            actor_obj.avatar.save(face_filename, File(open(face, "rb")))
+            actor_obj.save()
+
+        related_videos = list(set(related_videos + related_videos2))
+        related_images = list(set(related_images + related_images2))
         print(f"related videos: {related_videos}")
+        print(f"related images: {related_images}")
         if related_videos:
             related_videos = list(related_videos)
             related_video_objs = Videos.objects.filter(id__in=related_videos).all()
@@ -189,6 +204,12 @@ def updateActor(request):
             if not actor_obj.birth_year and ages:
                 actor_obj.birth_year = datetime.now().year - min(ages)
             actor_obj.save()
+        if related_images:
+            related_images = list(related_images)
+            related_image_objs = Images.objects.filter(id__in=related_images).all()
+            for image_obj in related_image_objs:
+                actor_obj.images.add(image_obj.id)
+                actor_obj.save()
         return JsonResponse({"actor-id": actor_obj.id})
 
 
@@ -275,6 +296,16 @@ def actor_remove_video(request):
     return HttpResponse("OK")
 
 
+def actor_remove_image(request):
+    if request.method == "POST":
+        actor_id = request.POST["actor_id"]
+        image_id = request.POST["image_id"]
+        actor_obj = Actors.objects.filter(id=actor_id).first()
+        image_obj = Images.objects.filter(id=image_id).first()
+        actor_obj.images.remove(image_obj)
+    return HttpResponse("OK")
+
+
 class DataLoader(generic.ListView):
     template_name = "viewer/loader.html"
     model = Videos
@@ -282,7 +313,7 @@ class DataLoader(generic.ListView):
     def get_context_data(self, **kwargs):
         context = super(DataLoader, self).get_context_data(**kwargs)
         context["video_count"] = self.get_queryset().count()
-        context["image_count"] = 0
+        context["image_count"] = Images.objects.all().count()
         return context
 
 
@@ -327,11 +358,20 @@ class ActorView(generic.DetailView):
             context["delete_form"] = DeleteActorView
             return self.render_to_response(context=context)
 
+    def get_faces(self, context):
+        faces = list()
+        actor = context["object"]
+        for video in actor.videos.all():
+            if (FULL_FACE_PATH / f"{video.id}_face.jpg").is_file():
+                faces.append(f"{video.id}_face.jpg")
+        return faces
+
     def get(self, request, *args, **kwargs):
         self.object = self.get_object()
         context = self.get_context_data(object=self.object)
         context["form"] = ImageForm
         context["delete_form"] = DeleteActorView
+        context["faces"] = self.get_faces(context)
         return self.render_to_response(context)
 
     def get_context_data(self, **kwargs):
@@ -393,6 +433,13 @@ class VideoOverview(generic.ListView):
     ordering = ["-inserted_at"]
 
 
+class ImageOverview(generic.ListView):
+    paginate_by = 16
+    model = Images
+    template_name = "viewer/overview_images.html"
+    ordering = ["-inserted_at"]
+
+
 class SearchView(VideoList):
     template_name = "viewer/search.html"
 
@@ -405,6 +452,7 @@ class SearchView(VideoList):
         context = super().get_context_data(**kwargs)
         search_query = self.request.GET["query"]
         context["videos"] = Videos.objects.filter(filename__icontains=search_query)
+        context["images"] = Images.objects.filter(filename__icontains=search_query)
         context["labels"] = Videos.objects.filter(labels__label__icontains=search_query)
         context["actors"] = Actors.objects.filter(
             Q(forename__icontains=search_query) | Q(surname__icontains=search_query)
@@ -423,11 +471,18 @@ def load_data(request):
 
 
 def post_process_video_controller(request):
-    videos = Videos.objects.filter(processed=False).all()
+    videos = Videos.objects.filter(processed=False).first()
     if not videos:
         return JsonResponse({"finished": True})
-    result = post_process_videos(PREVIEW_DIR, videos[0])
-    result["unprocessed"] = len(videos) - 1
+    result = post_process_videos(PREVIEW_DIR, videos)
+    return JsonResponse(result)
+
+
+def post_process_image_controller(request):
+    images = Images.objects.filter(processed=False).first()
+    if not images:
+        return JsonResponse({"finished": True})
+    result = post_process_images(images)
     return JsonResponse(result)
 
 
@@ -444,11 +499,29 @@ def add_favorite(request, videoid):
     return JsonResponse({"id": videoid, "status": True})
 
 
+def add_favorite_image(request, imageid):
+    imageid = int(imageid)
+    vid_obj = Images.objects.get(id=imageid)
+    vid_obj.favorite = True
+    print(vid_obj)
+    vid_obj.save()
+    return JsonResponse({"id": imageid, "status": True})
+
+
 def rem_favorite(request, videoid):
     vid_obj = Videos.objects.get(id=videoid)
     vid_obj.favorite = False
     vid_obj.save()
     return JsonResponse({"id": videoid, "status": False})
+
+
+def rem_favorite_image(request, imageid):
+    imageid = int(imageid)
+    vid_obj = Images.objects.get(id=imageid)
+    vid_obj.favorite = False
+    print(vid_obj)
+    vid_obj.save()
+    return JsonResponse({"id": imageid, "status": False})
 
 
 def rate_video(request):

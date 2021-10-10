@@ -40,6 +40,9 @@ class Videos(models.Model):
 
     class Meta:
         ordering = ["?"]
+        indexes = [
+            models.Index(fields=["path"]),
+        ]
 
 
 class Images(models.Model):
@@ -48,17 +51,21 @@ class Images(models.Model):
     dim_height = models.IntegerField(null=True)
     dim_width = models.IntegerField(null=True)
     size = models.IntegerField()
-    thumbnail = models.TextField()
-    processed = models.BooleanField()
-    rating = models.IntegerField(
-        choices=[(0, "0"), (1, "1"), (2, "2"), (3, "3"), (4, "4"), (5, "5")],
-    )
-    favorite = models.BooleanField()
+    processed = models.BooleanField(default=False)
+    favorite = models.BooleanField(default=False)
     inserted_at = models.DateField(default=django.utils.timezone.now)
     labels = models.ManyToManyField(Labels)
+    actor_age = models.IntegerField(null=True)
 
     def __str__(self):
         return f"{self.filename}"
+
+    class Meta:
+        ordering = ["-inserted_at"]
+        indexes = [
+            models.Index(fields=["path"]),
+        ]
+
 
 class Actors(models.Model):
     forename = models.TextField(null=True)

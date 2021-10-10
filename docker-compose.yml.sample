@@ -18,12 +18,12 @@ services:
     container_name: django
     build: .
     ports:
-      - "8000:8000"
+      - "80:80"
     volumes:
       - <Change to your video folder>:/srv/data/fapflix/viewer/static/viewer/ext_videos
-      - <Change to your image folder>:/srv/data/fapflix/viewer/static/viewer/ext_images
       - media-volume:/srv/data/fapflix/media
-      - static:/srv/data/fapflix/viewer/static/viewer
+      - static-thumbnails:/srv/data/fapflix/viewer/static/viewer/images/thumbnails
+      - static-previews:/srv/data/fapflix/viewer/static/viewer/images/previews
       - ml-volume:/root
     environment: 
       - POSTGRES_HOST=postgresql
@@ -33,11 +33,17 @@ services:
       && python manage.py makemigrations
       && python manage.py migrate
       && python manage.py loaddata labels.json
-      && python manage.py runserver 0.0.0.0:8000"
+      && python manage.py runserver 0.0.0.0:80"
     restart: always
 
 volumes: 
   db-data:
+    name: fapflix20_db-data
   media-volume:
-  static:
+    name: fapflix20_media-volume
+  static-thumbnails:
+    name: fapflix20_static-thumbnails
+  static-previews:
+    name: fapflix20_static-previews
   ml-volume:
+    name: fapflix20_ml-volume
