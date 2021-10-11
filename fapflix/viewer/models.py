@@ -1,6 +1,8 @@
 from django.db import models
 from datetime import datetime
+from pathlib import Path
 import django
+from numpy.core.numeric import full
 
 
 class Labels(models.Model):
@@ -38,6 +40,53 @@ class Videos(models.Model):
     def __str__(self):
         return f"{self.filename}"
 
+    def _delete_faces(self):
+        path = Path("/srv/data/fapflix/media/images/faces")
+        faces = path.glob(f"{self.id}_*.jpg")
+        for face in faces:
+            face.unlink()
+            print(f"Deleted face: {face}")
+        full_face = path.parent / "full_faces" / f"{self.id}_face.jpg"
+        if full_face.is_file():
+            full_face.unlink()
+
+    def _delete_previews(self):
+        path = Path("/srv/data/fapflix/viewer/static/viewer/images")
+        previews = path / "previews/"
+        thumbnails = path / "thumbnails/"
+        preview = previews / f"{self.id}.jpg"
+        if preview.is_file():
+            preview.unlink()
+        print(f"deleted {preview}")
+        thumbnail = thumbnails / f"{self.id}.jpg"
+        if thumbnail.is_file():
+            thumbnail.unlink()
+        print(f"deleted {thumbnail}")
+
+    def delete_full(self):
+        obj = Path(self.path)
+        print(f"Deleting {self.id}...")
+        try:
+            obj.unlink()
+        except (PermissionError, FileNotFoundError) as e:
+            print("Couldn't delete, file busy or already deleted.")
+        self._delete_faces()
+        self._delete_previews()
+        self.delete()
+
+    def file_exists(self):
+        obj = Path(self.path)
+        if obj.is_file():
+            return True
+        else:
+            return False
+
+    def clean(self):
+        if not self.file_exists():
+            self.delete()
+            return 1
+        return 0
+
     class Meta:
         ordering = ["?"]
         indexes = [
@@ -56,6 +105,19 @@ class Images(models.Model):
     inserted_at = models.DateField(default=django.utils.timezone.now)
     labels = models.ManyToManyField(Labels)
     actor_age = models.IntegerField(null=True)
+
+    def clean(self):
+        if not self.file_exists():
+            self.delete()
+            return 1
+        return 0
+
+    def file_exists(self):
+        obj = Path(self.path)
+        if obj.is_file():
+            return True
+        else:
+            return False
 
     def __str__(self):
         return f"{self.filename}"
