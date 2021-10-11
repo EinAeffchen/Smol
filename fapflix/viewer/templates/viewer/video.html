@@ -41,7 +41,7 @@
             </div>
             <div class="row justify-content-between video-infos">
                 <div class="col-lg-2 no-padding-left">
-                    <a class='btn btn-danger video-info-obj' id='rem-vid' onclick=remvid(this) href="/">
+                    <a class='btn btn-danger video-info-obj' id='rem-vid' onclick=remvid(this) href="#">
                         <span>Delete File</span> <i class="fas fa-trash"></i></i></a>
                 </div>
                 <div class="col-lg-1 form__group field" style="margin-top:0;">
@@ -115,7 +115,7 @@
         </div>
         {% if recommendations|length >= 14 %}
         <div>
-            {% include "viewer/carousel.html" with id="carousel1" result_videos=recommendations|slice:"8:32" %}
+            {% include "viewer/carousel.html" with id="carousel1"  title="Further recommendations:" result_set=recommendations|slice:"8:32" type="videos" %}
         </div>
         {% endif %}
         {% else %}
@@ -139,7 +139,7 @@
         </div>
         {% if rvideos|length >= 14 %}
         <div>
-            {% include "viewer/carousel.html" with id="carousel1" title="Further recommendations:" result_videos=rvideos|slice:"8:32" %}
+            {% include "viewer/carousel.html" with id="carousel1" title="Further recommendations:" result_set=rvideos|slice:"8:32" type="videos" %}
         </div>
         {% endif %}
 
@@ -184,10 +184,16 @@
         $(button).children()[0].setAttribute("class", "far fa-heart");
     }
     function remvid(button) {
-        const Http = new XMLHttpRequest();
-        const url = "{% url 'viewer:rem_video' video.id %}"
-        Http.open("GET", url);
-        Http.send();
+        $.ajax({
+            url: "{% url 'viewer:rem_video' %}",
+            method: "POST",
+            data: {
+                video_id: "{{video.id}}"
+            }, success: function (data) {
+                window.location = "/";
+            }
+        })
+        console.log("Send post request!")
     }
     function remVideoLabel(button) {
         $(button).parent().hide();
