@@ -191,6 +191,8 @@ def read_video_info(path: Path) -> dict:
         time = video_data["duration"].split(".")[0]
         dur = datetime.strptime(time, "%H:%M:%S") - datetime(1900, 1, 1)
         video_data["duration"] = dur.total_seconds()
+    except TypeError:
+        video_data["duration"] = 0
     return video_data
 
 

@@ -470,6 +470,15 @@ def load_data(request):
     return JsonResponse(last)
 
 
+def clean_data(request):
+    counter = {"videos": 0, "images": 0}
+    for video in Videos.objects.all():
+        counter["videos"] += video.clean()
+    for image in Images.objects.all():
+        counter["images"] += image.clean()
+    return JsonResponse(counter)
+
+
 def post_process_video_controller(request):
     videos = Videos.objects.filter(processed=False).first()
     if not videos:
@@ -503,7 +512,6 @@ def add_favorite_image(request, imageid):
     imageid = int(imageid)
     vid_obj = Images.objects.get(id=imageid)
     vid_obj.favorite = True
-    print(vid_obj)
     vid_obj.save()
     return JsonResponse({"id": imageid, "status": True})
 
@@ -519,7 +527,6 @@ def rem_favorite_image(request, imageid):
     imageid = int(imageid)
     vid_obj = Images.objects.get(id=imageid)
     vid_obj.favorite = False
-    print(vid_obj)
     vid_obj.save()
     return JsonResponse({"id": imageid, "status": False})
 
@@ -544,12 +551,9 @@ def change_age(request):
     return HttpResponse("OK")
 
 
-def rem_video(request, videoid):
-    vid_obj = Videos.objects.filter(id=videoid).first()
-    obj = Path(vid_obj.path)
-    try:
-        obj.unlink()
-    except PermissionError:
-        print("Couldn't delete, file busy.")
-    vid_obj.delete()
-    return redirect(reverse("viewer:index"))
+def rem_video(request):
+    if request.method == "POST":
+        video_id = request.POST["video_id"]
+        vid_obj = Videos.objects.filter(id=video_id).first()
+        vid_obj.delete_full()
+    return HttpResponse("OK")

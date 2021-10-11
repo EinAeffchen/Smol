@@ -20,11 +20,14 @@
             <h3>Start import:</h3>
             <div class="datablock-data">
                 <button type="button" id="add-files" class="btn outline-primary btn-lg active">Update content</button>
+                <button type="button" id="clean-files" class="btn outline-primary btn-lg active">Clean content</button>
             </div>
         </div>
     </div>
     <div class="datablock loader-info">
         <p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i>Loading</p>
+        <p id="clean-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i>Cleaning</p>
+        <p id="clean-info"></p>
         <p id="file-info"></p>
     </div>
 </div>
@@ -100,8 +103,19 @@
             }
         };
         $("#add-files").click(function () {
-            console.log("Click!");
             load_file();
+        });
+        $("#clean-files").click(function () {
+            $("#clean-icon").show();
+            $.ajax({
+                url: "{% url 'viewer:clean-data' %}",
+                type: 'GET',
+                success: function (msg) {
+                    $("#clean-info").html(msg["videos"] + " Videos removed! " + msg["images"] + "images removed!")
+                }
+
+            });
+            $("#clean-icon").hide();
         });
     });
 </script>
