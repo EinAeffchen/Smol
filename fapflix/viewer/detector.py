@@ -103,7 +103,7 @@ def get_age_ethnic_image(image: Images):
             face_image_path = face_path / f"image_{image.id}.jpg"
             cropped_image.save(face_image_path)
         return (result["age"], result["dominant_race"])
-    except ValueError as e:
+    except (ValueError, AttributeError) as e:
         print(e)
         return (None, None)
 
