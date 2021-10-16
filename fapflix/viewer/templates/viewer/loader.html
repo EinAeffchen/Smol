@@ -111,11 +111,15 @@
                 url: "{% url 'viewer:clean-data' %}",
                 type: 'GET',
                 success: function (msg) {
-                    $("#clean-info").html(msg["videos"] + " Videos removed! " + msg["images"] + "images removed!")
+                    $("#clean-info").html(msg["videos"] + " Videos removed! " + msg["images"] + "images removed!");
+                    new_image_count = parseInt($("#image-count").text())-parseInt(msg["images"]);
+                    new_video_count = parseInt($("#video-count").text())-parseInt(msg["videos"])
+                    $("#image-count").text(new_image_count);
+                    $("#video-count").text(new_video_count);
+                    $("#clean-icon").hide();
                 }
-
             });
-            $("#clean-icon").hide();
+
         });
     });
 </script>
