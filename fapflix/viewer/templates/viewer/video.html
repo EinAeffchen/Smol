@@ -253,7 +253,6 @@
                     label_id: chosen_label
                 },
                 success: function (data) {
-                    console.log(data);
                     new_label = "<div class=\"video-label col-lg-2\"><a href=\"/label/" + data["label_id"] + "/\">" + data["label"] + "</a><a onclick=\"remVideoLabel(this)\" class=\"delete-icon\" label-id=\"{{v_label.id}}\"><i class=\"fas fa-trash-alt\"></i></a></div>"
                     $(".video-labels").append(new_label);
                 },
