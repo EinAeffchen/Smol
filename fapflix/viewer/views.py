@@ -8,7 +8,12 @@ from django.db import IntegrityError
 from django.db.models import Count, F, Q
 from django.db.models.fields import CharField, IntegerField
 from django.db.models.query import Prefetch
-from django.http import HttpResponse, HttpResponseBadRequest, JsonResponse
+from django.http import (
+    HttpResponse,
+    HttpResponseBadRequest,
+    JsonResponse,
+    HttpResponseRedirect,
+)
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views import generic
@@ -98,7 +103,7 @@ class IndexView(generic.ListView):
                 for label in label_lists:
                     context["label_videos"][label[1]] = Videos.objects.filter(
                         labels=label[0]
-                    )
+                    )[:60]
         context["actors"] = Actors.objects.all()[:6]
         return context
 
@@ -132,6 +137,8 @@ class CreateActorView(CreateView):
         related_videos, related_images = get_videos_containing_actor(
             video_obj.id, "videos"
         )
+        print(related_videos)
+        print(related_images)
         if related_videos:
             print(f"related videos: {related_videos}")
             print(f"video: {related_videos[0]}")
@@ -163,6 +170,8 @@ class CreateActorView(CreateView):
                 face_filename = Path(face).name
                 actor.avatar.save(face_filename, File(open(face, "rb")))
             actor.save()
+        if not related_videos and not related_images:
+            return HttpResponse(content="No actor could be created", status=404)
         return JsonResponse({"actor-id": actor.id})
 
 
@@ -216,6 +225,12 @@ def updateActor(request):
 class DeleteActorView(DeleteView):
     model = Actors
     success_url = reverse_lazy("viewer:actors")
+
+    def delete(self, request, *args, **kwargs):
+        self.object = self.get_object()
+        success_url = self.get_success_url()
+        self.object.delete_full()
+        return HttpResponseRedirect(success_url)
 
 
 class LabelView(FormView, generic.ListView):
@@ -341,9 +356,7 @@ class ActorView(generic.DetailView):
     def post(self, request, *args, **kwargs):
         self.object = self.get_object()
         form = ImageForm(request.POST, request.FILES, instance=self.object)
-        print(request.POST)
         if form.is_valid():
-            # Write Your Logic here
             form.save()
             img_obj = form.instance
             context = super(ActorView, self).get_context_data(**kwargs)
@@ -437,7 +450,7 @@ class ImageOverview(generic.ListView):
     paginate_by = 16
     model = Images
     template_name = "viewer/overview_images.html"
-    ordering = ["-inserted_at"]
+    ordering = ["-favorite", "-inserted_at"]
 
 
 class SearchView(VideoList):
@@ -508,14 +521,6 @@ def add_favorite(request, videoid):
     return JsonResponse({"id": videoid, "status": True})
 
 
-def add_favorite_image(request, imageid):
-    imageid = int(imageid)
-    vid_obj = Images.objects.get(id=imageid)
-    vid_obj.favorite = True
-    vid_obj.save()
-    return JsonResponse({"id": imageid, "status": True})
-
-
 def rem_favorite(request, videoid):
     vid_obj = Videos.objects.get(id=videoid)
     vid_obj.favorite = False
@@ -523,11 +528,19 @@ def rem_favorite(request, videoid):
     return JsonResponse({"id": videoid, "status": False})
 
 
+def add_favorite_image(request, imageid):
+    imageid = int(imageid)
+    img_obj = Images.objects.get(id=imageid)
+    img_obj.favorite = True
+    img_obj.save()
+    return JsonResponse({"id": imageid, "status": True})
+
+
 def rem_favorite_image(request, imageid):
     imageid = int(imageid)
-    vid_obj = Images.objects.get(id=imageid)
-    vid_obj.favorite = False
-    vid_obj.save()
+    img_obj = Images.objects.get(id=imageid)
+    img_obj.favorite = False
+    img_obj.save()
     return JsonResponse({"id": imageid, "status": False})
 
 
@@ -556,4 +569,12 @@ def rem_video(request):
         video_id = request.POST["video_id"]
         vid_obj = Videos.objects.filter(id=video_id).first()
         vid_obj.delete_full()
+    return HttpResponse("OK")
+
+
+def rem_image(request):
+    if request.method == "POST":
+        image_id = request.POST["image_id"]
+        img_obj = Images.objects.filter(id=image_id).first()
+        img_obj.delete_full()
     return HttpResponse("OK")

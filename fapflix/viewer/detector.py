@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 from typing import Dict, List
 
-import cv2
 import numpy as np
 import pandas as pd
 from deepface import DeepFace
@@ -49,27 +48,6 @@ def recognizer(image_files: List[str], face_path: Path) -> DataFrame:
     print(f"Immediate results: {result[:50]}")
     result = result[result["Facenet_euclidean_l2"] < 0.55]  # 1.02
     return result
-
-
-def show_image_facebox(face_image_path: Path, result: dict):
-    open_cv_image = cv2.imread(str(face_image_path))
-    # open_cv_image = open_cv_image[:, :, ::-1].copy()
-    if result:
-        print(result)
-        cv2.rectangle(
-            open_cv_image,
-            (result["region"]["x"], result["region"]["y"]),
-            (
-                result["region"]["x"] + result["region"]["w"],
-                result["region"]["y"] + result["region"]["h"],
-            ),
-            (0, 250, 0),
-            3,
-        )
-    cv2.imshow(str(face_image_path), open_cv_image)
-    cv2.waitKey(0)
-    cv2.destroyWindow(str(face_image_path))
-
 
 def get_age_ethnic_image(image: Images):
     try:
@@ -130,8 +108,6 @@ def get_age_ethnic(video: Videos, video_preview: Path, debug=False):
                 prog_bar=False,
             )
             print(time.time() - start)
-            if debug:
-                show_image_facebox(face_image_path, result)
             if face_counter <= 6:
                 cropped_image = image.crop(
                     (

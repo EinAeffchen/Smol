@@ -171,6 +171,8 @@
             }, success: function (data) {
                 id = data["actor-id"];
                 window.location = "/actor/" + id + "/"
+            }, error: function (data) {
+                $("#load-icon").text("No faces detected for this video: Can't generate actor.")
             }
         })
     }
