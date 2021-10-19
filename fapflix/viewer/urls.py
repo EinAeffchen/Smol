@@ -39,6 +39,7 @@ urlpatterns = [
         name="rem_favorite_image",
     ),
     path("remvid/", views.rem_video, name="rem_video"),
+    path("remimage/", views.rem_image, name="rem-image"),
     path("search/", views.SearchView.as_view(), name="search"),
     path("video/<int:pk>/", views.VideoView.as_view(), name="video"),
     path("videoOverview/", views.VideoOverview.as_view(), name="video-overview"),

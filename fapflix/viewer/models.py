@@ -106,6 +106,26 @@ class Images(models.Model):
     labels = models.ManyToManyField(Labels)
     actor_age = models.IntegerField(null=True)
 
+    def _delete_faces(self):
+        path = Path("/srv/data/fapflix/media/images/faces")
+        faces = path.glob(f"image_{self.id}.jpg")
+        for face in faces:
+            face.unlink()
+            print(f"Deleted face: {face}")
+        full_face = path.parent / "full_faces" / f"image_{self.id}_face.jpg"
+        if full_face.is_file():
+            full_face.unlink()
+
+    def delete_full(self):
+        obj = Path(self.path)
+        print(f"Deleting {self.id}...")
+        try:
+            obj.unlink()
+        except (PermissionError, FileNotFoundError) as e:
+            print("Couldn't delete, file busy or already deleted.")
+        self._delete_faces()
+        self.delete()
+
     def clean(self):
         if not self.file_exists():
             self.delete()
@@ -147,6 +167,20 @@ class Actors(models.Model):
             return today.year - self.birth_year
         else:
             return
+
+    def _delete_actor_profile(self):
+        media_path = Path("/srv/data/fapflix/media/")
+        profile_path = media_path / str(self.avatar)
+        print(profile_path)
+        try:
+            profile_path.unlink()
+        except (PermissionError, FileNotFoundError) as e:
+            print("Couldn't delete, file busy or already deleted.")
+
+    def delete_full(self):
+        print(f"Deleting {self.id}...")
+        self._delete_actor_profile()
+        self.delete()
 
     def __str__(self):
         return f"{self.forename} - {self.surname} - {self.birth_year}"
