@@ -5,7 +5,6 @@ from datetime import datetime
 from pathlib import Path
 from sys import dont_write_bytecode
 from typing import List, Set, Tuple, Union
-import cv2
 from PIL import Image
 import ffmpeg
 from django.conf import settings
@@ -336,7 +335,7 @@ def post_process_videos(preview_dir: Path, video: Videos):
         video.processed = True
         video.save()
         print(f"Finished processing {video.filename}")
-    except cv2.error as e:
+    except:
         print(f"Couldn't detect age and race due to {e}")
     return {"finished": False, "file": video.filename, "type": "video"}
 
@@ -349,7 +348,7 @@ def post_process_images(image: Images):
         image.processed = True
         image.save()
         print(f"Finished processing {image.filename}")
-    except cv2.error as e:
+    except:
         print(f"Couldn't detect age and race due to {e}")
     return {"finished": False, "file": image.filename, "type": "image"}
 

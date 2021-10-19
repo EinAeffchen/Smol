@@ -1,5 +1,4 @@
 django==3.2.6
-opencv-python==4.5.3.56
 django-debug-toolbar==3.2.1
 deepface==0.0.68
 ffmpeg-python==0.2.0
