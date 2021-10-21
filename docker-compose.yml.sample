@@ -19,6 +19,8 @@ services:
     build: .
     ports:
       - "80:80"
+    depends_on:
+      - "postgres"
     volumes:
       - <Change to your video folder>:/srv/data/fapflix/viewer/static/viewer/ext_videos
       - media-volume:/srv/data/fapflix/media
