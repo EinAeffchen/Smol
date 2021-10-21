@@ -15,7 +15,7 @@ Manage your ever-growing porn collection
 
 ## Get started
 
-[Setup Fapflix](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/main.png?raw=true)
+![Setup Fapflix](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/main.png?raw=true)
 
 ###  Prerequisites
 - Docker installed
