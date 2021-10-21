@@ -15,7 +15,7 @@ Manage your ever-growing porn collection
 
 ## Get started
 
-[Setup Fapflix](https://github.com/EinAeffchen/Fapflix2.0/tree/master/screenshots/main.png?raw=true)
+[Setup Fapflix](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/main.png?raw=true)
 
 ###  Prerequisites
 - Docker installed
@@ -30,7 +30,7 @@ Manage your ever-growing porn collection
 ### First Use
 1. Open [localhost](http://localhost) in your webbrowser. (This can take a few seconds to spin up, so have a little patients)
 2. Go to the Loader page and click 'Update Content'. This will look for all images and videos, create thumbnails, previews and detect faces.
-[Load Images](https://github.com/EinAeffchen/Fapflix2.0/tree/master/screenshots/loader.png?raw=true)
+[Load Images](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/loader.png?raw=true)
 If you run this for the first time, it can take a while because all the Face detection models have to be downloaded first.
 Run `make logs` to check what's going on behind the scenes.
 You can cancel and continue this process any time. Missing faces will be detected afterwards. Also you can always add new files to the linked folder and simpy add them by running 'Update Content' again.
@@ -38,10 +38,10 @@ You can cancel and continue this process any time. Missing faces will be detecte
 ### Create Actors
 There are two options to create actors:
 1. Automatically generate them by clicking 'Generate actor' button on a video.
-[Auto Generate Actor](https://github.com/EinAeffchen/Fapflix2.0/tree/master/screenshots/video.png?raw=true)
+[Auto Generate Actor](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/video.png?raw=true)
 This might take a while at the first time, as the face recognition models have to be downloaded and the face vectors for all detected faces have to be created.
 2. Alternatively you go to the Actors page and manually create an actor. Afterwards you can add a profile picture, videos he/she acts in etc.
-[Actor Page](https://github.com/EinAeffchen/Fapflix2.0/tree/master/screenshots/actor.png?raw=true)
+[Actor Page](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/actor.PNG?raw=true)
 
 ## Licensed under: 
 [GNU AFFERO GENERAL PUBLIC LICENSE](./License.md)
