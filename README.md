@@ -44,4 +44,4 @@ This might take a while at the first time, as the face recognition models have t
 ![Actor Page](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/actor.png?raw=true)
 
 ## Licensed under: 
-[GNU AFFERO GENERAL PUBLIC LICENSE](./License.md)
+[GNU AFFERO GENERAL PUBLIC LICENSE](./LICENSE.md)
