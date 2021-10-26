@@ -43,5 +43,10 @@ This might take a while at the first time, as the face recognition models have t
 2. Alternatively you go to the Actors page and manually create an actor. Afterwards you can add a profile picture, videos he/she acts in etc.
 ![Actor Page](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/actor.png?raw=true)
 
+### Docker version
+If you have trouble with make all due to the docker volumes, try updating your docker and docker-compose versions.
+* Docker version 20.10.8
+* Docker-compose version 1.29.2
+
 ## Licensed under: 
 [GNU AFFERO GENERAL PUBLIC LICENSE](./LICENSE.md)
