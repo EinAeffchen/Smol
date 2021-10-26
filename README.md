@@ -28,7 +28,7 @@ Manage your ever-growing porn collection
 3. Run `make up`
 
 ### First Use
-1. Open [localhost](http://localhost) in your webbrowser. (This can take a few seconds to spin up, so have a little patients)
+1. Open [localhost](http://localhost) in your webbrowser. (This can take a few seconds to spin up, so have a little patience)
 2. Go to the Loader page and click 'Update Content'. This will look for all images and videos, create thumbnails, previews and detect faces.
 ![Load Images](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/loader.png?raw=true)
 If you run this for the first time, it can take a while because all the Face detection models have to be downloaded first.
