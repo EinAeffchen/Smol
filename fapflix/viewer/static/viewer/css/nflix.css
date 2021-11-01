@@ -69,16 +69,16 @@ html {
 .logo-text {
     font-size: 43;
     font-weight: 600;
-    color: #a5070f;
+    color: var(--primary);
 }
 
 .btn-primary {
-    border-color: #e50914;
+    border-color: var(--secondary);
     background-color: #d10913;
 }
 
 .btn-primary:hover {
-    background-color: #a5070f;
+    background-color: var(--primary);
     border-color: #b30710;
 }
 
@@ -620,17 +620,17 @@ a {
     padding: 0 7px 0 14px;
     white-space: nowrap;
     position: relative;
-    background: -moz-linear-gradient(top, #a5070f 0%, #d10913 100%);
-    background: -webkit-gradient(linear, left top, left bottom, color-stop(0%, #a5070f), color-stop(100%, #d10913));
-    background: -webkit-linear-gradient(top, #a5070f 0%, #d10913 100%);
-    background: -o-linear-gradient(top, #a5070f 0%, #d10913 100%);
-    background: linear-gradient(to bottom, #a5070f 0%, #d10913 100%);
-    background-color: #a5070f;
+    background: -moz-linear-gradient(top, var(--primary) 0%, #d10913 100%);
+    background: -webkit-gradient(linear, left top, left bottom, color-stop(0%, var(--primary)), color-stop(100%, #d10913));
+    background: -webkit-linear-gradient(top, var(--primary) 0%, #d10913 100%);
+    background: -o-linear-gradient(top, var(--primary) 0%, #d10913 100%);
+    background: linear-gradient(to bottom, var(--primary) 0%, #d10913 100%);
+    background-color: var(--primary);
     color: rgb(211, 210, 209);
     font: bold 11px/21px Arial, Tahoma, sans-serif;
     text-decoration: none;
     text-shadow: 0 1px rgba(255, 255, 255, 0.4);
-    border: 1px solid #a5070f;
+    border: 1px solid var(--primary);
     border-radius: 1px 3px 3px 1px;
     box-shadow: inset 0 1px #be3239, 0 1px 2px rgba(0, 0, 0, 0.21);
     max-width: 100%;
