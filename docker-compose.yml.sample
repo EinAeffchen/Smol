@@ -40,12 +40,7 @@ services:
 
 volumes: 
   db-data:
-    name: fapflix20_db-data
   media-volume:
-    name: fapflix20_media-volume
   static-thumbnails:
-    name: fapflix20_static-thumbnails
   static-previews:
-    name: fapflix20_static-previews
   ml-volume:
-    name: fapflix20_ml-volume
