@@ -1,6 +1,6 @@
-# Fapflix
+# MOARS
 
-Manage your ever-growing porn collection
+Media Organization and Recognition System
 
 ## Support
 
@@ -15,7 +15,7 @@ Manage your ever-growing porn collection
 
 ## Get started
 
-![Setup Fapflix](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/main.png?raw=true)
+![Setup MOARS](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/main.png?raw=true)
 
 ###  Prerequisites
 - Docker installed
@@ -23,7 +23,7 @@ Manage your ever-growing porn collection
 ### Setup
 1. Clone this repository
 2. Rename `docker-compose.yml.sample` to `docker-compose.yml`
-3. Change line 23 `<Change to your video folder>` to the path of your media folder.
+3. Change line 25 `<Change to your video folder>` to the path of your media folder. (e.g. `C:/Videos:/srv/data/fapflix/viewer/static/viewer/ext_videos)`
 2. Run `make build`
 3. Run `make up`
 
