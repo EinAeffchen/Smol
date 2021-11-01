@@ -2,6 +2,10 @@
 
 Manage your ever-growing porn collection
 
+## NOTICE
+> :warning: **Fapflix will not be developed any further. Due to common interest and the possibility of porn addiction being a serious threat to mental health, I decided to rebrand this project to a more general use media platform. This will need some major changes in the design and will therefore take a while. You can see the progress in the branch "moars", when the first version of the rebrand is finished, this project will be published under a new repo linked here. However I will keep this repo up, as it is up to everyone to decide whether to use this or not.**
+
+
 ## Support
 
 [![Donate with Bitcoin](https://en.cryptobadges.io/badge/big/1GDoR1t9AQcB3KHymRgoE8iKnikaw8GwMh)](https://en.cryptobadges.io/donate/1GDoR1t9AQcB3KHymRgoE8iKnikaw8GwMh)
