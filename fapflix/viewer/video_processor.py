@@ -359,8 +359,8 @@ def generate_for_videos(
     for video in file_dir.rglob("*"):
         if video.name == ".gitignore":
             continue
-        if video.is_file() and video.suffix in VIDEO_SUFFIXES:
-            if video.suffix != ".mp4" and video.name != ".gitignore":
+        if video.is_file() and video.suffix.lower() in VIDEO_SUFFIXES:
+            if video.suffix.lower() != ".mp4" and video.name != ".gitignore":
                 video = repackage(video)
             if not Videos.objects.filter(path=str(video)):
                 last_video = str(video.name)
