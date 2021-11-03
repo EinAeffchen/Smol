@@ -405,8 +405,7 @@ labels = Labels.objects.all()
 
 
 def generate_previews_thumbnails(thumbnail_dir, preview_dir):
-    path = Path(__file__).resolve().parent
-    file_dir = path / "static/viewer/ext_videos"
+    file_dir = Path("/srv/data/fapflix/local_media/")
     result = generate_for_videos(file_dir, thumbnail_dir, preview_dir, labels)
     if result:
         return result

@@ -27,6 +27,9 @@ Media Organization and Recognition System
 2. Run `make build`
 3. Run `make up`
 
+### Setable Environment Variables
+* *HOST* - Allowed Host/Address
+
 ### First Use
 1. Open [localhost](http://localhost) in your webbrowser. (This can take a few seconds to spin up, so have a little patience)
 2. Go to the Loader page and click 'Update Content'. This will look for all images and videos, create thumbnails, previews and detect faces.

@@ -26,7 +26,7 @@ SECRET_KEY = "k&ndet-+-&(yxp_hih^k9y*$hbe2p=$vzeryfj$x*&$#+0-$sx"
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ["fap.flix", "192.168.178.22", "localhost", "127.0.0.1"]
+ALLOWED_HOSTS = ["192.168.178.22", "localhost", "127.0.0.1", os.environ.get("HOST", "fap.flix")]
 DEFAULT_CHARSET = "utf-8"
 
 
@@ -51,7 +51,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
-    # 'django.middleware.csrf.CsrfViewMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -144,7 +144,7 @@ def always_true(request):
 
 
 SHOW_TOOLBAR_CALLBACK = always_true
-INTERNAL_IPS = ["127.0.0.1", "localhost", "192.168.99.22", "192.168.178.22", "fap.flix"]
+INTERNAL_IPS = ["127.0.0.1", "localhost", "192.168.99.22", "192.168.178.22", os.environ.get("HOST", "fap.flix")]
 
 SITE_ID = 1
 

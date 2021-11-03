@@ -2,3 +2,4 @@ django==3.2.6
 django-debug-toolbar==3.2.1
 deepface==0.0.68
 ffmpeg-python==0.2.0
+gunicorn

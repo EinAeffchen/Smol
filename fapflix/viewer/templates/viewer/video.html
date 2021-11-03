@@ -11,7 +11,7 @@
             <div class="embed-responsive embed-responsive-16by9 video">
                 <video id="vid-{{video.id}}" class="video-js embed-responsive-item" controls="" preload="auto"
                     poster="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}" loop="true">
-                    <source src="{% static 'viewer/ext_videos' %}{{video.filename|urlencode}}" type="{{video.filename|get_type}}">
+                    <source src="/local-media{{video.filename|urlencode}}" type="{{video.filename|get_type}}">
                     <p class="vjs-no-js">
                         To view this video please enable JavaScript, and consider upgrading to a
                         web browser that
