@@ -1,2 +1,2 @@
-from fapflix.utils import *
-from fapflix.model import *
+from moars.utils import *
+from moars.model import *

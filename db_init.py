@@ -14,7 +14,7 @@ def create_schema():
         "before_create",
         DDL(
             """
-            CREATE SCHEMA IF NOT EXISTS fapflix;
+            CREATE SCHEMA IF NOT EXISTS moars;
             """
         ),
     )

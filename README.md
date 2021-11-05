@@ -15,7 +15,7 @@ Media Organization and Recognition System
 
 ## Get started
 
-![Setup MOARS](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/main.png?raw=true)
+![Setup MOARS](https://github.com/EinAeffchen/moars2.0/blob/master/screenshots/main.png?raw=true)
 
 ###  Prerequisites
 - Docker installed
@@ -23,7 +23,7 @@ Media Organization and Recognition System
 ### Setup
 1. Clone this repository
 2. Rename `docker-compose.yml.sample` to `docker-compose.yml`
-3. Change line 25 `<Change to your video folder>` to the path of your media folder. (e.g. `C:/Videos:/srv/data/fapflix/viewer/static/viewer/ext_videos)`
+3. Change line 25 `<Change to your video folder>` to the path of your media folder. (e.g. `C:/Videos:/srv/data/moars/viewer/static/viewer/ext_videos)`
 2. Run `make build`
 3. Run `make up`
 
@@ -33,7 +33,7 @@ Media Organization and Recognition System
 ### First Use
 1. Open [localhost](http://localhost) in your webbrowser. (This can take a few seconds to spin up, so have a little patience)
 2. Go to the Loader page and click 'Update Content'. This will look for all images and videos, create thumbnails, previews and detect faces.
-![Load Images](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/loader.png?raw=true)
+![Load Images](https://github.com/EinAeffchen/moars2.0/blob/master/screenshots/loader.png?raw=true)
 If you run this for the first time, it can take a while because all the Face detection models have to be downloaded first.
 Run `make logs` to check what's going on behind the scenes.
 You can cancel and continue this process any time. Missing faces will be detected afterwards. Also you can always add new files to the linked folder and simpy add them by running 'Update Content' again.
@@ -41,10 +41,10 @@ You can cancel and continue this process any time. Missing faces will be detecte
 ### Create Actors
 There are two options to create actors:
 1. Automatically generate them by clicking 'Generate actor' button on a video.
-![Auto Generate Actor](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/video.png?raw=true)
+![Auto Generate Actor](https://github.com/EinAeffchen/moars2.0/blob/master/screenshots/video.png?raw=true)
 This might take a while at the first time, as the face recognition models have to be downloaded and the face vectors for all detected faces have to be created.
 2. Alternatively you go to the Actors page and manually create an actor. Afterwards you can add a profile picture, videos he/she acts in etc.
-![Actor Page](https://github.com/EinAeffchen/Fapflix2.0/blob/master/screenshots/actor.png?raw=true)
+![Actor Page](https://github.com/EinAeffchen/moars2.0/blob/master/screenshots/actor.png?raw=true)
 
 ### Docker version
 If you have trouble with make all due to the docker volumes, try updating your docker and docker-compose versions.

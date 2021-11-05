@@ -5,7 +5,7 @@ services:
     hostname: postgresql
     image: postgres:13.3-alpine
     environment:
-      - POSTGRES_DB=fapflix
+      - POSTGRES_DB=moars
       - POSTGRES_HOST_AUTH_METHOD=trust
     ports:
       - "5432:5432"
@@ -22,14 +22,14 @@ services:
     depends_on:
       - "postgres"
     volumes:
-      - <Change to your video folder>:/srv/data/fapflix/viewer/static/viewer/ext_videos
-      - media-volume:/srv/data/fapflix/media
-      - static-thumbnails:/srv/data/fapflix/viewer/static/viewer/images/thumbnails
-      - static-previews:/srv/data/fapflix/viewer/static/viewer/images/previews
+      - <Change to your video folder>:/srv/data/moars/viewer/static/viewer/ext_videos
+      - media-volume:/srv/data/moars/media
+      - static-thumbnails:/srv/data/moars/viewer/static/viewer/images/thumbnails
+      - static-previews:/srv/data/moars/viewer/static/viewer/images/previews
       - ml-volume:/root
     environment: 
       - POSTGRES_HOST=postgresql
-    working_dir: /srv/data/fapflix
+    working_dir: /srv/data/moars
     command: bash -c
       "mkdir -p /var/tmp/django_cache
       && python manage.py makemigrations
