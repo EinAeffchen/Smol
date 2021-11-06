@@ -129,3 +129,5 @@ dmypy.json
 .pyre/
 docker-compose.yml
 *.Zone.Identifier
+
+moars.db
