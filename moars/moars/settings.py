@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
+import platform
 from pathlib import Path
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -51,7 +52,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
-    'django.middleware.csrf.CsrfViewMiddleware',
+    # 'django.middleware.csrf.CsrfViewMiddleware',
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -86,14 +87,18 @@ WSGI_APPLICATION = "moars.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
+if platform.system() == 'Windows':
+    sqlite_file = Path(__file__).parent.parent.parent/"moars.db"
+else:
+    sqlite_file = "/srv/data/db/moars.db"
+
 DATABASES = {
     "default": {
-        "ENGINE": os.environ.get("DB_ENGINE", "django.db.backends.sqlite3"),
-        "NAME": os.environ.get("DB_DIR", "/srv/data/db"),
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": os.environ.get("DB_DIR", sqlite_file),
         "USER": os.environ.get("DB_ADMIN_USER", "moars"),
         "PASSWORD": os.environ.get("DB_PASSWORD", "moars"),
         "HOST": os.environ.get("DB_HOST", "localhost"),
-        "PORT": os.environ.get("DB_PORT", "")
     }
 }
 
