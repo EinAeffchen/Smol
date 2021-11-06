@@ -11,7 +11,7 @@ from django.conf import settings
 from pandas import DataFrame
 from PIL import Image
 
-from .models import Images, Videos
+from .models import Image, Video
 from .utils import base64_encode, split_image
 
 face_path = Path(__file__).parent.parent / "media/images/faces"
@@ -49,7 +49,7 @@ def recognizer(image_files: List[str], face_path: Path) -> DataFrame:
     result = result[result["Facenet_euclidean_l2"] < 0.55]  # 1.02
     return result
 
-def get_age_ethnic_image(image: Images):
+def get_age_ethnic_image(image: Image):
     try:
         result = DeepFace.analyze(
             img_path=str(image.path),
@@ -86,7 +86,7 @@ def get_age_ethnic_image(image: Images):
         return (None, None)
 
 
-def get_age_ethnic(video: Videos, video_preview: Path, debug=False):
+def get_age_ethnic(video: Video, video_preview: Path, debug=False):
     images = split_image(video_preview / video.preview, 50)
     ages = []
     ethnicities = []
@@ -132,8 +132,6 @@ def get_age_ethnic(video: Videos, video_preview: Path, debug=False):
         except ValueError as e:
             print(e)
             print(time.time() - start)
-            if debug:
-                show_image_facebox(face_image_path, result)
             face_image_path.unlink()
         except AttributeError as e:
             print(e)

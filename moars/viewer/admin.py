@@ -1,7 +1,7 @@
 from django.contrib import admin
-from .models import Actors, Videos, Labels
+from .models import Person, Video, Label
 
 # Register your models here.
-admin.site.register(Labels)
-admin.site.register(Actors)
-admin.site.register(Videos)
+admin.site.register(Label)
+admin.site.register(Person)
+admin.site.register(Video)

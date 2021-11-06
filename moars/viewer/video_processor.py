@@ -10,7 +10,7 @@ import ffmpeg
 from django.conf import settings
 from pandas.core.frame import DataFrame
 from .detector import get_age_ethnic, recognizer, get_age_ethnic_image
-from .models import Labels, Videos, Images
+from .models import Label, Video, Image
 
 face_path = Path(settings.MEDIA_ROOT) / "images/faces"
 full_face_path = Path(settings.MEDIA_ROOT) / "images/full_faces"
@@ -203,7 +203,7 @@ def update_preview_name(filename: str, preview_dir: Path):
 
 
 def generate_preview(
-    video: Videos, frames: int, preview_dir: Path, video_path: Path
+    video: Video, frames: int, preview_dir: Path, video_path: Path
 ) -> Path:
     if frames:
         nth_frame = int(int(frames) / 50)
@@ -244,7 +244,7 @@ def generate_preview(
     return out_filename
 
 
-def generate_thumbnail(video: Videos, thumbnail_dir: Path, video_path: Path) -> Path:
+def generate_thumbnail(video: Video, thumbnail_dir: Path, video_path: Path) -> Path:
     out_filename = f"{video.id}.jpg"
     out_path = thumbnail_dir / out_filename
     if out_path.is_file():
@@ -284,21 +284,21 @@ def generate_thumbnail(video: Videos, thumbnail_dir: Path, video_path: Path) -> 
     return out_filename
 
 
-def add_labels_by_path(video_row: Videos, labels: List[Labels], video_path: Path):
+def add_labels_by_path(video_row: Video, labels: List[Label], video_path: Path):
     for part in video_path.parts:
         for label in labels:
             if label.label.lower() in part.lower():
                 video_row.labels.add(label)
 
 
-def post_process_videos(preview_dir: Path, video: Videos):
+def post_process_videos(preview_dir: Path, video: Video):
     video.processed = True
     video.save()
     print(f"Finished processing {video.filename}")
     return {"finished": False, "file": video.filename, "type": "video"}
 
 
-def post_process_images(image: Images):
+def post_process_images(image: Image):
     image.processed = True
     image.save()
     print(f"Finished processing {image.filename}")
@@ -306,13 +306,13 @@ def post_process_images(image: Images):
 
 
 def generate_for_videos(
-    file_dir: Path, thumbnail_dir: Path, preview_dir: Path, labels: Labels
+    file_dir: Path, thumbnail_dir: Path, preview_dir: Path, labels: Label
 ):
     for video in file_dir.rglob("*"):
         if video.name == ".gitignore":
             continue
         if video.is_file() and video.suffix.lower() in VIDEO_SUFFIXES:
-            if not Videos.objects.filter(path=str(video)):
+            if not Video.objects.filter(path=str(video)):
                 last_video = str(video.name)
                 video_data = read_video_info(video)
                 video_data["size"] = video.stat().st_size
@@ -321,7 +321,7 @@ def generate_for_videos(
                     os.path.commonprefix([str(file_dir), str(video)]), ""
                 )
                 frames = video_data.pop("frames")
-                video_row = Videos(**video_data)
+                video_row = Video(**video_data)
                 video_row.processed = False
                 video_row.save()
                 video_row.thumbnail = generate_thumbnail(
@@ -335,23 +335,23 @@ def generate_for_videos(
                 return {"finished": False, "file": last_video, "type": "video"}
 
 
-def generate_for_images(file_dir: Path, labels: Labels):
+def generate_for_images(file_dir: Path, labels: Label):
     for image in file_dir.rglob("*"):
         if image.name == ".gitignore":
             continue
         if image.is_file() and image.suffix in IMAGE_SUFFIXES:
-            if not Images.objects.filter(path=str(image)):
+            if not Image.objects.filter(path=str(image)):
                 image_data = read_image_info(image)
                 image_data["filename"] = str(image).replace(
                     os.path.commonprefix([str(file_dir), str(image)]), ""
                 )
-                image_row = Images(**image_data)
+                image_row = Image(**image_data)
                 image_row.save()
                 add_labels_by_path(image_row, labels, image)
                 image_row.save()
 
 
-labels = Labels.objects.all()
+labels = Label.objects.all()
 
 
 def generate_previews_thumbnails(thumbnail_dir, preview_dir):

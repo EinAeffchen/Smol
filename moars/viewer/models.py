@@ -17,7 +17,16 @@ class Label(models.Model):
         return f"{self.label}"
 
 
-class MediaFile(models.Model):
+class Video(models.Model):
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["filename"]),
+            models.Index(fields=["rating"]),
+            models.Index(fields=["age_rating"]),
+            models.Index(fields=["path"]),
+        ]
+
     path = models.TextField(unique=True)
     filename = models.TextField()
     dim_height = models.IntegerField(null=True)
@@ -29,13 +38,13 @@ class MediaFile(models.Model):
     videocodec = models.TextField(null=True)
     preview = models.TextField()
     thumbnail = models.TextField()
-    processed = models.BooleanField()
+    processed = models.BooleanField(default=False)
     rating = models.FloatField(default=0)
     favorite = models.BooleanField(default=False)
     labels = models.ManyToManyField(Label)
     inserted_at = models.DateTimeField(default=django.utils.timezone.now)
-    year = models.IntegerField()
-    age_rating = models.IntegerField()
+    year = models.IntegerField(null=True, blank=True)
+    age_rating = models.IntegerField(null=True)
 
     def __str__(self):
         return f"{self.filename}"
@@ -87,13 +96,6 @@ class MediaFile(models.Model):
             return 1
         return 0
 
-    class Meta:
-        indexes = [
-            models.Index(fields=["filename"]),
-            models.Index(fields=["rating"]),
-            models.Index(fields=["age_rating"]),
-        ]
-
 
 class Show(models.Model):
     class Meta:
@@ -103,12 +105,12 @@ class Show(models.Model):
             models.Index(fields=["year"]),
         ]
 
-    name = models.TextField()
-    year = models.IntegerField()
+    name = models.TextField(null=True)
+    year = models.IntegerField(null=True)
 
 
 class Episode(models.Model):
-    media_id = models.ForeignKey(MediaFile, on_delete=models.CASCADE)
+    media_id = models.ForeignKey(Video, on_delete=models.CASCADE)
     show_id = models.ForeignKey(Show, on_delete=models.CASCADE)
     name = models.TextField(null=True)
 
@@ -123,7 +125,7 @@ class Episode(models.Model):
 
 
 class Movie(models.Model):
-    media_id = models.ForeignKey(MediaFile, on_delete=models.CASCADE)
+    media_id = models.ForeignKey(Video, on_delete=models.CASCADE)
 
 
 class Image(models.Model):
@@ -135,7 +137,7 @@ class Image(models.Model):
     processed = models.BooleanField(default=False)
     favorite = models.BooleanField(default=False)
     inserted_at = models.DateField(default=django.utils.timezone.now)
-    labels = models.ManyToManyField(Labels)
+    labels = models.ManyToManyField(Label)
     actor_age = models.IntegerField(null=True)
 
     def _delete_faces(self):
@@ -183,7 +185,7 @@ class Image(models.Model):
 
 class Person(models.Model):
     class Meta:
-        ordering = ["name"]
+        ordering = ["surname", "forename"]
         indexes = [
             models.Index(fields=["forename"]),
             models.Index(fields=["surname"]),
@@ -195,13 +197,13 @@ class Person(models.Model):
     birth_year = models.IntegerField(null=True)
     nationality = models.TextField(null=True)
     labels = models.ManyToManyField(Label, blank=True)
-    video_files = models.ManyToManyField(MediaFile, blank=True)
+    video_files = models.ManyToManyField(Video, blank=True)
     shows = models.ManyToManyField(Show, blank=True)
     images = models.ManyToManyField(Image, blank=True)
     avatar = models.ImageField(
         upload_to="images/actor_profiles/", null=True, blank=True
     )
-    function = models.TextField(null=True, indexed=True)
+    function = models.TextField(null=True)
 
     def age(self):
         today = datetime.now().date()
@@ -229,6 +231,6 @@ class Person(models.Model):
 
 
 class PersonMediaFunction(models.Model):
-    person_id = models.ForeignKey(Person)
-    media_id = models.ForeignKey(MediaFile)
+    person_id = models.ForeignKey(Person, on_delete=models.CASCADE)
+    media_id = models.ForeignKey(Video, on_delete=models.CASCADE)
     function = models.TextField(null=False)

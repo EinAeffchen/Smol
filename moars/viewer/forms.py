@@ -1,5 +1,5 @@
 from django import forms
-from .models import Actors, Videos
+from .models import Person, Video
 from django.views.generic.edit import UpdateView
 
 
@@ -22,13 +22,13 @@ class ImageForm(forms.ModelForm):
     """Form for the image model"""
 
     class Meta:
-        model = Actors
+        model = Person
         fields = ("avatar",)
 
 
 class DeleteActorForm(forms.ModelForm):
     class Meta:
-        model = Actors
+        model = Person
         fields = ("id",)
 
 
@@ -41,10 +41,10 @@ class OrderedModelMultipleChoiceField(forms.ModelMultipleChoiceField):
 class ActorForm(forms.ModelForm):
     """Form for the image model"""
 
-    videos = OrderedModelMultipleChoiceField(Videos.objects.order_by("filename"))
+    videos = OrderedModelMultipleChoiceField(Video.objects.order_by("filename"))
 
     class Meta:
-        model = Actors
+        model = Person
         fields = (
             "forename",
             "surname",
