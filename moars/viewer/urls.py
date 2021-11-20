@@ -13,6 +13,7 @@ urlpatterns = [
     path("removeActorVideo/", views.actor_remove_video, name="actor-video-delete"),
     path("removeActorImage/", views.actor_remove_image, name="actor-image-delete"),
     path("actors/", views.ActorView.as_view(), name="actors"),
+    path("show/<int:pk>/", views.ShowView.as_view(), name="show"),
     path("addVideoLabel/", views.add_video_label, name="label-video-add"),
     path("changeAge/", views.change_age, name="change-age"),
     path("deleteActorLabel/", views.delete_actor_label, name="label-actor-delete"),

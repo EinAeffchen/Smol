@@ -42,10 +42,14 @@ class IndexView(generic.ListView):
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
-        
+
         context["movies"] = Movie.objects.all()[:60]
         context["shows"] = Show.objects.all()[:60]
-        context["newest"] = Video.objects.all().order_by("-inserted_at")[:60]
+        context["newest"] = (
+            Video.objects.exclude(id__in=Episode.objects.values("media_id"))
+            .exclude(id__in=Movie.objects.values("media_id"))
+            .order_by("-inserted_at")[:60]
+        )
         if not self.request.GET:
             context["label_videos"] = dict()
             active_labels = [
@@ -75,7 +79,6 @@ class EditActorView(UpdateView, generic.DetailView):
         # This method is called when valid form data has been POSTed.
         # It should return an HttpResponse.
         form.save()
-        print(self.request.POST)
         return super().form_valid(form)
 
 
@@ -306,6 +309,24 @@ class VideoView(generic.DetailView):
         return context
 
 
+class ShowView(generic.DetailView):
+    model = Show
+    template_name = "viewer/show.html"
+
+    def get_context_data(self, **kwargs):
+        context = super(generic.DetailView, self).get_context_data(**kwargs)
+        show = context["object"]
+        context["labels"] = Label.objects.all().order_by("label")
+        context["show"] = show
+        context["seasons"] = dict()
+        seasons = Episode.objects.filter(show_id=show.id).values("season").distinct("season")
+        for season in seasons:
+            context["seasons"][season] = Episode.objects.filter(
+                show_id=show.id, season=season
+            ).order_by("episode")
+        return context
+
+
 class ActorView(generic.DetailView):
     model = Person
     template_name = "viewer/actor.html"
@@ -450,7 +471,7 @@ class SearchView(VideoList):
 
 
 def load_data(request):
-    clean_recognize_pkls()
+    # clean_recognize_pkls()
     if not THUMBNAIL_DIR.is_dir():
         THUMBNAIL_DIR.mkdir()
     if not PREVIEW_DIR.is_dir():
