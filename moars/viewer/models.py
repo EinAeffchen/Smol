@@ -22,7 +22,6 @@ class Video(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=["filename"]),
-            models.Index(fields=["rating"]),
             models.Index(fields=["age_rating"]),
             models.Index(fields=["path"]),
         ]
@@ -39,11 +38,10 @@ class Video(models.Model):
     preview = models.TextField()
     thumbnail = models.TextField()
     processed = models.BooleanField(default=False)
-    rating = models.FloatField(default=0)
     favorite = models.BooleanField(default=False)
     labels = models.ManyToManyField(Label)
     inserted_at = models.DateTimeField(default=django.utils.timezone.now)
-    year = models.IntegerField(null=True, blank=True)
+    year = models.IntegerField(null=True)
     age_rating = models.IntegerField(null=True)
 
     def __str__(self):
@@ -106,14 +104,24 @@ class Show(models.Model):
         ]
 
     name = models.TextField(null=True)
+    matching_name = models.TextField(null=True)
+    overview = models.TextField(null=True)
     year = models.IntegerField(null=True)
+    network = models.TextField(null=True)
+    poster = models.TextField(null=True)
+    backdrop = models.TextField(null=True)
+    rating = models.FloatField(null=False, default=0.0)
+    labels = models.ManyToManyField(Label)
+    origin_country = models.TextField(null=True)
 
 
 class Episode(models.Model):
-    media_id = models.ForeignKey(Video, on_delete=models.CASCADE)
+    media_id = models.OneToOneField(Video, on_delete=models.CASCADE)
     show_id = models.ForeignKey(Show, on_delete=models.CASCADE)
     name = models.TextField(null=True)
-
+    season = models.IntegerField(null=False, default=1)
+    episode = models.IntegerField(null=False, default=1)
+    air_date = models.DateField(null=True)
     class Meta:
         ordering = ["name"]
 
@@ -125,7 +133,13 @@ class Episode(models.Model):
 
 
 class Movie(models.Model):
-    media_id = models.ForeignKey(Video, on_delete=models.CASCADE)
+    media_id = models.OneToOneField(Video, on_delete=models.CASCADE)
+    title = models.TextField(null=True)
+    adult = models.BooleanField(null=False, default=False)
+    release_date = models.DateField(null=True)
+    overview = models.TextField(null=True)
+    rating = models.FloatField(null=False, default=0.0)
+
 
 
 class Image(models.Model):
