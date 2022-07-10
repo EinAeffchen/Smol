@@ -1,0 +1,443 @@
+[
+  {
+    "model": "viewer.label",
+    "pk": 1,
+    "fields": {
+      "label": "action"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 2,
+    "fields": {
+      "label": "adventure"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 3,
+    "fields": {
+      "label": "comedy"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 4,
+    "fields": {
+      "label": "crime"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 5,
+    "fields": {
+      "label": "mystery"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 6,
+    "fields": {
+      "label": "fantasy"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 7,
+    "fields": {
+      "label": "historical"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 8,
+    "fields": {
+      "label": "horror"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 9,
+    "fields": {
+      "label": "romance"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 10,
+    "fields": {
+      "label": "satire"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 11,
+    "fields": {
+      "label": "science fiction"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 12,
+    "fields": {
+      "label": "cyberpunk"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 13,
+    "fields": {
+      "label": "stand-up comedy"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 14,
+    "fields": {
+      "label": "thriller"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 15,
+    "fields": {
+      "label": "western"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 16,
+    "fields": {
+      "label": "anthology"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 17,
+    "fields": {
+      "label": "detective"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 18,
+    "fields": {
+      "label": "gangster"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 19,
+    "fields": {
+      "label": "mafia"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 20,
+    "fields": {
+      "label": "yakuza"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 21,
+    "fields": {
+      "label": "heist"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 22,
+    "fields": {
+      "label": "exploitation"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 23,
+    "fields": {
+      "label": "gothic"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 24,
+    "fields": {
+      "label": "dark"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 25,
+    "fields": {
+      "label": "magic"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 26,
+    "fields": {
+      "label": "musical"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 27,
+    "fields": {
+      "label": "paranormal"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 28,
+    "fields": {
+      "label": "series"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 29,
+    "fields": {
+      "label": "tv show"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 30,
+    "fields": {
+      "label": "sports"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 31,
+    "fields": {
+      "label": "telenovela"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 32,
+    "fields": {
+      "label": "sitcom"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 33,
+    "fields": {
+      "label": "psychological"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 34,
+    "fields": {
+      "label": "wuxia"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 35,
+    "fields": {
+      "label": "animation"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 36,
+    "fields": {
+      "label": "cgi"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 37,
+    "fields": {
+      "label": "stop motion"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 38,
+    "fields": {
+      "label": "drama"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 39,
+    "fields": {
+      "label": "mockumentary"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 40,
+    "fields": {
+      "label": "news"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 41,
+    "fields": {
+      "label": "slapstick"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 42,
+    "fields": {
+      "label": "medical"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 43,
+    "fields": {
+      "label": "political"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 44,
+    "fields": {
+      "label": "slasher"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 45,
+    "fields": {
+      "label": "splatter"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 46,
+    "fields": {
+      "label": "chinese"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 47,
+    "fields": {
+      "label": "german"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 48,
+    "fields": {
+      "label": "american"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 49,
+    "fields": {
+      "label": "japanese"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 50,
+    "fields": {
+      "label": "korean"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 51,
+    "fields": {
+      "label": "dystopian"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 52,
+    "fields": {
+      "label": "post apocalyptic"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 53,
+    "fields": {
+      "label": "steampunk"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 54,
+    "fields": {
+      "label": "utopian"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 55,
+    "fields": {
+      "label": "isekai"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 56,
+    "fields": {
+      "label": "amateur"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 56,
+    "fields": {
+      "label": "educational"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 57,
+    "fields": {
+      "label": "infomercial"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 58,
+    "fields": {
+      "label": "reality show"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 59,
+    "fields": {
+      "label": "talk show"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 60,
+    "fields": {
+      "label": "variety"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 61,
+    "fields": {
+      "label": "concert"
+    }
+  },
+  {
+    "model": "viewer.label",
+    "pk": 62,
+    "fields": {
+      "label": "cooking show"
+    }
+  }
+]

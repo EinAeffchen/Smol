@@ -130,4 +130,4 @@ dmypy.json
 docker-compose.yml
 *.Zone.Identifier
 
-moars.db
+smol.db

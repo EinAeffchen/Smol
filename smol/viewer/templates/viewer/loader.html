@@ -1,0 +1,97 @@
+{% extends 'viewer/base.html' %}
+{% load humanize %}
+{% load static %}
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-around">
+        <div class='datablock'>
+            <h3>Video Count:</h3>
+            <div class="datablock-data" id="video-count">
+                {{ video_count }}
+            </div>
+        </div>
+        <div class='datablock'>
+            <h3>Image Count:</h3>
+            <div class="datablock-data" id="image-count">
+                {{ image_count }}
+            </div>
+        </div>
+        <div class='datablock'>
+            <h3>Start import:</h3>
+            <div class="datablock-data">
+                <button type="button" id="add-files" class="btn outline-primary btn-lg active">Update content</button>
+                <button type="button" id="clean-files" class="btn outline-primary btn-lg active">Clean content</button>
+            </div>
+        </div>
+    </div>
+    <div class="datablock loader-info">
+        <p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i>Loading</p>
+        <p id="clean-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i>Cleaning</p>
+        <p id="clean-info"></p>
+        <p id="file-info"></p>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block script %}
+<script type="text/javascript">
+    var loaded = false;
+    var processed = false;
+    $(document).ready(function () {
+        function load_file() {
+            if (loaded == false) {
+                console.log("Processing next video!")
+                $("#load-icon").show();
+                $.ajax({
+                    url: "{% url 'viewer:load-data' %}",
+                    type: 'GET',
+                    success: function (msg) {
+                        if (msg["finished"] == false) {
+                            if (msg["type"] == "image") {
+                                current_image_count = parseInt($("#image-count").text());
+                                new_image_count = current_image_count + 1;
+                                $("#image-count").html(new_image_count);
+                            } else if (msg["type"] == "video") {
+                                current_video_count = parseInt($("#video-count").text());
+                                new_video_count = current_video_count + 1;
+                                $("#video-count").html(new_video_count);
+                            }
+                            $("#file-info").html(msg["file"] + " loaded sucessfully!")
+                            load_file();
+                        }
+                        if (msg["finished"] == true) {
+                            $("#load-icon").hide();
+                            $("#file-info").html("Finished loading all files, starting Post Processing!")
+                            loaded = true;
+                            load_file();
+                        }
+                    }
+                });
+            }
+            else {
+                $("#file-info").html("Nothing new to process!")
+            }
+        };
+        $("#add-files").click(function () {
+            load_file();
+        });
+        $("#clean-files").click(function () {
+            $("#clean-icon").show();
+            $.ajax({
+                url: "{% url 'viewer:clean-data' %}",
+                type: 'GET',
+                success: function (msg) {
+                    $("#clean-info").html(msg["videos"] + " Videos removed! " + msg["images"] + "images removed!");
+                    new_image_count = parseInt($("#image-count").text())-parseInt(msg["images"]);
+                    new_video_count = parseInt($("#video-count").text())-parseInt(msg["videos"])
+                    $("#image-count").text(new_image_count);
+                    $("#video-count").text(new_video_count);
+                    $("#clean-icon").hide();
+                }
+            });
+
+        });
+    });
+</script>
+{% endblock %}

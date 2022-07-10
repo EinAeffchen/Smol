@@ -1,4 +1,4 @@
-FROM nginx:1.17.2-alpine
+FROM nginx:stable-alpine
 
 RUN apk update && apk add bash && apk add fail2ban && apk add openrc --no-cache
 RUN apk add --no-cache bash

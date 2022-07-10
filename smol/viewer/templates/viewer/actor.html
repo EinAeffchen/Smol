@@ -1,0 +1,199 @@
+{% extends 'viewer/base.html' %}
+{% load static %}
+{% load custom_filters %}
+{% block content %}
+<div class="container">
+    <div class="row">
+        <div class="col-lg-12">
+            <h2 class="info-field">{{object.forename}} {{object.surname}}</h2>
+        </div>
+        <div class="col-lg-12 row person-media-box">
+            <div class="col-lg-3">
+                {% if object.avatar %}
+                <img class="person-profile-img" src="/viewer/images/{{ object.avatar }}"
+                    alt="{{object.forename}}{{object.surname}}">
+                {% else %}
+                <img class="person-profile-img" src="{% static 'viewer/images/person_profiles/thumbnail.png' %}"
+                    alt="{{object.forename}}{{object.surname}}">
+                {% endif %}
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button type="submit">Upload</button>
+                </form>
+            </div>
+            <div class="col-lg-3">
+                <table>
+                    <tr>
+                        <th>Born in: </th>
+                        <td>{{object.birth_year}}</td>
+                    </tr>
+                    <tr>
+                        <th>Age:</th>
+                        <td>{{object.age}}</td>
+                    </tr>
+                    <tr>
+                        <th>Nationality:</th>
+                        <td>{{object.nationality}}</td>
+                    </tr>
+                    <tr>
+                        <th>Videos:</th>
+                        <td>{{object.videos.all|length}}</td>
+                    </tr>
+                    <tr>
+                        <th>Images:</th>
+                        <td>{{object.images.all|length}}</td>
+                    </tr>
+                    <tr>
+                        <th>Labels:</th>
+                        <td> {% for label in object.labels.all %}
+                            <small class="card-text video-label">
+                                <a href="/label/{{label.id}}/">{{label.label}}</a><a onclick="remPersonLabel(this)"
+                                    class="delete-icon" label-id="{{label.id}}" person-id="{{object.id}}"><i
+                                        class="fas fa-trash-alt"></i></a>
+                            </small>
+
+                            {% endfor %}
+                        </td>
+                    </tr>
+                </table>
+
+
+
+            </div>
+            <div class="col-lg-3 ">
+
+                {% if best_rated %}
+                <h3>Best rated video:</h3>
+                <div id='carouselSW-content-{{id}}' class="imgSW-preview person-video float-right">
+                    <a href="{% url 'viewer:video' best_rated.id %}">
+                        <img src="{% static 'viewer/images/thumbnails/' %}{{best_rated.thumbnail}}"
+                            preview="{% static 'viewer/images/previews/' %}{{best_rated.preview}}"
+                            class="car-preview-img video-preview" name='preview-{{best_rated.id}}'
+                            alt="{{best_rated.filename}}">
+                    </a>
+                    <div class="img-overlay">
+                        <p>{{best_rated.filename|truncatechars:35}}</p>
+                    </div>
+                </div>
+                {% endif %}
+
+
+            </div>
+            <div class="col-lg-12"></div>
+        </div>
+        <div class="col-lg-1 offset-lg-9">
+            <a class="btn btn-primary my-2 my-sm-0 float-right" onclick="addContent(this)">Load related content</a>
+        </div>
+        <div class="col-lg-1">
+            <a class="btn btn-primary my-2 my-sm-0 float-right" href="{% url 'viewer:edit-person' object.id %}">Edit</a>
+        </div>
+        <div class="col-lg-1">
+            <form action="{% url 'viewer:delete-person' object.id %}" method="post">
+                {{delete_form.id}}
+                <button class="btn btn-primary my-2 my-sm-0 float-right" type="submit">Delete</button>
+            </form>
+        </div>
+        <div class="col-lg-12">
+            <p id="load-icon" style="display:none"><i class="fas fa-spinner fa-spin"></i> Running face recognition.
+                Depening on your library size, this might take a while</p>
+        </div>
+        <div class="col-lg-12 person-carousel">
+            <h3>Videos ({{object.videos.all|length}}):</h3>
+            {% if object.videos.all %}
+            <div class="row">
+                {% for video in object.videos.all %}
+                <div class="col-lg-3 col-md-4 col-12 img_preview img_side" id="{{video.id}}">
+                    <a href="{% url 'viewer:video' video.id %}">
+                        <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
+                            preview="{% static 'viewer/images/previews/' %}{{video.preview}}"
+                            thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
+                            class="car-preview-img video-preview" dataframes="100" name='preview-{{video.id}}'
+                            alt="{{video.filename}}" style="width:100%;">
+                    </a>
+                    <div class="video-delete">
+                        <a onclick=removeVideo(this) video-id="{{video.id}}" person-id="{{object.id}}">
+                            Remove <i class="fas fa-trash-alt"></i></a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <h3>Images ({{object.images.all|length}}):</h3>
+            {% if object.images.all %}
+            <div class="row">
+                {% for image in object.images.all %}
+                <div class="col-lg-3 image-overview-card">
+                    <a href="{% static 'viewer/ext_videos/' %}{{image.filename|urlencode}}">
+                        <img src="{% static 'viewer/ext_videos/' %}{{image.filename|urlencode}}" id="{{image.id}}"
+                            class="image-preview" alt="{{image.filename}}">
+                    </a>
+                    <div class="image-delete">
+                        <a onclick=removeImage(this) image-id="{{image.id}}" person-id="{{object.id}}">
+                            Remove <i class="fas fa-trash-alt"></i></a>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            <!-- {% for face in faces %}
+            <img src="/viewer/images/images/full_faces/{{face}}" class="image-preview">
+            {% endfor %} -->
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+<script type="text/javascript">
+    function removeVideo(button) {
+        $(button).parent().hide();
+        $("#" + $(button).attr("video-id")).hide();
+        $.ajax({
+            url: "{% url 'viewer:person-video-delete' %}",
+            method: "POST",
+            data: {
+                video_id: $(button).attr("video-id"),
+                person_id: $(button).attr("person-id")
+            }
+        })
+    };
+    function removeImage(button) {
+        $(button).parent().hide();
+        $("#" + $(button).attr("image-id")).hide();
+        $.ajax({
+            url: "{% url 'viewer:person-image-delete' %}",
+            method: "POST",
+            data: {
+                image_id: $(button).attr("image-id"),
+                person_id: $(button).attr("person-id")
+            }
+        })
+    };
+    function addContent(button) {
+        $("#load-icon").show();
+        $.ajax({
+            url: "{% url 'viewer:person-add-content' %}",
+            method: "POST",
+            data: {
+                person: "{{object.id}}"
+            }, success: function (data) {
+                id = data["person-id"];
+                window.location = "/person/" + id + "/"
+            }
+        })
+    };
+    function remPersonLabel(button) {
+        $(button).parent().hide();
+        $.ajax({
+            url: "{% url 'viewer:label-person-delete' %}",
+            method: "POST",
+            data: {
+                label_id: $(button).attr("label-id"),
+                person_id: "{{object.id}}"
+            }
+        })
+    }</script>
+{% endblock %}

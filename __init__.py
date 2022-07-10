@@ -1,2 +1,2 @@
-from moars.utils import *
-from moars.model import *
+from smol.utils import *
+from smol.model import *

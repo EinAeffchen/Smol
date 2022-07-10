@@ -1,0 +1,30 @@
+{% extends 'viewer/base.html' %}
+{% load custom_filters %}
+{% block content %}
+<div class="container">
+    <a class="btn btn-danger" href="{% url 'viewer:new-person' %}">add new person</a>
+    <div class="card-deck">
+        {% for person in object_list %}
+        {% include "viewer/person_card.html" with person=person %}
+        {% endfor %}
+    </div>
+</div>
+
+
+{% endblock %}
+
+
+{% block script %}
+<script type="text/javascript">
+    function remPersonLabel(button) {
+        $(button).parent().hide();
+        $.ajax({
+            url: "{% url 'viewer:label-person-delete' %}",
+            method: "POST",
+            data: {
+                label_id: $(button).attr("label-id"),
+                person_id: $(button).attr("person-id"),
+            }
+        })
+    }</script>
+{% endblock %}

@@ -1,18 +1,30 @@
-all: build up 
+all: build-image push kill up 
 
-build:
-	docker-compose -p moars build
+build-image:
+	docker build -t smol .
+	docker build -t smol_nginx ./nginx
+
+push:
+	docker tag smol einaeffchen/smol
+	docker push einaeffchen/smol
+	docker tag smol_nginx einaeffchen/smol_nginx
+	docker push einaeffchen/smol_nginx
+
+kill:
+	docker-compose down
+	docker-compose rm -f
 
 up:
-	docker-compose -p moars up -d 
+	docker-compose pull
+	docker-compose -p smol up -d 
 
 logs:
 	docker logs django
 
 down:
-	docker-compose -p moars down
+	docker-compose -p smol down
 
 killall:
 	docker kill django nginx postgresql
 	docker rm django nginx postgresql
-	docker volume rm moars_db-data moars_media-volume moars_ml-volume moars_static-movie-volume moars_static-volume
+	docker volume rm smol_db-data smol_media-volume smol_ml-volume smol_static-movie-volume smol_static-volume

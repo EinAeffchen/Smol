@@ -1,0 +1,20 @@
+{% extends 'viewer/base.html' %}
+{% load static %}
+{% load custom_filters %}
+{% block content %}
+<div class="container">
+    <div class="row">
+        
+        {% for season, episodes in seasons.items() %}
+            Season {{season}}
+            {% for episode in episodes %}
+                {{episode.name}}
+                Episode {{episode.episode}}
+                {{episode.air_date}}
+            {% endfor %}
+
+        {% endfor %}
+            
+    </div>
+</div>
+{% endblock %}
