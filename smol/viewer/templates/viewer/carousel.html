@@ -19,7 +19,7 @@
                             <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail|urlencode}}"
                                 preview="{% static 'viewer/images/previews/' %}{{video.preview|urlencode}}"
                                 thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail|urlencode}}"
-                                class="car-preview-img video-preview d-block w-20" dataframes="50"
+                                class="car-preview-img video-preview d-block w-20" dataframes={{dataframes}}
                                 name='preview-{{video.id}}' alt="{{video.filename}}" style="width:100%;">
                         </a>
                         <div class="img-overlay">

@@ -91,7 +91,7 @@ WSGI_APPLICATION = "smol.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
-sqlite_file = Path("/srv/data/smol/local_media/db")
+sqlite_file = Path("/srv/data/smol/local_media/smol/db")
 sqlite_file.mkdir(exist_ok=True, parents=True)
 sqlite_file = sqlite_file / "smol.db"
 
@@ -159,6 +159,8 @@ INTERNAL_IPS = [
 ]
 
 SITE_ID = 1
+
+PREVIEW_IMAGES = 15
 
 MEDIA_URL = "/viewer/images/"
 MEDIA_ROOT = BASE_DIR/"media/"

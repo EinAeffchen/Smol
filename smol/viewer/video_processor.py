@@ -73,7 +73,7 @@ def read_video_info(path: Path) -> dict:
 
 
 def calculate_padding(width: int, height: int) -> str:
-    tgt_width = 65500 / 50  # (max dim / frames)
+    tgt_width = 410  # (max dim / frames)
     tgt_height = tgt_width / 1.51
     height_padding = 0
     # scale to target height
@@ -108,9 +108,9 @@ def update_preview_name(filename: str, preview_dir: Path):
 
 def generate_preview(video: Video, frames: int, video_path: Path) -> str:
     if frames:
-        nth_frame = int(int(frames) / 15)
+        nth_frame = int(int(frames) / settings.PREVIEW_IMAGES)
     else:
-        nth_frame = 15
+        nth_frame = settings.PREVIEW_IMAGES
     out_filename = f"{video.id}.jpg"
     out_path = settings.PREVIEW_DIR / out_filename
     if out_path.is_file():
@@ -133,7 +133,7 @@ def generate_preview(video: Video, frames: int, video_path: Path) -> str:
             "-c:v",
             "mjpeg",
             "-vf",
-            f"select=not(mod(n\,{nth_frame})),{pad},tile=50x1",
+            f"select=not(mod(n\,{nth_frame})),{pad},tile={settings.PREVIEW_IMAGES}x1",
             str(out_path),
         ],
         stdout=subprocess.PIPE,

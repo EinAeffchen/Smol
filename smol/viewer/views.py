@@ -36,9 +36,11 @@ class IndexView(generic.ListView):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
 
-        context["result_videos1"] = Video.objects.all()[:60]
+        context["result_videos1"] = Video.objects.order_by("-rating")[:30]
         context["result_videos2"] = Video.objects.order_by("-inserted_at")[:30]
-        context["result_videos3"] = Video.objects.order_by("-rating")[:30]
+        context["result_videos3"] = Video.objects.order_by("-duration")[:30]
+
+        context["dataframes"] = settings.PREVIEW_IMAGES
 
         if not self.request.GET:
             context["label_videos"] = dict()
@@ -221,6 +223,7 @@ class LabelResultView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super(generic.DetailView, self).get_context_data(**kwargs)
         label_obj = context["object"]
+        context["dataframes"] = settings.PREVIEW_IMAGES
         context["result_videos1"] = Video.objects.filter(
             labels=label_obj
         ).order_by("-rating")[:30]
