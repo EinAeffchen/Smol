@@ -95,7 +95,6 @@ class Image(models.Model):
     favorite = models.BooleanField(default=False)
     inserted_at = models.DateField(default=django.utils.timezone.now)
     labels = models.ManyToManyField(Label)
-    person_age = models.IntegerField(null=True)
 
     def delete_full(self):
         obj = Path(self.path)

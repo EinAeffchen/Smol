@@ -8,8 +8,8 @@
 
         <div class="col-lg-3">
             <div class="card image-overview-card">
-                <a href="{% static 'viewer/ext_videos/' %}{{image.filename|urlencode}}">
-                    <img src="{% static 'viewer/ext_videos/' %}{{image.filename|urlencode}}" id="{{image.id}}"
+                <a href="/local-media{{image.path|urlencode}}">
+                    <img src="/local-media{{image.path|urlencode}}" id="{{image.id}}"
                         class="image-preview" alt="{{image.filename}}">
                 </a>
                 <div class="card-body row">

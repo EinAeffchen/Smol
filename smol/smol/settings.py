@@ -91,7 +91,7 @@ WSGI_APPLICATION = "smol.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
-sqlite_file = Path("/srv/data/smol/local_media/smol/db")
+sqlite_file = Path("/srv/data/smol/local_media/.smol/db")
 sqlite_file.mkdir(exist_ok=True, parents=True)
 sqlite_file = sqlite_file / "smol.db"
 

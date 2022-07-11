@@ -20,12 +20,10 @@ def get_duration(stream: dict):
 
 
 def read_image_info(path: Path):
-    print(f"Processing: {path}")
     img = PILImage.open(str(path))
 
     image_data = dict()
     image_data["dim_height"], image_data["dim_width"] = img.size
-    image_data["processed"] = False
     image_data["size"] = path.stat().st_size
     image_data["path"] = str(path)
     return image_data
@@ -222,7 +220,9 @@ def generate_for_videos():
 def generate_for_images():
     for suffix in settings.IMAGE_SUFFIXES:
         for image in settings.MEDIA_DIR.rglob(f"*{suffix}"):
-            if not Image.objects.filter(path=str(image)):
+            if ".smol" not in image.parts and not Image.objects.filter(
+                path=str(image)
+            ):
                 image_data = read_image_info(image)
                 image_data["filename"] = image.name
                 image_row = Image(**image_data)
@@ -230,6 +230,7 @@ def generate_for_images():
                 add_labels_by_path(image_row, image)
                 image_row.save()
                 return {"finished": False, "file": image.name, "type": "image"}
+
 
 def generate_previews_thumbnails():
     result = generate_for_videos()
