@@ -91,7 +91,7 @@ WSGI_APPLICATION = "smol.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
-sqlite_file = Path("/srv/data/smol/local_media/.smol/db")
+sqlite_file = Path("/srv/data/smol/db")
 sqlite_file.mkdir(exist_ok=True, parents=True)
 sqlite_file = sqlite_file / "smol.db"
 
@@ -142,6 +142,7 @@ USE_TZ = True
 PROJECT_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT_alt = os.path.dirname(os.path.abspath(__file__))
 
+
 def always_true(request):
     return True
 
@@ -160,11 +161,11 @@ SITE_ID = 1
 PREVIEW_IMAGES = 15
 
 MEDIA_URL = "/viewer/images/"
-MEDIA_ROOT = BASE_DIR/"media/"
-MEDIA_DIR = BASE_DIR/"local_media"
+MEDIA_ROOT = BASE_DIR / "media/"
+MEDIA_DIR = BASE_DIR / "local_media"
 
 STATIC_URL = "/static/"
-STATIC_ROOT = MEDIA_DIR/".smol/static"
+STATIC_ROOT = MEDIA_DIR / ".smol/static"
 
 THUMBNAIL_DIR = STATIC_ROOT / "viewer/images/thumbnails"
 PREVIEW_DIR = STATIC_ROOT / "viewer/images/previews"
