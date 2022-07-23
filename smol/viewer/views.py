@@ -1,16 +1,12 @@
 import random
-from datetime import datetime
-from pathlib import Path
 
-from django.core.files import File
 from django.db import IntegrityError
-from django.db.models import Count, Q
+from django.db.models import Count
 from django.db.models.fields import CharField
 from django.http import (
     HttpResponse,
     HttpResponseBadRequest,
     JsonResponse,
-    HttpResponseRedirect,
 )
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
@@ -18,10 +14,8 @@ from django.views import generic
 from django.views.generic.edit import (
     FormView,
 )
-
-from asgiref.sync import sync_to_async
-from .forms import PersonForm, FilterForm, ImageForm, LabelForm
-from .models import Video, Label, Person, Image
+from .forms import FilterForm, LabelForm
+from .models import Video, Label, Image
 from django.conf import settings
 from .video_processor import (
     generate_previews_thumbnails,
@@ -58,7 +52,6 @@ class IndexView(generic.ListView):
                         labels=label[0]
                     )[:60]
         return context
-
 
 
 class LabelView(FormView, generic.ListView):
@@ -138,9 +131,11 @@ class VideoView(generic.DetailView):
         video = context["object"]
         context["labels"] = Label.objects.all().order_by("label")
         context["video"] = video
+        context["dataframes"] = settings.PREVIEW_IMAGES
         context["recommendations"] = (
             Video.objects.filter(labels__in=video.labels.all())
             .exclude(id=video.id)
+            .order_by("?")
             .distinct()
         )
         return context
@@ -172,6 +167,12 @@ class VideoOverview(generic.ListView):
     template_name = "viewer/overview.html"
     ordering = ["-inserted_at"]
 
+    def get_context_data(self, **kwargs):
+        context = super(CLASS_NAME, self).get_context_data(**kwargs)
+        context["dataframes"] = settings.PREVIEW_IMAGES
+        return context
+    
+
 
 class ImageOverview(generic.ListView):
     paginate_by = 16
@@ -202,6 +203,7 @@ class SearchView(VideoList):
         )
         return context
 
+
 def load_data(request):
     return JsonResponse(generate_previews_thumbnails())
 
@@ -213,7 +215,6 @@ def clean_data(request):
     for image in Image.objects.all():
         counter["images"] += image.clean()
     return JsonResponse(counter)
-
 
 
 class LabelResultView(generic.DetailView):
@@ -235,6 +236,7 @@ class LabelResultView(generic.DetailView):
         ).order_by("-favorite")[:30]
         print(context)
         return context
+
 
 def add_favorite(request, videoid):
     vid_obj = Video.objects.get(id=videoid)
@@ -292,6 +294,7 @@ def rem_video(request):
         vid_obj: Video = Video.objects.filter(id=video_id).first()
         vid_obj.delete_full()
     return HttpResponse("OK")
+
 
 def rem_meta(request):
     if request.method == "POST":

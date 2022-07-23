@@ -12,7 +12,7 @@
                     <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail|urlencode}}"
                         preview="{% static 'viewer/images/previews/' %}{{video.preview|urlencode}}"
                         thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail|urlencode}}"
-                        class="video-preview" dataframes="50" name='preview-{{video.id}}' alt="{{video.filename}}">
+                        class="video-preview" dataframes={{dataframes}} name='preview-{{video.id}}' alt="{{video.filename}}">
                 </a>
                 <div class="card-body row">
                     <div class="col-lg-6">

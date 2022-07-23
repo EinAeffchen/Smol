@@ -93,7 +93,7 @@
                             <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
                                 preview="{% static 'viewer/images/previews/' %}{{video.preview}}"
                                 thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
-                                class="car-preview-img video-preview" dataframes="100" name='preview-{{video.id}}'
+                                class="car-preview-img video-preview" dataframes={{dataframes}} name='preview-{{video.id}}'
                                 alt="{{video.filename}}" style="width:100%;">
                         </a>
                         <div class="img-overlay">
@@ -106,7 +106,7 @@
         </div>
         {% if recommendations|length >= 14 %}
         <div>
-            {% include "viewer/carousel.html" with id="carousel1"  title="Further recommendations:" result_set=recommendations|slice:"8:32" type="videos" %}
+            {% include "viewer/carousel.html" with id="carousel1"  title="Further recommendations:" result_set=recommendations|slice:"8:32" type="videos" dataframes=15 %}
         </div>
         {% endif %}
         {% else %}
@@ -120,7 +120,7 @@
                             <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
                                 preview="{% static 'viewer/images/previews/' %}{{video.preview}}"
                                 thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
-                                class="car-preview-img video-preview" dataframes="100" name='preview-{{video.id}}'
+                                class="car-preview-img video-preview" dataframes={{dataframes}} name='preview-{{video.id}}'
                                 alt="{{video.filename}}" style="width:100%;">
                         </a>
                     </div>
@@ -130,7 +130,7 @@
         </div>
         {% if rvideos|length >= 14 %}
         <div>
-            {% include "viewer/carousel.html" with id="carousel1" title="Further recommendations:" result_set=rvideos|slice:"8:32" type="videos" %}
+            {% include "viewer/carousel.html" with id="carousel1" title="Further recommendations:" result_set=rvideos|slice:"8:32" type="videos" dataframes=15 %}
         </div>
         {% endif %}
 

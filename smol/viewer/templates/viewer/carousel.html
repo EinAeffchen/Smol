@@ -44,7 +44,7 @@
                         <div id='carouselSW-content-{{id}}' class="imgSW-preview">
                             <a href="{% static 'viewer/ext_videos/' %}{{image.filename|urlencode}}">
                                 <img src="{% static 'viewer/ext_videos/' %}{{image.filename|urlencode}}"
-                                    class="car-preview-img image-preview d-block w-20" dataframes="50"
+                                    class="car-preview-img image-preview d-block w-20" dataframes={{dataframes}}
                                     name='preview-{{image.id}}' alt="{{image.filename}}" style="width:100%;">
                             </a>
                             <div class="img-overlay">

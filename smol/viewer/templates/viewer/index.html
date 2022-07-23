@@ -14,7 +14,7 @@
 
 
     {% for key, dataset in label_videos.items %}
-    {% include "viewer/carousel.html" with id="carousel"|connect:forloop.counter title=key result_set=dataset type="videos" %}
+    {% include "viewer/carousel.html" with id="carousel"|connect:forloop.counter title=key result_set=dataset type="videos" dataframes=dataframes %}
     {% endfor %}
 
 </div>

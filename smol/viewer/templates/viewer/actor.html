@@ -108,7 +108,7 @@
                         <img src="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
                             preview="{% static 'viewer/images/previews/' %}{{video.preview}}"
                             thumbnail="{% static 'viewer/images/thumbnails/' %}{{video.thumbnail}}"
-                            class="car-preview-img video-preview" dataframes="100" name='preview-{{video.id}}'
+                            class="car-preview-img video-preview" dataframes={{dataframes}} name='preview-{{video.id}}'
                             alt="{{video.filename}}" style="width:100%;">
                     </a>
                     <div class="video-delete">
