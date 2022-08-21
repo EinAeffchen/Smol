@@ -223,7 +223,10 @@ def generate_for_images():
             if ".smol" not in image.parts and not Image.objects.filter(
                 path=str(image)
             ):
-                image_data = read_image_info(image)
+                try:
+                    image_data = read_image_info(image)
+                except OSError:
+                    continue
                 image_data["filename"] = image.name
                 image_row = Image(**image_data)
                 image_row.save()
