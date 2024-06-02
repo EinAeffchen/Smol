@@ -15,7 +15,7 @@ class FilterForm(forms.Form):
 
 
 class LabelForm(forms.Form):
-    label = forms.CharField(label="Label", max_length=100)
+    labels = forms.CharField(label="Label")
 
 
 class ImageForm(forms.ModelForm):
@@ -41,7 +41,9 @@ class OrderedModelMultipleChoiceField(forms.ModelMultipleChoiceField):
 class PersonForm(forms.ModelForm):
     """Form for the image model"""
 
-    videos = OrderedModelMultipleChoiceField(Video.objects.order_by("filename"))
+    videos = OrderedModelMultipleChoiceField(
+        Video.objects.order_by("filename")
+    )
 
     class Meta:
         model = Person

@@ -1,9 +1,9 @@
-import random
-
+from django.conf import settings
 from django.db import IntegrityError
-from django.db.models import Count
+from django.db.models import Q
 from django.db.models.fields import CharField
 from django.http import (
+    HttpRequest,
     HttpResponse,
     HttpResponseBadRequest,
     JsonResponse,
@@ -11,15 +11,13 @@ from django.http import (
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views import generic
-from django.views.generic.edit import (
-    FormView,
-)
+from django.views.generic.edit import FormView
+from django.core import serializers
+import json
+
 from .forms import FilterForm, LabelForm
-from .models import Video, Label, Image
-from django.conf import settings
-from .video_processor import (
-    generate_previews_thumbnails,
-)
+from .models import Image, Label, Video
+from .video_processor import generate_previews_thumbnails
 
 
 class IndexView(generic.ListView):
@@ -29,28 +27,8 @@ class IndexView(generic.ListView):
     def get_context_data(self, **kwargs):
         # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
-
-        context["result_videos1"] = Video.objects.order_by("-rating")[:30]
-        context["result_videos2"] = Video.objects.order_by("-inserted_at")[:30]
-        context["result_videos3"] = Video.objects.order_by("-duration")[:30]
-
-        context["dataframes"] = settings.PREVIEW_IMAGES
-
-        if not self.request.GET:
-            context["label_videos"] = dict()
-            active_labels = [
-                (label.id, label.label)
-                for label in Label.objects.annotate(video_count=Count("video"))
-                .filter(video__isnull=False)
-                .filter(video_count__gte=6)
-                .distinct()
-            ]
-            if len(active_labels) >= 5:
-                label_lists = random.sample(active_labels, 5)
-                for label in label_lists:
-                    context["label_videos"][label[1]] = Video.objects.filter(
-                        labels=label[0]
-                    )[:60]
+        context["videos"] = Video.objects.order_by("?")[:50]
+        context["images"] = Image.objects.order_by("?")[:50]
         return context
 
 
@@ -65,7 +43,7 @@ class LabelView(FormView, generic.ListView):
         context = dict()
         if form.is_valid():
             try:
-                label = request.POST["label"].lower()
+                label = request.POST["labels"].lower().strip()
                 label_obj = Label(label=label)
                 label_obj.save()
             except IntegrityError:
@@ -77,6 +55,7 @@ class LabelView(FormView, generic.ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        print(context)
         context["form"] = LabelForm()
         context["form"].widget = CharField()
         return context
@@ -89,16 +68,17 @@ def delete_label(request, pk):
 
 
 def add_video_label(request):
+    print(request.body)
     if request.method == "POST":
-        video_id = request.POST["video_id"]
-        label_id = request.POST["label_id"]
-        label_obj = Label.objects.filter(id=label_id).first()
+        post_data = json.loads(request.body)
+        video_id = post_data["video_id"]
+        labels = post_data["labels"]
+        label_objs = Label.objects.filter(label__in=labels).all()
         video_obj = Video.objects.filter(id=video_id).first()
-        if label_obj in video_obj.labels.all():
-            return HttpResponseBadRequest("Label already added!")
-        video_obj.labels.add(label_obj)
+        video_obj.labels.clear()
+        [video_obj.labels.add(label_obj) for label_obj in label_objs]
         video_obj.save()
-    return JsonResponse({"label": label_obj.label, "label_id": label_obj.id})
+    return JsonResponse({"labels": labels})
 
 
 def delete_video_label(request):
@@ -129,14 +109,16 @@ class VideoView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super(generic.DetailView, self).get_context_data(**kwargs)
         video = context["object"]
-        context["labels"] = Label.objects.all().order_by("label")
+        context["labels"] = serializers.serialize(
+            "json", Label.objects.all().order_by("label")
+        )
         context["video"] = video
         context["dataframes"] = settings.PREVIEW_IMAGES
         context["recommendations"] = (
             Video.objects.filter(labels__in=video.labels.all())
             .exclude(id=video.id)
-            .order_by("?")
             .distinct()
+            .order_by("?")[:50]
         )
         return context
 
@@ -168,10 +150,9 @@ class VideoOverview(generic.ListView):
     ordering = ["-inserted_at"]
 
     def get_context_data(self, **kwargs):
-        context = super(CLASS_NAME, self).get_context_data(**kwargs)
+        context = super(generic.ListView, self).get_context_data(**kwargs)
         context["dataframes"] = settings.PREVIEW_IMAGES
         return context
-    
 
 
 class ImageOverview(generic.ListView):
@@ -182,7 +163,7 @@ class ImageOverview(generic.ListView):
 
 
 class SearchView(VideoList):
-    template_name = "viewer/search.html"
+    template_name = "viewer/index.html"
 
     def get_queryset(self):
         search_query = self.request.GET["query"]
@@ -193,13 +174,12 @@ class SearchView(VideoList):
         context = super().get_context_data(**kwargs)
         search_query = self.request.GET["query"]
         context["videos"] = Video.objects.filter(
-            filename__icontains=search_query
+            Q(filename__icontains=search_query)
+            | Q(path__icontains=search_query)
         )
         context["images"] = Image.objects.filter(
-            filename__icontains=search_query
-        )
-        context["labels"] = Video.objects.filter(
-            labels__label__icontains=search_query
+            Q(filename__icontains=search_query)
+            | Q(path__icontains=search_query)
         )
         return context
 
@@ -224,17 +204,12 @@ class LabelResultView(generic.DetailView):
     def get_context_data(self, **kwargs):
         context = super(generic.DetailView, self).get_context_data(**kwargs)
         label_obj = context["object"]
-        context["dataframes"] = settings.PREVIEW_IMAGES
-        context["result_videos1"] = Video.objects.filter(
-            labels=label_obj
-        ).order_by("-rating")[:30]
-        context["result_videos2"] = Video.objects.filter(
-            labels=label_obj
-        ).order_by("-inserted_at")[:30]
-        context["result_videos3"] = Video.objects.filter(
-            labels=label_obj
-        ).order_by("-favorite")[:30]
-        print(context)
+        context["videos"] = Video.objects.filter(labels=label_obj).order_by(
+            "-favorite"
+        )[:50]
+        context["images"] = Image.objects.filter(labels=label_obj).order_by(
+            "-favorite"
+        )[:50]
         return context
 
 
@@ -280,8 +255,9 @@ def rate_video(request):
 
 def change_age(request):
     if request.method == "POST":
-        video_id = request.POST["video_id"]
-        age = request.POST["age"]
+        body = json.loads(request.body)
+        video_id = body["video_id"]
+        age = body["age"]
         video_obj = Video.objects.filter(id=video_id).first()
         video_obj.person_age = age
         video_obj.save()
@@ -290,7 +266,8 @@ def change_age(request):
 
 def rem_video(request):
     if request.method == "POST":
-        video_id = request.POST["video_id"]
+        body = json.loads(request.body)
+        video_id = body["video_id"]
         vid_obj: Video = Video.objects.filter(id=video_id).first()
         vid_obj.delete_full()
     return HttpResponse("OK")

@@ -3,6 +3,12 @@
 {% load static %}
 {% load cache %}
 {% load custom_filters %}
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]>      <html class="no-js"> <!--<![endif]-->
+<html>
 
 <head>
     {% block head %}
@@ -14,12 +20,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1.0">
 
     <link rel="shortcut icon" type="image/png" href="{% static 'viewer/favicons/favicon.ico' %}" />
-
-    <link rel="stylesheet" type="text/css" href="{% static 'viewer/css/bootstrap.css' %}">
-    <link rel="stylesheet" type="text/css" href="{% static 'viewer/css/nflix.css' %}">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css"
-        integrity="sha512-1ycn6IcaQQ40/MKBW2W4Rhis/DbILU74C1vSrLJxCq57o941Ym01SwNsOMqvEBFlcgUa6xLiPY/NS5R+E6ztJQ=="
-        crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <link rel="stylesheet" type="text/css" href="{% static 'viewer/css/font-awesome.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'viewer/css/pico.fuchsia.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'viewer/css/pico.custom.css' %}">
 
     <!-- Favicons -->
 
@@ -30,152 +33,59 @@
     <link rel="mask-icon" href="{% static 'viewer/favicons/safari-pinned-tab.svg' %}" color="#5bbad5">
     <meta name="msapplication-TileColor" content="#b91d47">
     <meta name="theme-color" content="#000000">
-    <script src="https://code.jquery.com/jquery-3.6.0.js"
-        integrity="sha256-H+K7U5CnXl1h5ywQfKtSj8PCmoN9aaq30gDh27Xc0jk=" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"
-        integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo"
-        crossorigin="anonymous"></script>
-    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"
-        integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6"
-        crossorigin="anonymous"></script>
-    <script>
-        $(document).ready(function () {
-            $("[href]").each(function () {
-                if (this.href == window.location.href) {
-                    $(this).addClass("active");
-                }
-            });
-        });
-    </script>
-    <script>
-        $(document).ready(function () {
-
-            var left = document.getElementsByClassName("carousel-control-prev")
-            var right = document.getElementsByClassName("carousel-control-next")
-
-            function scrollRight() {
-                var car_id = this.attributes.car_id.value
-                var carousel = document.getElementById('carouselSW-container-'.concat(car_id))
-                var step = carousel.scrollWidth / 14
-                if (!('page' in carousel)) {
-                    carousel.page = 1
-                }
-                else {
-                    console.log(carousel.page)
-                }
-                carousel.scrollLeft += step
-                carousel.page += 1
-            }
-            function scrollLeft() {
-                var car_id = this.attributes.car_id.value
-                var carousel = document.getElementById('carouselSW-container-'.concat(car_id))
-                var step = carousel.scrollWidth / 14
-                if ('page' in carousel) {
-                    if (carousel.page <= 1) {
-                        console.error("No previous page to show.")
-                    }
-                    else {
-                        carousel.page -= 1
-                        carousel.scrollLeft -= step
-                    }
-                }
-            }
-
-            for (var i = 0; i < left.length; i++) {
-                left[i].addEventListener("click", scrollLeft);
-            }
-
-            for (var i = 0; i < right.length; i++) {
-                right[i].addEventListener("click", scrollRight);
-            }
-        });
-    </script>
 </head>
 
-<body class='fixed-border'>
-    <!-- Google Tag Manager (noscript) -->
-    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-TLKS58K" height="0" width="0"
-            style="display:none;visibility:hidden"></iframe></noscript>
-    <!-- End Google Tag Manager (noscript) -->
-    <nav id="topheader" class="navbar navbar-expand-lg navbar-dark main-header sticky-top">
-        <a class="navbar-brand" href="{% url 'viewer:index' %}"><img src="{% static 'viewer/images/logo.svg' %}"
-                class='header-logo' alt="smol Logo"></a>
-        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
-            aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-            <span class="navbar-toggler-icon"></span>
-        </button>
+<body>
+    <nav class='container-fluid'>
+        <ul>
+            <li>
+                <a href="{% url 'viewer:index' %}"><strong>SMOL</strong></a>
+            </li>
+        </ul>
+        <ul>
+            <li>
+                <form role="search" class="search-form" action="{% url 'viewer:search' %}" method="get">
+                    <input id="site-search" name="query" type='search' placeholder="filenames, labels, etc."
+                        aria-label="Search" size="30">
+                    <button type="submit">Search</button>
+                </form>
+            </li>
+            <li>
+                <details class="dropdown">
+                    <summary>Menu</summary>
+                    <ul dir="rtl">
+                        <li>
+                            <a href="{% url 'viewer:labels' %}">Labels</a>
+                        </li>
+                        <li>
+                            <a href="{% url 'viewer:video-overview' %}">Videos</a>
+                        </li>
+                        <li>
+                            <a href="{% url 'viewer:image-overview' %}">Images</a>
+                        </li>
+                        <li>
+                            <a href="{% url 'viewer:load' %}">Loader</a>
+                        </li>
+                        {% if rvideo %}
+                        <li>
+                            <a href="{% url 'viewer:video' rvideo.id %}"><button>Random Video</button></a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </details>
+            </li>
+        </ul>
 
-        <div class="collapse navbar-collapse" id="navbarSupportedContent">
-            <ul class="navbar-nav mr-auto">
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'viewer:index' %}">Home</span></a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'viewer:labels' %}">Labels</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'viewer:video-overview' %}">Videos</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'viewer:image-overview' %}">Images</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'viewer:load' %}">Loader</a>
-                </li>
-                {% if rvideo %}
-                <li class="nav-item">
-                    <a class="nav-link" href="{% url 'viewer:video' rvideo.id %}">Random Video</a>
-                </li>
-                {% endif %}
-            </ul>
-            <form action="{% url 'viewer:search' %}" class="form-inline my-2 my-lg-0 form__group search" method="get">
-                <!-- <label for="search" class="form__label">Search</label> -->
-                <input id="site-search" name="query" type='search' class="form__field video-filter-obj"
-                    placeholder="filenames, labels, etc." aria-label="Search" size="30">
-                <button class="btn btn-primary my-2 my-sm-0 nflx-button" type="submit">Search</button>
-            </form>
-        </div>
     </nav>
     {% block content %}
 
     {% endblock %}
-    <script type="text/javascript">
-        var width = 0;
-        $(document).ready(function () {
-            $(".imgSW-preview").off("mouseenter").on("mouseenter", function () {
-                var self = this.querySelector("img");
-                console.log(self)
-                frames = parseFloat(self.attributes.dataframes.nodeValue);
-                width = self.width;
-                self.src = self.attributes.preview.nodeValue;
-                var i = 1;
-                self.style.left = -i * width;
-                self.style.width = self.width * frames;
-                self.style.position = "absolute";
-                self.style.overflow = "hidden";
-                iid = setInterval(function () {
-                    if (i == frames) {
-                        i = 1;
-                    }
-                    self.style.left = -i * width;
-                    i = i + 1;
-                }, 350);
-                console.log(iid);
-            }).off("mouseleave").on("mouseleave", function () {
-                var self = this.querySelector("img");
-                iid && clearInterval(iid);
-                self.style.position = "relative";
-                self.style.width = "100%";
-                self.style.left = null;
-                self.src = self.attributes.thumbnail.nodeValue;
-            });
-        });
-    </script>
+
     {% block script %}
 
     {% endblock %}
+    <script src="{% static 'viewer/js/video_play.js' %}"></script>
+</body>
 
-
-
-    </html>
-    {% endautoescape %}
+</html>
+{% endautoescape %}

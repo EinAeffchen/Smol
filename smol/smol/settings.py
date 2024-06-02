@@ -24,7 +24,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = "k&ndet-+-&(yxp_hih^k9y*$hbe2p=$vzeryfj$x*&$#+0-$sx"
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = False
+DEBUG = True
 
 ALLOWED_HOSTS = [
     "192.168.178.20",
@@ -39,7 +39,7 @@ DEFAULT_CHARSET = "utf-8"
 
 INSTALLED_APPS = [
     "viewer.apps.ViewerConfig",
-    "django.contrib.admin",
+    # "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -88,21 +88,6 @@ TEMPLATES = [
 WSGI_APPLICATION = "smol.wsgi.application"
 
 
-# Database
-# https://docs.djangoproject.com/en/2.2/ref/settings/#databases
-
-sqlite_file = Path("/srv/data/smol/local_media/.smol/db")
-sqlite_file.mkdir(exist_ok=True, parents=True)
-sqlite_file = sqlite_file / "smol.db"
-
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": str(sqlite_file),
-    }
-}
-
-
 # Password validation
 # https://docs.djangoproject.com/en/2.2/ref/settings/#auth-password-validators
 
@@ -111,13 +96,19 @@ AUTH_PASSWORD_VALIDATORS = [
         "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
     },
     {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation.MinimumLengthValidator"
+        ),
     },
     {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation.CommonPasswordValidator"
+        ),
     },
     {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+        "NAME": (
+            "django.contrib.auth.password_validation.NumericPasswordValidator"
+        ),
     },
 ]
 
@@ -161,14 +152,29 @@ SITE_ID = 1
 PREVIEW_IMAGES = 15
 
 MEDIA_URL = "/viewer/images/"
-MEDIA_ROOT = BASE_DIR / "media/"
-MEDIA_DIR = BASE_DIR / "local_media"
+MEDIA_ROOT = BASE_DIR / "local_media/"
+MEDIA_DIR = MEDIA_ROOT
 
-STATIC_URL = "/static/"
+STATIC_URL = "static/"
 STATIC_ROOT = MEDIA_DIR / ".smol/static"
+STATICFILES_DIRS = (MEDIA_DIR / ".smol/static/viewer/images",)
+# Database
+# https://docs.djangoproject.com/en/2.2/ref/settings/#databases
+
+sqlite_file = MEDIA_DIR / ".smol/db"
+sqlite_file.mkdir(exist_ok=True, parents=True)
+sqlite_file = sqlite_file / "smol.db"
+
+DATABASES = {
+    "default": {
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": str(sqlite_file),
+    }
+}
 
 THUMBNAIL_DIR = STATIC_ROOT / "viewer/images/thumbnails"
 PREVIEW_DIR = STATIC_ROOT / "viewer/images/previews"
+
 if not THUMBNAIL_DIR.is_dir():
     THUMBNAIL_DIR.mkdir(exist_ok=True, parents=True)
 if not PREVIEW_DIR.is_dir():

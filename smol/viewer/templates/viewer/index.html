@@ -1,21 +1,10 @@
 {% extends 'viewer/base.html' %}
 {% load custom_filters %}
+{% load humanize %}
+{% load static %}
 {% block content %}
 <div class="container-fluid">
-    {% if result_videos1 %}
-    {% include "viewer/carousel.html" with id="carousel7" title="Best rated:" result_set=result_videos1 type="videos" dataframes=dataframes %}
-    {% endif %}
-    {% if result_videos2 %}
-    {% include "viewer/carousel.html" with id="carousel8" title="Newest:" result_set=result_videos2 type="videos" dataframes=dataframes %}
-    {% endif %}
-    {% if result_videos3 %}
-    {% include "viewer/carousel.html" with id="carousel9" title="Longest:" result_set=result_videos3 type="videos" dataframes=dataframes %}
-    {% endif %}
-
-
-    {% for key, dataset in label_videos.items %}
-    {% include "viewer/carousel.html" with id="carousel"|connect:forloop.counter title=key result_set=dataset type="videos" dataframes=dataframes %}
-    {% endfor %}
-
+    {% include "viewer/video_gallery.html" with title="Videos:" type="videos" %}
+    {% include "viewer/video_gallery.html" with title="Images:" type="images" %}
 </div>
 {% endblock %}

@@ -40,6 +40,12 @@ def connect(first, second):
     return str(first)+str(second)
 
 @register.filter
+def to_duration(value_in_seconds):
+    minutes = value_in_seconds/60
+    seconds = value_in_seconds%60
+    return f"{int(minutes):02d}:{int(seconds):02d}"
+
+@register.filter
 def get_type(value):
     mime_mapping = {
         ".avi": "video/x-msvideo",

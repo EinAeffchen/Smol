@@ -1,22 +1,18 @@
-all: build-image push kill up 
-
-build-image:
-	docker build -t smol .
-	docker build -t smol_nginx ./nginx
-
-push:
-	docker tag smol einaeffchen/smol
-	docker push einaeffchen/smol
-	docker tag smol_nginx einaeffchen/smol_nginx
-	docker push einaeffchen/smol_nginx
-
 kill:
 	docker-compose down
 	docker-compose rm -f
 
+mount:
+	rclone mount onedrive_crypt:/sec smol/local_media --buffer-size 128Mi --drive-chunk-size 128M --vfs-cache-max-age 210000h --vfs-read-ahead 128Mi --vfs-cache-mode full --allow-other &
+
+unmount:
+	umount smol/local_media
+
 up:
-	docker-compose pull
-	docker-compose -p smol up -d 
+	cd smol && python3 manage.py collectstatic --noinput
+	cd smol && python3 manage.py makemigrations
+	cd smol && python3 manage.py migrate
+	cd smol && python3 manage.py runserver
 
 logs:
 	docker logs django

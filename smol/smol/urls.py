@@ -27,8 +27,9 @@ urlpatterns = [
     path("__debug__/", include(debug_toolbar.urls)),
 ]
 if settings.DEBUG:
-    urlpatterns += staticfiles_urlpatterns()
+    # urlpatterns += staticfiles_urlpatterns()
     # urlpatterns += [
     #     re_path(r"^static/(?P<path>.*)$", views.serve),
     # ]
+    urlpatterns += static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
