@@ -1,0 +1,29 @@
+{% extends 'viewer/base.html' %}
+
+{% block content %}
+<div class="container">
+    <article>
+        <header>
+            <form method="post" action="{% url 'viewer:labels' %}">{% csrf_token %}
+                {{form}}
+                <input type="submit" value="Submit">
+            </form>
+            {% if error %}
+            <b>{{error}}</b>
+            {% endif %}
+        </header>
+        <div role="group" class="label-group-box">
+            {% for label in object_list %}
+            <div role="group" class="label-group">
+                <a role="button" class="small-button outline" href="/label/{{label.id}}/">
+                    <span>{{label.label}}</span>
+                </a>
+                <a class="delete-button outline" role="button" href="{% url 'viewer:label-delete' label.id %}">
+                    <i class="fa fa-trash"></i>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </article>
+</div>
+{% endblock %}

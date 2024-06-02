@@ -129,3 +129,10 @@ dmypy.json
 .pyre/
 docker-compose.yml
 *.Zone.Identifier
+
+smol.db
+.venv
+**/viewer/images
+**smol/local_media
+
+Makefile

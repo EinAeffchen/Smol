@@ -1,4 +1,6 @@
-django==3.2.6
-django-debug-toolbar==3.2.1
-deepface==0.0.68
+django==5.0.6
+django-debug-toolbar==4.4.2
 ffmpeg-python==0.2.0
+gunicorn==22.0.0
+Pillow==10.3.0
+ffprobe-python==1.0.3

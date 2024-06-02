@@ -1,0 +1,91 @@
+{% autoescape off %}
+{% load humanize %}
+{% load static %}
+{% load cache %}
+{% load custom_filters %}
+<!DOCTYPE html>
+<!--[if lt IE 7]>      <html class="no-js lt-ie9 lt-ie8 lt-ie7"> <![endif]-->
+<!--[if IE 7]>         <html class="no-js lt-ie9 lt-ie8"> <![endif]-->
+<!--[if IE 8]>         <html class="no-js lt-ie9"> <![endif]-->
+<!--[if gt IE 8]>      <html class="no-js"> <!--<![endif]-->
+<html>
+
+<head>
+    {% block head %}
+    <title>smol</title>
+    {% endblock %}
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1.0">
+
+    <link rel="shortcut icon" type="image/png" href="{% static 'viewer/favicons/favicon.ico' %}" />
+    <link rel="stylesheet" type="text/css" href="{% static 'viewer/css/font-awesome.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'viewer/css/pico.fuchsia.css' %}">
+    <link rel="stylesheet" type="text/css" href="{% static 'viewer/css/pico.custom.css' %}">
+
+    <!-- Favicons -->
+
+    <link rel="apple-touch-icon" sizes="180x180" href="{% static 'viewer/favicons/apple-touch-icon.png' %}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{% static 'viewer/favicons/favicon-32x32.png' %}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{% static 'viewer/favicons/favicon-16x16.png' %}">
+    <link rel="manifest" href="{% static 'viewer/favicons/site.webmanifest' %}">
+    <link rel="mask-icon" href="{% static 'viewer/favicons/safari-pinned-tab.svg' %}" color="#5bbad5">
+    <meta name="msapplication-TileColor" content="#b91d47">
+    <meta name="theme-color" content="#000000">
+</head>
+
+<body>
+    <nav class='container-fluid'>
+        <ul>
+            <li>
+                <a href="{% url 'viewer:index' %}"><strong>SMOL</strong></a>
+            </li>
+        </ul>
+        <ul>
+            <li>
+                <form role="search" class="search-form" action="{% url 'viewer:search' %}" method="get">
+                    <input id="site-search" name="query" type='search' placeholder="filenames, labels, etc."
+                        aria-label="Search" size="30">
+                    <button type="submit">Search</button>
+                </form>
+            </li>
+            <li>
+                <details class="dropdown">
+                    <summary>Menu</summary>
+                    <ul dir="rtl">
+                        <li>
+                            <a href="{% url 'viewer:labels' %}">Labels</a>
+                        </li>
+                        <li>
+                            <a href="{% url 'viewer:video-overview' %}">Videos</a>
+                        </li>
+                        <li>
+                            <a href="{% url 'viewer:image-overview' %}">Images</a>
+                        </li>
+                        <li>
+                            <a href="{% url 'viewer:load' %}">Loader</a>
+                        </li>
+                        {% if rvideo %}
+                        <li>
+                            <a href="{% url 'viewer:video' rvideo.id %}"><button>Random Video</button></a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </details>
+            </li>
+        </ul>
+
+    </nav>
+    {% block content %}
+
+    {% endblock %}
+
+    {% block script %}
+
+    {% endblock %}
+    <script src="{% static 'viewer/js/video_play.js' %}"></script>
+</body>
+
+</html>
+{% endautoescape %}

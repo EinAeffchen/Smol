@@ -1,0 +1,139 @@
+{% extends 'viewer/base.html' %}
+{% load humanize %}
+{% load static %}
+{% load custom_filters %}
+{% block head %}
+<title>smol</title>
+{% endblock %}
+{% block content %}
+<div class="container-fluid">
+    <article>
+        <header>
+            <h4>{{video.filename}}</h4>
+        </header>
+
+        <video id="vid-{{video.id}}" class="video-fullsize" controls preload="metadata"
+            poster="{% static '/thumbnails/' %}{{video.thumbnail}}" loop="true" data-setup="{}">
+            <source src="/viewer/images/{{video.path|urlencode}}" type="{{video.filename|get_type}}">
+        </video>
+        <footer>
+            <div>
+                <div role="group">
+                    {% for v_label in video.labels.all %}
+                    <a role="button" class="outline" href="/label/{{v_label.id}}/">{{v_label.label}}</a>
+                    {% endfor %}
+                </div>
+            </div>
+            <div>
+                <select list="add-label" id="label-choice" name="label-choice" multiple />
+                {% for v_label in video.labels.all %}
+                <option value={{v_label.label}} selected>{{v_label.label}}</option>
+                {% endfor %}
+                </select>
+                {{labels|json_script:"labels"}}
+            </div>
+            <div role="group">
+                <a role="button" class="outline" id='rem-vid' onclick=remvid(this) href="#">
+                    <span>Delete File</span> <i class="fa fa-trash"></i></i></a>
+                <a role="button" class="outline" id='rem-vid' onclick=remmeta(this) href="#">
+                    <span>Delete From Library</span> <i class="fa fa-trash"></i></i></a>
+            </div>
+            <div role="group">
+                <input id="video-info-age" placeholder="age" type="number" size="6" name="age" max="99"
+                    value="{{video.person_age}}">
+                {% if video.favorite %}
+                <a role="button" id='rem-fav' onclick=remfav(this)><i class="fa fa-heart"></i></a>
+                {% else %}
+                <a role="button" id='add-fav' onclick=addfav(this)><i class="fa fa-heart-o"></i></a>
+                {% endif %}
+                <p id="load-icon" style="display:none"><i class="fa fa-spinner fa-spin"></i> Running face
+                    recognition. Depening on your library size, this might take a while</p>
+            </div>
+        </footer>
+    </article>
+    {% if recommendations|length > 1 %}
+    <div>
+        {% include "viewer/video_gallery.html" with title="Recommendations:" videos=recommendations type="videos" %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block script %}
+<!-- <script type="text/javascript">
+    function remvid(button) {
+        $.ajax({
+            url: "{% url 'viewer:rem_video' %}",
+            method: "POST",
+            data: {
+                video_id: "{{video.id}}"
+            }, success: function (data) {
+                window.location = "/";
+            }
+        })
+        console.log("Send post request!")
+    }
+    function remmeta(button) {
+        $.ajax({
+            url: "{% url 'viewer:rem_video_meta' %}",
+            method: "POST",
+            data: {
+                video_id: "{{video.id}}"
+            }, success: function (data) {
+                window.location = "/";
+            }
+        })
+        console.log("Send post request!")
+    }
+    function remVideoLabel(button) {
+        $(button).parent().hide();
+        $.ajax({
+            url: "{% url 'viewer:label-video-delete' %}",
+            method: "POST",
+            data: {
+                label_id: $(button).attr("label-id"),
+                video_id: "{{video.id}}"
+            }
+        })
+    }
+    $(document).ready(function () {
+        rating_val = parseFloat("{{video.rating}}")
+        if (rating_val > 0) {
+            if (rating_val % 1 != 0) {
+                final = "half";
+                rating_val = parseInt(rating_val);
+            } else {
+                final = "";
+            }
+            rat_selector = "#star" + rating_val + final;
+            $(rat_selector).prop("checked", true);
+        }
+        $(".rating input").on("click", function () {
+            rating = $(this).val();
+            console.log(rating)
+            console.log(this)
+            $.ajax({
+                url: "{% url 'viewer:rate-video' %}",
+                method: "POST",
+                data: {
+                    rating: rating,
+                    video_id: "{{video.id}}"
+                }
+            })
+        });
+        document.getElementById("video-info-age").onchange = function () {
+            age = $(this).val();
+            console.log(age)
+            $.ajax({
+                url: "{% url 'viewer:change-age' %}",
+                method: "POST",
+                data: {
+                    age: age,
+                    video_id: "{{video.id}}"
+                }
+            })
+        };
+    });
+
+</script> -->
+{% endblock %}

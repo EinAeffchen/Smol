@@ -1,0 +1,16 @@
+{% extends 'viewer/base.html' %}
+{% load custom_filters %}
+{% block content %}
+<div class="container-fluid">
+    {% if videos %}
+    {% include "viewer/carousel.html" with id="carousel1" title="Videos" result_set=videos type="videos" dataframes=15 %}
+    {% endif %}
+    {% if labels %}
+    {% include "viewer/carousel.html" with id="carousel2" title="Labels" result_set=labels type="videos" dataframes=15 %}
+    {% endif %}
+    {% if images %}
+    {% include "viewer/carousel.html" with id="carousel3" title="Images" result_set=images type="images" dataframes=15 %}
+    {% endif %}
+
+</div>
+{% endblock %}

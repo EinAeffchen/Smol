@@ -1,2 +1,2 @@
-from fapflix.utils import *
-from fapflix.model import *
+from smol.utils import *
+from smol.model import *
