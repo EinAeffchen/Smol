@@ -43,7 +43,6 @@ class Video(models.Model):
     labels = models.ManyToManyField(Label)
     inserted_at = models.DateTimeField(default=django.utils.timezone.now)
     rating = models.IntegerField(null=True)
-    person_age = models.IntegerField(null=True)
 
     def __str__(self):
         return f"{self.filename}"

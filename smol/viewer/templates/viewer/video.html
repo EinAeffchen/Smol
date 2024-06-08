@@ -39,8 +39,6 @@
                     <span>Delete From Library</span> <i class="fa fa-trash"></i></i></a>
             </div>
             <div role="group">
-                <input id="video-info-age" placeholder="age" type="number" size="6" name="age" max="99"
-                    value="{{video.person_age}}">
                 {% if video.favorite %}
                 <a role="button" id='rem-fav' onclick=remfav(this)><i class="fa fa-heart"></i></a>
                 {% else %}
@@ -60,80 +58,5 @@
 {% endblock %}
 
 {% block script %}
-<!-- <script type="text/javascript">
-    function remvid(button) {
-        $.ajax({
-            url: "{% url 'viewer:rem_video' %}",
-            method: "POST",
-            data: {
-                video_id: "{{video.id}}"
-            }, success: function (data) {
-                window.location = "/";
-            }
-        })
-        console.log("Send post request!")
-    }
-    function remmeta(button) {
-        $.ajax({
-            url: "{% url 'viewer:rem_video_meta' %}",
-            method: "POST",
-            data: {
-                video_id: "{{video.id}}"
-            }, success: function (data) {
-                window.location = "/";
-            }
-        })
-        console.log("Send post request!")
-    }
-    function remVideoLabel(button) {
-        $(button).parent().hide();
-        $.ajax({
-            url: "{% url 'viewer:label-video-delete' %}",
-            method: "POST",
-            data: {
-                label_id: $(button).attr("label-id"),
-                video_id: "{{video.id}}"
-            }
-        })
-    }
-    $(document).ready(function () {
-        rating_val = parseFloat("{{video.rating}}")
-        if (rating_val > 0) {
-            if (rating_val % 1 != 0) {
-                final = "half";
-                rating_val = parseInt(rating_val);
-            } else {
-                final = "";
-            }
-            rat_selector = "#star" + rating_val + final;
-            $(rat_selector).prop("checked", true);
-        }
-        $(".rating input").on("click", function () {
-            rating = $(this).val();
-            console.log(rating)
-            console.log(this)
-            $.ajax({
-                url: "{% url 'viewer:rate-video' %}",
-                method: "POST",
-                data: {
-                    rating: rating,
-                    video_id: "{{video.id}}"
-                }
-            })
-        });
-        document.getElementById("video-info-age").onchange = function () {
-            age = $(this).val();
-            console.log(age)
-            $.ajax({
-                url: "{% url 'viewer:change-age' %}",
-                method: "POST",
-                data: {
-                    age: age,
-                    video_id: "{{video.id}}"
-                }
-            })
-        };
-    });
-
-</script> -->
+<script src="{% static 'viewer/js/video_play.js' %}"></script>
 {% endblock %}

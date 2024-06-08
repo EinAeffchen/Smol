@@ -5,7 +5,6 @@ from . import views
 urlpatterns = [
     path("", views.IndexView.as_view(), name="index"),
     path("addVideoLabel/", views.add_video_label, name="label-video-add"),
-    path("changeAge/", views.change_age, name="change-age"),
     path(
         "deleteVideoLabel/",
         views.delete_video_label,
@@ -26,6 +25,8 @@ urlpatterns = [
     path("labels/", views.LabelView.as_view(), name="labels"),
     path("load/", views.DataLoader.as_view(), name="load"),
     path("loadData/", views.load_data, name="load-data"),
+    path("load-video/", views.load_file, name="load-file"),
+    path("get-new-videos/", views.get_new_files, name="get-new-files"),
     path("cleanData/", views.clean_data, name="clean-data"),
     path("rateVideo/", views.rate_video, name="rate-video"),
     path("remfav/<int:videoid>/", views.rem_favorite, name="rem_favorites"),
@@ -44,5 +45,5 @@ urlpatterns = [
     ),
     path(
         "imageOverview/", views.ImageOverview.as_view(), name="image-overview"
-    )
+    ),
 ]
