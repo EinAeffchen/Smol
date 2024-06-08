@@ -56,9 +56,6 @@ def read_video_info(path: Path) -> dict:
         video_data["audiocodec"] = audio_stream["codec_name"]
     video_data["duration"] = get_duration(video_stream)
     video_data["bitrate"] = video_stream.get("bit_rate")
-    video_data["frames"] = video_stream.get(
-        "nb_frames", video_stream.get("tags", {}).get("NUMBER_OF_FRAMES-eng")
-    )
     try:
         video_data["duration"] = float(video_data["duration"])
     except ValueError:
