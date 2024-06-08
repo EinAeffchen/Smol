@@ -1,19 +1,26 @@
+import json
+from pathlib import Path
+
 from django.conf import settings
+from django.core import serializers
 from django.db import IntegrityError
 from django.db.models import Q
 from django.db.models.fields import CharField
 from django.http import (
-    HttpRequest,
     HttpResponse,
-    HttpResponseBadRequest,
     JsonResponse,
 )
 from django.shortcuts import redirect, render
 from django.urls import reverse, reverse_lazy
 from django.views import generic
+from django.views.decorators.http import require_POST
 from django.views.generic.edit import FormView
-from django.core import serializers
-import json
+
+from viewer.video_processor import (
+    generate_thumbnail,
+    add_labels_by_path,
+    read_video_info,
+)
 
 from .forms import FilterForm, LabelForm
 from .models import Image, Label, Video
@@ -25,7 +32,6 @@ class IndexView(generic.ListView):
     model = Video
 
     def get_context_data(self, **kwargs):
-        # Call the base implementation first to get a context
         context = super().get_context_data(**kwargs)
         context["videos"] = Video.objects.order_by("?")[:50]
         context["images"] = Image.objects.order_by("?")[:50]
@@ -65,6 +71,42 @@ def delete_label(request, pk):
     if request.method == "GET":
         Label.objects.filter(id=pk).delete()
     return redirect(reverse("viewer:labels"))
+
+
+def get_new_files(request) -> JsonResponse:
+    new_files = list()
+    for suffix in settings.VIDEO_SUFFIXES:
+        for video in settings.MEDIA_DIR.rglob(f"*{suffix}"):
+            file_path = video.relative_to(settings.MEDIA_ROOT)
+            if not Video.objects.filter(path=file_path):
+                print("Found:", file_path)
+                new_files.append(str(file_path))
+    return JsonResponse(data={"count": len(new_files), "paths": new_files})
+
+
+@require_POST
+def load_file(request, *args, **kwargs) -> JsonResponse:
+    if request.method == "POST":
+        body = json.loads(request.body)
+        print("Processing: ", body["path"])
+        path = body["path"]
+        if Video.objects.filter(path=path):
+            return HttpResponse("Document already imported!", status=409)
+        video_path = settings.MEDIA_DIR / path
+        video_data = read_video_info(video_path)
+        relative_video_path = video_path.relative_to(settings.MEDIA_ROOT)
+        video_data["size"] = video_path.stat().st_size
+        video_data["path"] = relative_video_path
+        video_data["filename"] = video_path.name
+        video_obj = Video(**video_data)
+        video_obj.processed = False
+        video_obj.save()
+        video_obj.thumbnail = generate_thumbnail(video_obj, video_path)
+        add_labels_by_path(video_obj, relative_video_path)
+        video_obj.save()
+        return JsonResponse(
+            {"file": body["path"], "thumbnail": video_obj.thumbnail}
+        )
 
 
 def add_video_label(request):
@@ -251,18 +293,6 @@ def rate_video(request):
         video_obj.rating = rating
         video_obj.save()
     return HttpResponse("OK")
-
-
-def change_age(request):
-    if request.method == "POST":
-        body = json.loads(request.body)
-        video_id = body["video_id"]
-        age = body["age"]
-        video_obj = Video.objects.filter(id=video_id).first()
-        video_obj.person_age = age
-        video_obj.save()
-    return HttpResponse("OK")
-
 
 def rem_video(request):
     if request.method == "POST":
