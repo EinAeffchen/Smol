@@ -1,5 +1,8 @@
 function startPreview(video) {
-  video.children[0].setAttribute("src", video.children[0].getAttribute("src_tmp"));
+  video.children[0].setAttribute(
+    "src",
+    video.children[0].getAttribute("src_tmp")
+  );
   video.muted = true;
   video.currentTime = 5;
   video.load();
@@ -7,21 +10,19 @@ function startPreview(video) {
 }
 
 function stopPreview(video) {
-  video.pause()
+  video.pause();
 }
 
 window.onload = function () {
-  console.log("Document finished loading!");
+  if (document.URL.includes("/video/")) {
+    setup_labels();
+    setup_label_tracking();
+  }
   for (video of document.getElementsByClassName("video-preview")) {
     video.addEventListener("mouseenter", (event) => startPreview(event.target));
     video.addEventListener("mouseleave", (event) => stopPreview(event.target));
   }
-  if (document.URL.includes("/video/")) {
-    setup_labels();
-    setup_label_tracking();
-    setup_age_tracking();
-  }
-}
+};
 
 function label_exists(label, selector) {
   for (existing_label of selector.options) {
@@ -35,34 +36,26 @@ function label_exists(label, selector) {
 function setup_label_tracking() {
   document.getElementById("label-choice").onchange = function (e) {
     console.log(e);
-    var chosen_labels = Array.from(e.target.options).filter(function (option) { return option.selected; });
+    var chosen_labels = Array.from(e.target.options).filter(function (option) {
+      return option.selected;
+    });
     console.log(chosen_labels);
-    xhr = new XMLHttpRequest()
+    xhr = new XMLHttpRequest();
     xhr.open("POST", "/addVideoLabel/", true);
     xhr.setRequestHeader("Content-Type", "application/json");
-    var labels = chosen_labels.map(function (option) { return option.value });
-    var post_data = { "labels": labels };
+    var labels = chosen_labels.map(function (option) {
+      return option.value;
+    });
+    var post_data = { labels: labels };
     post_data["video_id"] = document.URL.split("/")[4];
     console.log(post_data);
     console.log(JSON.stringify(post_data));
     for (label in chosen_labels) {
       xhr.send(JSON.stringify(post_data));
     }
-  }
-
+  };
 }
 
-function setup_age_tracking() {
-  document.getElementById("video-info-age").onchange = function (e) {
-    var age = e.target.value;
-    xhr = new XMLHttpRequest()
-    xhr.open("POST", "/changeAge/", true);
-    xhr.setRequestHeader("Content-Type", "application/json");
-    var post_data = { "age": age };
-    post_data["video_id"] = document.URL.split("/")[4];
-    xhr.send(JSON.stringify(post_data));
-  }
-}
 function addfav(button) {
   const Http = new XMLHttpRequest();
   const url = "/fav/" + document.URL.split("/")[4] + "/";
@@ -88,7 +81,7 @@ function remvid(button) {
   var video_id = document.URL.split("/")[4];
   xhr.open("POST", "/remvid/", true);
   xhr.setRequestHeader("Content-Type", "application/json");
-  var post_data = { "video_id": video_id };
+  var post_data = { video_id: video_id };
   xhr.send(JSON.stringify(post_data));
   window.location.href = "/";
 }
