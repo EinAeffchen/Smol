@@ -17,6 +17,7 @@
                 <source src_tmp="/viewer/images/{{video.path|urlencode}}" type="{{video.filename|get_type}}">
             </video>
             <span>{{video.duration|to_duration}}</span>
+            <span>{{video.dim_width}}p</span>
         </a>
     </div>
     {% endfor %}
