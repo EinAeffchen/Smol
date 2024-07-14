@@ -1,13 +1,19 @@
-import os
+import pickle
 import subprocess
 from datetime import datetime
 from pathlib import Path
-from typing import List
-from PIL import Image as PILImage
-import ffmpeg
-from django.conf import settings
+from typing import Generator, Optional
+import json
 
-from .models import Label, Video, Image
+import ffmpeg
+from hashlib import sha1
+import pandas as pd
+from deepface.modules import representation, verification
+from django.conf import settings
+from PIL import Image as PILImage
+from tqdm import tqdm
+
+from .models import Image, Label, Video, VideoPersonMatch
 
 
 def get_duration(stream: dict):
@@ -31,7 +37,7 @@ def read_image_info(path: Path, file_path: Path):
 
 def read_video_info(path: Path) -> dict:
     probe = ffmpeg.probe(str(path))
-
+    probe_str = json.dumps(probe, indent=2, sort_keys=True)
     video_stream = next(
         (
             stream
@@ -49,6 +55,7 @@ def read_video_info(path: Path) -> dict:
         None,
     )
     video_data = dict()
+    video_data["id_hash"] = sha1(probe_str.encode("utf-8")).hexdigest()
     video_data["dim_height"] = video_stream["height"]
     video_data["dim_width"] = video_stream["width"]
     video_data["videocodec"] = video_stream["codec_name"]
@@ -139,8 +146,8 @@ def generate_preview(video: Video, frames: int, video_path: Path) -> str:
     return out_filename
 
 
-def generate_thumbnail(video: Video, video_path: Path) -> str:
-    out_filename = f"{video.filename}-{video.duration}.jpg"
+def generate_thumbnail(video: "Video", video_path: Path) -> str:
+    out_filename = f"{video.id_hash}.jpg"
     out_path = settings.THUMBNAIL_DIR / out_filename
     if out_path.is_file():
         return out_filename
@@ -177,62 +184,172 @@ def generate_thumbnail(video: Video, video_path: Path) -> str:
     return out_filename
 
 
-def add_labels_by_path(video_row: Video, video_path: Path):
-    for part in video_path.parts[5:-1]:
+def add_labels_by_path(video: "Video"):
+    for part in Path(video.path).parts[:-1]:
         label_candidates = part.lower()
         for label_candidate in label_candidates.split():
             try:
                 label = Label.objects.get(label=label_candidate)
             except Label.DoesNotExist:
                 label = Label.objects.create(label=label_candidate)
-            video_row.labels.add(label)
+                label.save()
+            print(f"Adding label {label_candidate}")
+            video.labels.add(label)
 
 
-def generate_for_videos():
-    for suffix in settings.VIDEO_SUFFIXES:
-        for video in settings.MEDIA_DIR.rglob(f"*{suffix}"):
-            file_path = video.relative_to(settings.MEDIA_ROOT)
-            if not Video.objects.filter(path=file_path):
-                video_data = read_video_info(video)
-                video_data["size"] = video.stat().st_size
-                video_data["path"] = file_path
-                video_data["filename"] = video.name
-                print(video_data)
-                frames = video_data.pop("frames")
-                video_row = Video(**video_data)
-                video_row.processed = False
-                video_row.save()
-                video_row.thumbnail = generate_thumbnail(video_row, video)
-                video_row.preview = generate_preview(video_row, frames, video)
-                add_labels_by_path(video_row, video)
-                video_row.save()
-                return {"finished": False, "file": video.name, "type": "video"}
+def load_embedding_database(video_id: Optional[int] = None):
+    representations: Generator[Path, None, None] = (
+        settings.RECOGNITION_DATA_PATH.glob("*.pkl")
+    )
+    datasets = []
+    print("Loading recognition db!")
+    for rep in representations:
+        if video_id and rep.stem == str(video_id):
+            continue
+        with open(rep, "rb") as f_in:
+            faces = pickle.load(f_in)
+            datasets += faces
+    return pd.DataFrame(datasets)
 
 
-def generate_for_images():
-    for suffix in settings.IMAGE_SUFFIXES:
-        for image in settings.MEDIA_DIR.rglob(f"*{suffix}"):
-            file_path = image.relative_to(settings.MEDIA_ROOT)
-            if ".smol" not in image.parts and not Image.objects.filter(
-                path=file_path
+face_database = load_embedding_database()
+
+
+class Matcher:
+    MATCHING_MODES: dict[int, callable]
+
+    def __init__(self) -> None:
+        self.MATCHING_MODES = dict()
+        self.MATCHING_MODES[1] = self.matching_mode_1
+        self.MATCHING_MODES[2] = self.matching_mode_2
+
+    def start_matching(self, video: Video, mode: int = 1):
+        if video.ran_recognition:
+            print("Video already got checked for related videos!")
+            return
+        encodings = video.face_encodings
+        if len(encodings) == 0:
+            print("No faces detected!")
+            return
+        if face_database.empty:
+            print("No other detection data exists, nothing to match against!")
+            return
+        return self.MATCHING_MODES[mode](video)
+
+    def matching_mode_2(
+        self,
+        video: Video,
+        distance_metric: str = "cosine",
+    ):
+        """
+        Takes into account all distances between the src_video
+        first face and averages the distance to all other faces."""
+        matched_videos = dict()
+        first_encoding = video.face_encodings[0]
+        target_embedding_obj = first_encoding["embedding"]
+        matched_videos_tmp: dict[str, list] = dict()
+        matched_videos_tmp = self.get_distances(
+            video, distance_metric, target_embedding_obj
+        )
+        for identity, distances in matched_videos_tmp.items():
+            matched_videos[identity] = (
+                matched_videos.get(identity, 0)
+                + sum(distances) / len(distances)
+            ) / 2
+        for video_id, scores in matched_videos.items():
+            if len(scores) / len(encodings) >= 0.4:
+                match_count += 1
+                distance_score = sum(scores) / len(scores)
+                save_match(video, video_id, distance_score)
+        video.related_videos.clear()
+        match_count = 0
+
+    def matching_mode_1(
+        self,
+        video: Video,
+        distance_metric: str = "cosine",
+    ):
+        """
+        For every detected source face saves all matching values against the target
+        faces, if they are below the threshold. If 2/5 of the compared faces match
+        it returns a match.
+        """
+        matched_videos: dict[Video, float] = dict()
+        target_threshold = (
+            settings.RECOGNITION_THRESHOLD
+            or verification.find_threshold(
+                settings.RECOGNITION_MODEL, distance_metric
+            )
+        )
+        print("TARGET: ", target_threshold)
+        for encoding in tqdm(video.face_encodings):
+            target_representation = encoding["embedding"]
+            matched_videos_tmp = self.get_distances(
+                video, distance_metric, target_representation
+            )
+
+            for identity, distances in matched_videos_tmp.items():
+                for distance in distances:
+                    if distance <= target_threshold:
+                        matched_videos[identity] = matched_videos.get(
+                            identity, []
+                        ) + [distance]
+
+            video.related_videos.clear()
+            match_count = 0
+            for video_id, scores in sorted(
+                matched_videos.items(), key=lambda x: x[1]
             ):
-                try:
-                    image_data = read_image_info(image, file_path)
-                except OSError:
-                    continue
-                image_data["filename"] = image.name
-                image_row = Image(**image_data)
-                image_row.save()
-                add_labels_by_path(image_row, image)
-                image_row.save()
-                return {"finished": False, "file": image.name, "type": "image"}
+                if sum(scores)/len(scores) <= 0.31:
+                    match_count += 1
+                    distance_score = sum(scores) / len(scores)
+                    save_match(video, video_id, distance_score)
+            # video.ran_recognition = True
+            # video.save()
+        print(f"Saved {match_count} matched videos.")
+
+    def get_distances(self, video, distance_metric, target_representation):
+        matched_videos_tmp: dict[str, list] = dict()
+        for _, db_instance in tqdm(face_database.iterrows()):
+            if str(db_instance["identity"]) == str(video.id_hash):
+                continue
+            source_representation = db_instance["embedding"]
+            if source_representation is None:
+                continue
+            try:
+                distance = verification.find_distance(
+                    source_representation,
+                    target_representation,
+                    distance_metric,
+                )
+            except ValueError:
+                print(db_instance["identity"])
+                raise
+            matched_videos_tmp[db_instance.identity] = matched_videos_tmp.get(
+                db_instance.identity, []
+            ) + [distance]
+
+        return matched_videos_tmp
 
 
-def generate_previews_thumbnails():
-    result = generate_for_videos()
-    if result:
-        return result
-    result = generate_for_images()
-    if result:
-        return result
-    return {"finished": True}
+def recognize_faces(video: Video):
+    global face_database
+    face_database = load_embedding_database()
+    matcher = Matcher()
+    matcher.start_matching(video)
+
+
+def save_match(video, related_video_id, score):
+    related_video = Video.objects.filter(id_hash=related_video_id).first()
+    match = VideoPersonMatch(
+        source_video=video,
+        related_video=related_video,
+        score=score,
+    )
+    match.save()
+    match_reverse = VideoPersonMatch(
+        source_video=related_video,
+        related_video=video,
+        score=score,
+    )
+    match_reverse.save()

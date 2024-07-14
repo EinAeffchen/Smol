@@ -8,7 +8,7 @@
     </span>
 </h2>
 <div class="main-container">
-    {% if videos|length > 1 and type == "videos" %}
+    {% if videos|length >= 1 and type == "videos" %}
     {% for video in videos %}
     <div class="video-block">
         <a class="video-link" href="{% url 'viewer:video' video.id %}">
@@ -22,7 +22,7 @@
     </div>
     {% endfor %}
     {% endif %}
-    {% if images|length > 1 and type == "images" %}
+    {% if images|length >= 1 and type == "images" %}
     {% for image in images %}
     <img class="video-js video-preview" src="/viewer/images/{{image.path|urlencode}}">
     {% endfor %}

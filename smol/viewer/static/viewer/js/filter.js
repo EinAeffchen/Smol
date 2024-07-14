@@ -7,7 +7,7 @@ $(document).ready(function () {
 
   // reset all parameters on page load
 
-  resetFilters();
+  // resetFilters();
   // bring all the data without any filters
 
   getAPIData();

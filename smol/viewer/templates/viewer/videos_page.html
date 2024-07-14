@@ -1,0 +1,12 @@
+{% extends 'viewer/base.html' %} {% load custom_filters %} {% load humanize %}
+{% load static %} {% block content %}
+<div class="container-fluid">
+  <form method="GET" action="{% url 'viewer:video-overview' %}">
+    <fieldset>{% csrf_token %} {{form}}</fieldset>
+    <input type="submit" value="Submit" />
+  </form>
+  {% include "viewer/video_gallery.html" with title="Videos:" type="videos" %}
+</div>
+{% endblock %} {% block script %}
+<script src="{% static 'viewer/js/video_play.js' %}"></script>
+{% endblock %}

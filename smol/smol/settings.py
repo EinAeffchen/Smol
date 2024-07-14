@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
 from pathlib import Path
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -165,6 +166,10 @@ sqlite_file = MEDIA_DIR / ".smol/db"
 sqlite_file.mkdir(exist_ok=True, parents=True)
 sqlite_file = sqlite_file / "smol.db"
 
+RECOGNITION_DATA_PATH = MEDIA_DIR / ".smol/static/faces"
+RECOGNITION_DATA_PATH.mkdir(parents=True, exist_ok=True)
+
+
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -201,3 +206,14 @@ IMAGE_SUFFIXES = [
     ".gif",
     ".bmp",
 ]
+
+# face recognition settings
+
+RECOGNITION_FRAME_SKIP = os.getenv("RECOGNITION_RECOGNITION_FRAME_SKIP", 5)  # steps in frames used to check for faces
+RECOGNITION_FACE_COUNT = os.getenv("RECOGNITION_FACE_COUNT", 5)
+# For other models and detector backends check: https://github.com/serengil/deepface?tab=readme-ov-file
+RECOGNITION_MODEL = os.getenv("RECOGNITION_MODEL", "Facenet")
+RECOGNITION_IMAGE_NORMALIZATION = os.getenv("RECOGNITION_IMAGE_NORMALIZATION", "Facenet")
+RECOGNITION_DETECTION_BACKEND = os.getenv("RECOGNITION_DETECTION_BACKEND", "fastmtcnn")
+RECOGNITION_STORE_FACES = os.getenv("RECOGNITION_STORE_FACES", True)
+RECOGNITION_THRESHOLD = os.getenv("RECOGNITION_THRESHOLD")

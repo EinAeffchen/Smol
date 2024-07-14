@@ -15,7 +15,6 @@ function stopPreview(video) {
 
 window.onload = function () {
   if (document.URL.includes("/video/")) {
-    setup_labels();
     setup_label_tracking();
   }
   for (video of document.getElementsByClassName("video-preview")) {
@@ -34,8 +33,7 @@ function label_exists(label, selector) {
 }
 
 function setup_label_tracking() {
-  document.getElementById("label-choice").onchange = function (e) {
-    console.log(e);
+  document.getElementById("id_labels").onchange = function (e) {
     var chosen_labels = Array.from(e.target.options).filter(function (option) {
       return option.selected;
     });
@@ -66,6 +64,35 @@ function addfav(button) {
   button.setAttribute("id", "rem-fav");
   button.children[0].setAttribute("class", "fa fa-heart");
 }
+async function analyze() {
+  let loader = document.getElementById("load-icon");
+  loader.style.display = "none";
+  loader.innerHTML =
+    '<i class="fa fa-spinner fa-spin"></i> Running face recognition. Depening on your library size, this might take a while';
+  loader.style.display = "block";
+  console.log(loader);
+  const response = await fetch("/analyze/", {
+    method: "POST",
+    body: JSON.stringify({ video_id: document.URL.split("/")[4] }),
+  });
+  console.log(response);
+  loader.innerHTML = '<i class="fa fa-check" aria-hidden="true"></i> Done';
+  location.reload();
+}
+// TODO add new element instead of reusing loader
+async function deleteEncoding(button) {
+  let loader = document.getElementById("load-icon");
+  loader.style.display = "none";
+  loader.innerHTML =
+    '<i class="fa fa-spinner fa-spin"></i> Deleting recognition data...';
+  loader.style.display = "block";
+  const response = await fetch("/delete-encoding/", {
+    method: "POST",
+    body: JSON.stringify({ video_id: document.URL.split("/")[4] }),
+  });
+  loader.innerHTML =
+    '<i class="fa fa-check" aria-hidden="true"></i> Deleted Recognition data!';
+}
 function remfav(button) {
   const Http = new XMLHttpRequest();
   const url = "/remfav/" + document.URL.split("/")[4] + "/";
@@ -85,17 +112,12 @@ function remvid(button) {
   xhr.send(JSON.stringify(post_data));
   window.location.href = "/";
 }
-
-function setup_labels() {
-  var selector = document.getElementById("label-choice");
-  var labels = JSON.parse(JSON.parse(document.querySelector("#labels").text));
-  console.log(selector);
-  for (label of labels) {
-    var opt = document.createElement("option");
-    opt.value = label.fields.label;
-    opt.innerHTML = label.fields.label;
-    if (!label_exists(label.fields.label, selector)) {
-      selector.appendChild(opt);
-    }
-  }
+async function remmeta(button) {
+  const response = await fetch("/remmeta/", {
+    method: "POST",
+    body: JSON.stringify({ video_id: document.URL.split("/")[4] }),
+  });
+  const output = await response;
+  console.log(output);
+  window.location.href = "/";
 }

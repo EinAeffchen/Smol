@@ -25,12 +25,7 @@
                 </div>
             </div>
             <div>
-                <select list="add-label" id="label-choice" name="label-choice" multiple />
-                {% for v_label in video.labels.all %}
-                <option value={{v_label.label}} selected>{{v_label.label}}</option>
-                {% endfor %}
-                </select>
-                {{labels|json_script:"labels"}}
+                 {{form}}
             </div>
             <div role="group">
                 <a role="button" class="outline" id='rem-vid' onclick=remvid(this) href="#">
@@ -44,11 +39,19 @@
                 {% else %}
                 <a role="button" id='add-fav' onclick=addfav(this)><i class="fa fa-heart-o"></i></a>
                 {% endif %}
-                <p id="load-icon" style="display:none"><i class="fa fa-spinner fa-spin"></i> Running face
-                    recognition. Depening on your library size, this might take a while</p>
+                <a role="button" id='analyze' onclick=analyze(this)><i class="fa fa-address-card-o "></i> Scan Video</a>
+                <a role="button" id='delete-encoding' onclick=deleteEncoding(this)><i class="fa fa-trash-o" aria-hidden="true"></i> Delete recognition data</a>
             </div>
+            <p id="load-icon" style="display:none"><i class="fa fa-spinner fa-spin"></i> Running face
+                recognition. Depening on your library size, this might take a while</p>
         </footer>
     </article>
+
+    {% if video.related_videos.all|length >= 1 %}
+    <div>
+        {% include "viewer/video_gallery.html" with title="Recognition related videos:" videos=video.related_videos.all|order_filter:"to_video__score" type="videos" %}
+    </div>
+    {% endif %}
     {% if recommendations|length > 1 %}
     <div>
         {% include "viewer/video_gallery.html" with title="Recommendations:" videos=recommendations type="videos" %}

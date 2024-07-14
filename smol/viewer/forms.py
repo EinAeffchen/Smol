@@ -1,21 +1,35 @@
 from django import forms
-from .models import Person, Video
-from django.views.generic.edit import UpdateView
+from .models import Person, Video, Label
 
 
 class FilterForm(forms.Form):
     FILTERS = [
-        ("rating", "rating"),
-        ("favorite", "favorites"),
-        ("dim_width", "resolution"),
-        ("inserted_at", "newest"),
-        ("duration", "longest"),
+        ("", "Select Order"),
+        ("-favorite", "favorites"),
+        ("dim_width", "resolution asc"),
+        ("-dim_width", "resolution desc"),
+        ("-inserted_at", "newest"),
+        ("inserted_at", "oldest"),
+        ("duration", "shortest"),
+        ("-duration", "longest"),
     ]
-    filter_videos = forms.ChoiceField(choices=FILTERS)
+    labels = Label.objects.all()
+    order_videos = forms.ChoiceField(choices=FILTERS, required=False, initial=0)
+    label_field = forms.ModelMultipleChoiceField(
+        queryset=labels, required=False
+    )
+
+    # def __init__(self, *args, **kwargs):
+    #     super(FilterForm, self).__init__(*args, **kwargs)
+    #     print("FORM: %s", dir(self))
+    #     self.declared_fields['labels'].widget.attrs['class'] = 'form-control'
 
 
 class LabelForm(forms.Form):
-    labels = forms.CharField(label="Label")
+    labels = forms.ModelMultipleChoiceField(queryset=Label.objects.all())
+
+class LabelAddForm(forms.Form):
+    labels = forms.CharField()
 
 
 class ImageForm(forms.ModelForm):
