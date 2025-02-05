@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+from typing import Generator
 
 from django.conf import settings
 from django.db import IntegrityError
@@ -15,7 +17,6 @@ from django.views.decorators.http import require_POST
 from django.views.generic.edit import FormMixin, FormView
 
 from viewer.video_processor import (
-    add_labels_by_path,
     generate_thumbnail,
     read_video_info,
     recognize_faces,
@@ -70,19 +71,28 @@ def delete_label(request, pk):
     return redirect(reverse("viewer:labels"))
 
 
-def get_new_files(request) -> JsonResponse:
-    file_paths = list()
-    for suffix in settings.VIDEO_SUFFIXES:
-        for video in settings.MEDIA_DIR.rglob(f"*{suffix}"):
-            if ".smol" in video.parts:
-                continue
+def _get_videos(dir: Path) -> Generator[Path, None, None]:
+    for video in dir.iterdir():
+        if video.is_dir() and ".smol" not in video.parts:
+            yield from _get_videos(video)
+        elif (
+            video.is_file()
+            and video.suffix in settings.VIDEO_SUFFIXES
+            and ".smol" not in video.parts
+        ):
             file_path = video.relative_to(settings.MEDIA_ROOT)
             if not Video.objects.filter(path=file_path):
-                file_paths.append(str(file_path))
+                print(f"Found {file_path}")
+                yield file_path
+
+
+def get_new_files(request) -> JsonResponse:
+    file_paths = list()
+    for video in _get_videos(settings.MEDIA_DIR):
+        file_paths.append(str(video))
     response = JsonResponse(
         data={"paths": file_paths, "count": len(file_paths)}
     )
-    print(response)
     return response
 
 
@@ -293,7 +303,6 @@ def scan_video(request):
         body = json.loads(request.body)
         video_id = body["video_id"]
         video = Video.objects.filter(id=video_id).first()
-        add_labels_by_path(video)
         percent = recognize_faces(video)
     return HttpResponse(percent)
 

@@ -11,7 +11,8 @@ https://docs.djangoproject.com/en/2.2/ref/settings/
 """
 
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3' 
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 from pathlib import Path
 
 # Build paths inside the project like this: os.path.join(BASE_DIR, ...)
@@ -209,11 +210,17 @@ IMAGE_SUFFIXES = [
 
 # face recognition settings
 
-RECOGNITION_FRAME_SKIP = os.getenv("RECOGNITION_RECOGNITION_FRAME_SKIP", 5)  # steps in frames used to check for faces
-RECOGNITION_FACE_COUNT = os.getenv("RECOGNITION_FACE_COUNT", 5)
+RECOGNITION_FRAME_SKIP = os.getenv(
+    "RECOGNITION_RECOGNITION_FRAME_SKIP", 10
+)  # steps in frames used to check for faces
+RECOGNITION_FACE_COUNT = os.getenv("RECOGNITION_FACE_COUNT", 3)
 # For other models and detector backends check: https://github.com/serengil/deepface?tab=readme-ov-file
-RECOGNITION_MODEL = os.getenv("RECOGNITION_MODEL", "Facenet")
-RECOGNITION_IMAGE_NORMALIZATION = os.getenv("RECOGNITION_IMAGE_NORMALIZATION", "Facenet")
-RECOGNITION_DETECTION_BACKEND = os.getenv("RECOGNITION_DETECTION_BACKEND", "fastmtcnn")
+RECOGNITION_MODEL = os.getenv("RECOGNITION_MODEL", "Facenet512")
+RECOGNITION_IMAGE_NORMALIZATION = os.getenv(
+    "RECOGNITION_IMAGE_NORMALIZATION", "Facenet2018"
+)
+RECOGNITION_DETECTION_BACKEND = os.getenv(
+    "RECOGNITION_DETECTION_BACKEND", "ssd"
+)
 RECOGNITION_STORE_FACES = os.getenv("RECOGNITION_STORE_FACES", True)
-RECOGNITION_THRESHOLD = os.getenv("RECOGNITION_THRESHOLD")
+RECOGNITION_THRESHOLD = os.getenv("RECOGNITION_THRESHOLD",0.25)

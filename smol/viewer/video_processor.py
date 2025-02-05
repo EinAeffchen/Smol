@@ -1,19 +1,19 @@
+import json
 import pickle
 import subprocess
 from datetime import datetime
+from hashlib import sha1
 from pathlib import Path
 from typing import Generator, Optional
-import json
 
 import ffmpeg
-from hashlib import sha1
 import pandas as pd
-from deepface.modules import representation, verification
+from deepface.modules import verification
 from django.conf import settings
 from PIL import Image as PILImage
 from tqdm import tqdm
 
-from .models import Image, Label, Video, VideoPersonMatch
+from .models import Label, Video, VideoPersonMatch
 
 
 def get_duration(stream: dict):
@@ -193,7 +193,6 @@ def add_labels_by_path(video: "Video"):
             except Label.DoesNotExist:
                 label = Label.objects.create(label=label_candidate)
                 label.save()
-            print(f"Adding label {label_candidate}")
             video.labels.add(label)
 
 
@@ -228,8 +227,7 @@ class Matcher:
             print("Video already got checked for related videos!")
             return
         encodings = video.face_encodings
-        if len(encodings) == 0:
-            print("No faces detected!")
+        if not encodings or len(encodings) == 0:
             return
         if face_database.empty:
             print("No other detection data exists, nothing to match against!")
@@ -281,7 +279,6 @@ class Matcher:
                 settings.RECOGNITION_MODEL, distance_metric
             )
         )
-        print("TARGET: ", target_threshold)
         for encoding in tqdm(video.face_encodings):
             target_representation = encoding["embedding"]
             matched_videos_tmp = self.get_distances(
@@ -300,16 +297,17 @@ class Matcher:
             for video_id, scores in sorted(
                 matched_videos.items(), key=lambda x: x[1]
             ):
-                if sum(scores)/len(scores) <= 0.31:
+                if sum(scores) / len(scores) <= target_threshold:
                     match_count += 1
                     distance_score = sum(scores) / len(scores)
                     save_match(video, video_id, distance_score)
-            # video.ran_recognition = True
-            # video.save()
+            video.ran_recognition = True
+            video.save()
         print(f"Saved {match_count} matched videos.")
 
     def get_distances(self, video, distance_metric, target_representation):
         matched_videos_tmp: dict[str, list] = dict()
+        error_counter = 0
         for _, db_instance in tqdm(face_database.iterrows()):
             if str(db_instance["identity"]) == str(video.id_hash):
                 continue
@@ -323,18 +321,15 @@ class Matcher:
                     distance_metric,
                 )
             except ValueError:
-                print(db_instance["identity"])
-                raise
+                error_counter+=1
             matched_videos_tmp[db_instance.identity] = matched_videos_tmp.get(
                 db_instance.identity, []
             ) + [distance]
-
         return matched_videos_tmp
 
 
 def recognize_faces(video: Video):
     global face_database
-    face_database = load_embedding_database()
     matcher = Matcher()
     matcher.start_matching(video)
 

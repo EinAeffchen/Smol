@@ -7,7 +7,6 @@ from deepface.modules import detection, representation
 from django.conf import settings
 from django.db import models
 from PIL import Image as PILImage
-from tqdm import tqdm
 
 
 class Label(models.Model):
@@ -104,6 +103,7 @@ class Video(models.Model):
             self.face_encoding_file.unlink()
         [face.unlink() for face in self.examples_faces]
         self.ran_recognition = False
+        self.extracted_faces = False
         self.save()
 
     def create_encodings(self) -> list[dict]:
@@ -116,69 +116,67 @@ class Video(models.Model):
         face_count = 0
         full_face_encodings = []
         print("Starting recognition...")
-        with tqdm(total=int(total_frame_count)) as pbar:
-            while movie.isOpened():
-                ret, frame = movie.read()
+        while movie.isOpened():
+            ret, frame = movie.read()
 
-                if (
-                    not ret
-                    or face_count >= settings.RECOGNITION_FACE_COUNT
-                    or frame_number >= total_frame_count
-                ):
-                    movie.release()
-                    break
-                if frame.shape[1] < 500:
-                    frame = cv2.resize(frame, None, fx=2, fy=2)
-                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                try:
-                    img_objs = detection.extract_faces(
-                        rgb_frame,
-                        expand_percentage=20,
-                        detector_backend=settings.RECOGNITION_DETECTION_BACKEND,
+            if (
+                not ret
+                or face_count >= settings.RECOGNITION_FACE_COUNT
+                or frame_number >= total_frame_count
+            ):
+                movie.release()
+                break
+            if frame.shape[1] <= 640:
+                frame = cv2.resize(frame, None, fx=2, fy=2)
+            rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            try:
+                img_objs = detection.extract_faces(
+                    rgb_frame,
+                    expand_percentage=100,
+                    detector_backend=settings.RECOGNITION_DETECTION_BACKEND,
+                )
+            except ValueError:
+                img_objs = []
+
+            if img_objs:
+                for img_obj in img_objs:
+                    confidence = img_obj["confidence"]
+                    print(confidence)
+                    if confidence < 0.8:
+                        frame_jump = settings.RECOGNITION_FRAME_SKIP
+                        continue
+                    img_content = img_obj["face"]
+                    img_region = img_obj["facial_area"]
+                    embedding_obj = representation.represent(
+                        img_path=img_content,
+                        model_name=settings.RECOGNITION_MODEL,
+                        detector_backend="skip",
+                        normalization=settings.RECOGNITION_IMAGE_NORMALIZATION,
                     )
-                except ValueError:
-                    img_objs = []
-
-                if img_objs:
-                    for img_obj in img_objs:
-                        confidence = img_obj["confidence"]
-                        print(confidence)
-                        if confidence < 0.8:
-                            frame_jump = settings.RECOGNITION_FRAME_SKIP
-                            continue
-                        img_content = img_obj["face"]
-                        img_region = img_obj["facial_area"]
-                        embedding_obj = representation.represent(
-                            img_path=img_content,
-                            model_name=settings.RECOGNITION_MODEL,
-                            detector_backend="skip",
-                            normalization=settings.RECOGNITION_IMAGE_NORMALIZATION,
-                        )
-                        img_representation = embedding_obj[0]["embedding"]
-                        # get more different kinds of faces
-                        full_face_encodings.append(
-                            {
-                                "identity": f"{self.id_hash}",
-                                "hash": self.id_hash,
-                                "embedding": img_representation,
-                                "target_x": img_region["x"],
-                                "target_y": img_region["y"],
-                                "target_w": img_region["w"],
-                                "target_h": img_region["h"],
-                            }
-                        )
-                        self.save_face(
-                            face_count,
-                            rgb_frame,
-                            list(img_region.values())[:4],
-                        )
-                        frame_jump = int(total_frame_count / 10)
-                        face_count += 1
-                else:
-                    frame_jump = settings.RECOGNITION_FRAME_SKIP
-                frame_number += frame_jump
-                movie.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
-                pbar.update(frame_jump)
+                    img_representation = embedding_obj[0]["embedding"]
+                    # get more different kinds of faces
+                    full_face_encodings.append(
+                        {
+                            "identity": f"{self.id_hash}",
+                            "hash": self.id_hash,
+                            "embedding": img_representation,
+                            "target_x": img_region["x"],
+                            "target_y": img_region["y"],
+                            "target_w": img_region["w"],
+                            "target_h": img_region["h"],
+                        }
+                    )
+                    self.save_face(
+                        face_count,
+                        rgb_frame,
+                        list(img_region.values())[:4],
+                    )
+                    frame_jump = int(total_frame_count / 10)
+                    face_count += 1
+            else:
+                frame_jump = settings.RECOGNITION_FRAME_SKIP
+            frame_number += frame_jump
+            movie.set(cv2.CAP_PROP_POS_FRAMES, frame_number)
 
         if face_count > 0:
             with open(self.face_encoding_file, "wb") as f_out:
