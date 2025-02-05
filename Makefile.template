@@ -1,0 +1,28 @@
+kill:
+	docker-compose down
+	docker-compose rm -f
+
+up:
+	cd smol && python3 manage.py collectstatic --noinput
+	cd smol && python3 manage.py makemigrations
+	cd smol && python3 manage.py migrate
+	cd smol && python3 manage.py runserver 0.0.0.0:8080
+
+analyze:
+	cd smol && python3 manage.py analyze_all
+
+logs:
+	docker logs django
+
+db_repair:
+	cd smol/local_media/.smol/db && echo ".recover" |sqlite3 smol.db|sqlite3 repaired_smol.db 
+	&& mv smol.db corrupt_smol.db
+	&& mv repaired_smol.db smol.db
+
+down:
+	docker-compose -p smol down
+
+killall:
+	docker kill django nginx postgresql
+	docker rm django nginx postgresql
+	docker volume rm smol_db-data smol_media-volume smol_ml-volume smol_static-movie-volume smol_static-volume

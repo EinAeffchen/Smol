@@ -4,6 +4,7 @@ ffmpeg-python==0.2.0
 gunicorn==22.0.0
 Pillow==10.3.0
 ffprobe-python==1.0.3
-opencv-python==4.10.0.82
+opencv-python==4.11.0.86
 deepface==0.0.92
-facenet-pytorch
+facenet-pytorch==2.6.0
+tf-keras==2.18.0
