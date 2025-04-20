@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, create_engine, Session
 from sqlalchemy.pool import NullPool
 from app.config import DATABASE_URL
-
+from app.utils import logger
 
 engine = create_engine(
     DATABASE_URL,
@@ -14,7 +14,7 @@ engine = create_engine(
 def init_db():
     from app.models import Media, Person, Face, Tag, MediaTagLink
 
-    print("Using DATABASE_URL:", engine.url)
+    logger.debug("Using DATABASE_URL:", engine.url)
     SQLModel.metadata.create_all(engine)
 
 

@@ -1,9 +1,0 @@
-{% extends 'viewer/base.html' %} {% load custom_filters %} {% load humanize %}
-{% load static %} {% block content %}
-<div class="container-fluid">
-  {% include "viewer/video_gallery.html" with title="Videos:" type="videos" %}
-  {% include "viewer/video_gallery.html" with title="Images:" type="images" %}
-</div>
-{% endblock %} {% block script %}
-<script src="{% static 'viewer/js/video_play.js' %}"></script>
-{% endblock %}

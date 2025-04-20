@@ -1,13 +1,20 @@
-from fastapi import FastAPI, HTTPException, Query
-from sqlmodel import select
-from app.database import init_db, get_session
-from app.models import Media, Person, Face, Tag, MediaTagLink
-from app.utils import scan_folder
-from app.config import STATIC_DIR, MEDIA_DIR, THUMB_DIR
+import logging
 from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
+
 from app.api import media, person, tasks
+from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
+from app.database import init_db
+from app.utils import scan_folder
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+logging.getLogger("uvicorn.error").setLevel(logging.INFO)
+logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 
 @asynccontextmanager
