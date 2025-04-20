@@ -16,7 +16,7 @@ export default function TasksPanel() {
     // Fetch all tasks
     async function fetchTasks() {
         try {
-            const res = await fetch(`${API}/tasks/`)
+            const res = await fetch(`${API}/tasks/active`)
             const data: Task[] = await res.json()
             setTasks(data)
         } catch (e) {

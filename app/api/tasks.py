@@ -57,8 +57,12 @@ def _run_face_extraction(task_id: str, media_ids: List[int]):
     sess.commit()
 
     for mid in media_ids:
+        task = sess.get(ProcessingTask, task_id)
+        if task.status == "cancelled":
+            break
+
         media = sess.get(Media, mid)
-        faces = utils.detect_faces(str(Path(MEDIA_DIR) / media.path))
+        faces = utils.detect_faces(str(MEDIA_DIR.absolute() / media.path))
         # faces is a list of dicts e.g. [{"bbox":(...), "thumbnail":"/smol/thumbnails/..."}, ...]
         for f in faces:
             face = Face(media_id=mid, embedding=None, **f)
@@ -66,11 +70,11 @@ def _run_face_extraction(task_id: str, media_ids: List[int]):
         media.faces_extracted = True
         sess.add(media)
 
-        task.processed += 1
+        task.processed = 1
         sess.add(task)
         sess.commit()
 
-    task.status = "completed"
+    task.status = "completed" if task.status != "cancelled" else "cancelled"
     task.finished_at = datetime.now(timezone.utc)
     sess.add(task)
     sess.commit()
@@ -110,12 +114,16 @@ def _run_embedding_creation(task_id: str, face_ids: List[int]):
     sess.commit()
 
     for fid in face_ids:
+        task = sess.get(ProcessingTask, task_id)
+        if task.status == "cancelled":
+            break
+
         face = sess.get(Face, fid)
         emb = utils.create_embedding_for_face(face)  # you implement this
         face.embedding = emb
         sess.add(face)
 
-        task.processed += 1
+        task.processed = 1
         sess.add(task)
         sess.commit()
 
@@ -136,6 +144,20 @@ def list_tasks(session: Session = Depends(get_session)):
 
 
 @router.get(
+    "/active",
+    response_model=List[ProcessingTask],
+    summary="List all processing tasks",
+)
+def list_active_tasks(session: Session = Depends(get_session)):
+    return session.exec(
+        select(ProcessingTask).where(
+            ProcessingTask.status != "cancelled",
+            ProcessingTask.status != "finished",
+        )
+    ).all()
+
+
+@router.get(
     "/{task_id}",
     response_model=ProcessingTask,
     summary="Get a single task status",
@@ -144,4 +166,24 @@ def get_task(task_id: str, session: Session = Depends(get_session)):
     task = session.get(ProcessingTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    return task
+
+
+@router.post("/{task_id}/cancel", summary="Cancel a running task")
+def cancel_task(
+    task_id: str,
+    session: Session = Depends(get_session),
+):
+    task = session.get(ProcessingTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status not in ("pending", "running"):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot cancel task in status {task.status}",
+        )
+    task.status = "cancelled"
+    task.finished_at = datetime.now(timezone.utc)
+    session.add(task)
+    session.commit()
     return task
