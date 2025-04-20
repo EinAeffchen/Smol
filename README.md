@@ -12,6 +12,7 @@ This is a very rudimentary setup only meant for local hosting.
 ## Get started
 
 ### Setup
+* Setup Nvidia drivers for docker: https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
 * Rename Makefile.template to Makefile
 * Run `pip install -r requirements.txt`
 * Either link your local files to smol/local_media or change the `MEDIA_ROOT` in [settings.py](smol/smol/settings.py).

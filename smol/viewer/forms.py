@@ -64,10 +64,8 @@ class PersonForm(forms.ModelForm):
         fields = (
             "forename",
             "surname",
-            "birth_year",
-            "nationality",
+            "age",
             "labels",
             "videos",
-            "images",
             "avatar",
         )

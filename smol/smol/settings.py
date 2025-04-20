@@ -49,12 +49,10 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.humanize",
     # 'corsheaders',
-    "debug_toolbar",
 ]
 
 MIDDLEWARE = [
     # 'django.middleware.cache.UpdateCacheMiddleware',
-    "debug_toolbar.middleware.DebugToolbarMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -151,40 +149,33 @@ INTERNAL_IPS = [
 
 SITE_ID = 1
 
-PREVIEW_IMAGES = 15
-
+MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/viewer/images/"
-MEDIA_ROOT = BASE_DIR / "local_media/"
-MEDIA_DIR = MEDIA_ROOT
 
-STATIC_URL = "static/"
-STATIC_ROOT = MEDIA_DIR / ".smol/static"
-STATICFILES_DIRS = (MEDIA_DIR / ".smol/static/viewer/images",)
+SMOL_DIR = MEDIA_ROOT / ".smol"
+
+STATIC_URL = "/static/"
+STATIC_ROOT = SMOL_DIR / "static"
+STATICFILES_DIRS = [
+    SMOL_DIR / "static" / "viewer" / "images",
+]
+
 # Database
 # https://docs.djangoproject.com/en/2.2/ref/settings/#databases
 
-sqlite_file = MEDIA_DIR / ".smol/db"
-sqlite_file.mkdir(exist_ok=True, parents=True)
-sqlite_file = sqlite_file / "smol.db"
 
-RECOGNITION_DATA_PATH = MEDIA_DIR / ".smol/static/faces"
+RECOGNITION_DATA_PATH = STATIC_ROOT / "faces"
 RECOGNITION_DATA_PATH.mkdir(parents=True, exist_ok=True)
 
 
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
-        "NAME": str(sqlite_file),
+        "NAME": SMOL_DIR / "db.sqlite3",
     }
 }
 
-THUMBNAIL_DIR = STATIC_ROOT / "viewer/images/thumbnails"
-PREVIEW_DIR = STATIC_ROOT / "viewer/images/previews"
-
-if not THUMBNAIL_DIR.is_dir():
-    THUMBNAIL_DIR.mkdir(exist_ok=True, parents=True)
-if not PREVIEW_DIR.is_dir():
-    PREVIEW_DIR.mkdir(exist_ok=True, parents=True)
+SMOL_DIR.mkdir(exist_ok=True, parents=True)
 
 VIDEO_SUFFIXES = [
     ".mp4",
@@ -208,6 +199,9 @@ IMAGE_SUFFIXES = [
     ".bmp",
 ]
 
+CELERY_BROKER_URL = "redis://redis:6379/0"
+CELERY_RESULT_BACKEND = "redis://redis:6379/1"
+
 # face recognition settings
 
 RECOGNITION_FRAME_SKIP = os.getenv(
@@ -223,4 +217,5 @@ RECOGNITION_DETECTION_BACKEND = os.getenv(
     "RECOGNITION_DETECTION_BACKEND", "ssd"
 )
 RECOGNITION_STORE_FACES = os.getenv("RECOGNITION_STORE_FACES", True)
-RECOGNITION_THRESHOLD = os.getenv("RECOGNITION_THRESHOLD",0.25)
+RECOGNITION_THRESHOLD = os.getenv("RECOGNITION_THRESHOLD", 0.25)
+MAX_FACES_PER_VIDEO = os.getenv("MAX_FACES_PER_VIDEO")

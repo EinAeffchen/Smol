@@ -88,7 +88,7 @@ def _get_videos(dir: Path) -> Generator[Path, None, None]:
 
 def get_new_files(request) -> JsonResponse:
     file_paths = list()
-    for video in _get_videos(settings.MEDIA_DIR):
+    for video in _get_videos(settings.MEDIA_ROOT):
         file_paths.append(str(video))
     response = JsonResponse(
         data={"paths": file_paths, "count": len(file_paths)}
@@ -104,7 +104,7 @@ def load_file(request, *args, **kwargs) -> JsonResponse:
         path = body["path"]
         if Video.objects.filter(path=path):
             return HttpResponse("Document already imported!", status=409)
-        video_path = settings.MEDIA_DIR / path
+        video_path = settings.MEDIA_ROOT / path
         video_data = read_video_info(video_path)
         relative_video_path = video_path.relative_to(settings.MEDIA_ROOT)
         video_data["size"] = video_path.stat().st_size

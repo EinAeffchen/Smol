@@ -62,6 +62,8 @@ class Face(SQLModel, table=True):
     )
     media: Media = Relationship(back_populates="faces")
     person: Optional[Person] = Relationship(back_populates="faces")
+    thumbnail_path: Optional[str] = Field(default=None)
+    bbox: Optional[List[int]] = Field(sa_column=Column(JSON), default=None)
 
 
 class ProcessingTask(SQLModel, table=True):

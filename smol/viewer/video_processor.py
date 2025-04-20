@@ -1,17 +1,12 @@
 import json
-import pickle
 import subprocess
 from datetime import datetime
 from hashlib import sha1
 from pathlib import Path
-from typing import Generator, Optional
 
 import ffmpeg
-import pandas as pd
-from deepface.modules import verification
 from django.conf import settings
 from PIL import Image as PILImage
-from tqdm import tqdm
 
 from .models import Label, Video, VideoPersonMatch
 
@@ -29,7 +24,7 @@ def read_image_info(path: Path, file_path: Path):
     img = PILImage.open(str(path))
 
     image_data = dict()
-    image_data["dim_height"], image_data["dim_width"] = img.size
+    image_data["height"], image_data["dim_width"] = img.size
     image_data["size"] = path.stat().st_size
     image_data["path"] = file_path
     return image_data
@@ -56,8 +51,8 @@ def read_video_info(path: Path) -> dict:
     )
     video_data = dict()
     video_data["id_hash"] = sha1(probe_str.encode("utf-8")).hexdigest()
-    video_data["dim_height"] = video_stream["height"]
-    video_data["dim_width"] = video_stream["width"]
+    video_data["height"] = video_stream["height"]
+    video_data["width"] = video_stream["width"]
     video_data["videocodec"] = video_stream["codec_name"]
     if audio_stream:
         video_data["audiocodec"] = audio_stream["codec_name"]
@@ -95,55 +90,6 @@ def calculate_padding(width: int, height: int) -> str:
     else:
         pad = f"scale={int(width)}:{int(tgt_height)-10}:force_original_aspect_ratio=decrease,pad={int(tgt_width)}:{int(tgt_height)+height_padding}:{int(padding/2)}:{int(height_padding/2)}:black"
     return pad
-
-
-def update_preview_name(filename: str, preview_dir: Path):
-    counter = 1
-    out_filename = f"{filename}_{counter}.jpg"
-    out_path = preview_dir / out_filename
-    while out_path.is_file():
-        counter += 1
-        out_filename = f"{filename}_{counter}.jpg"
-        out_path = preview_dir / out_filename
-    return out_path, out_filename
-
-
-def generate_preview(video: Video, frames: int, video_path: Path) -> str:
-    if frames:
-        nth_frame = int(int(frames) / settings.PREVIEW_IMAGES)
-    else:
-        nth_frame = settings.PREVIEW_IMAGES
-    out_filename = f"{video.filename}-{video.duration}.jpg"
-    out_path = settings.PREVIEW_DIR / out_filename
-    if out_path.is_file():
-        return out_filename
-    pad = calculate_padding(video.dim_width, video.dim_height)
-    if nth_frame > 100:
-        nth_frame = 100
-    process = subprocess.Popen(
-        [
-            "ffmpeg",
-            "-loglevel",
-            "panic",
-            "-y",
-            "-i",
-            str(video_path),
-            "-frames",
-            "1",
-            "-q:v",
-            "5",
-            "-c:v",
-            "mjpeg",
-            "-vf",
-            f"select=not(mod(n\,{nth_frame})),{pad},tile={settings.PREVIEW_IMAGES}x1",
-            str(out_path),
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-    process.wait()
-    # process.terminate()
-    return out_filename
 
 
 def generate_thumbnail(video: "Video", video_path: Path) -> str:
@@ -184,6 +130,17 @@ def generate_thumbnail(video: "Video", video_path: Path) -> str:
     return out_filename
 
 
+def update_preview_name(filename: str, preview_dir: Path):
+    counter = 1
+    out_filename = f"{filename}_{counter}.jpg"
+    out_path = preview_dir / out_filename
+    while out_path.is_file():
+        counter += 1
+        out_filename = f"{filename}_{counter}.jpg"
+        out_path = preview_dir / out_filename
+    return out_path, out_filename
+
+
 def add_labels_by_path(video: "Video"):
     for part in Path(video.path).parts[:-1]:
         label_candidates = part.lower()
@@ -196,22 +153,22 @@ def add_labels_by_path(video: "Video"):
             video.labels.add(label)
 
 
-def load_embedding_database(video_id: Optional[int] = None):
-    representations: Generator[Path, None, None] = (
-        settings.RECOGNITION_DATA_PATH.glob("*.pkl")
-    )
-    datasets = []
-    print("Loading recognition db!")
-    for rep in representations:
-        if video_id and rep.stem == str(video_id):
-            continue
-        with open(rep, "rb") as f_in:
-            faces = pickle.load(f_in)
-            datasets += faces
-    return pd.DataFrame(datasets)
+# def load_embedding_database(video_id: Optional[int] = None):
+#     representations: Generator[Path, None, None] = (
+#         settings.RECOGNITION_DATA_PATH.glob("*.pkl")
+#     )
+#     datasets = []
+#     print("Loading recognition db!")
+#     for rep in representations:
+#         if video_id and rep.stem == str(video_id):
+#             continue
+#         with open(rep, "rb") as f_in:
+#             faces = pickle.load(f_in)
+#             datasets += faces
+#     return pd.DataFrame(datasets)
 
 
-face_database = load_embedding_database()
+# face_database = load_embedding_database()
 
 
 class Matcher:
@@ -279,7 +236,7 @@ class Matcher:
                 settings.RECOGNITION_MODEL, distance_metric
             )
         )
-        for encoding in tqdm(video.face_encodings):
+        for encoding in video.face_encodings:
             target_representation = encoding["embedding"]
             matched_videos_tmp = self.get_distances(
                 video, distance_metric, target_representation
@@ -308,7 +265,7 @@ class Matcher:
     def get_distances(self, video, distance_metric, target_representation):
         matched_videos_tmp: dict[str, list] = dict()
         error_counter = 0
-        for _, db_instance in tqdm(face_database.iterrows()):
+        for _, db_instance in face_database.iterrows():
             if str(db_instance["identity"]) == str(video.id_hash):
                 continue
             source_representation = db_instance["embedding"]
@@ -321,7 +278,7 @@ class Matcher:
                     distance_metric,
                 )
             except ValueError:
-                error_counter+=1
+                error_counter += 1
             matched_videos_tmp[db_instance.identity] = matched_videos_tmp.get(
                 db_instance.identity, []
             ) + [distance]
@@ -329,7 +286,6 @@ class Matcher:
 
 
 def recognize_faces(video: Video):
-    global face_database
     matcher = Matcher()
     matcher.start_matching(video)
 

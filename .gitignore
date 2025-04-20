@@ -133,6 +133,7 @@ docker-compose.yml
 smol.db
 .venv
 **/viewer/images
-**smol/local_media
+media
 
+frontend/node_modules
 Makefile
