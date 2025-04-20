@@ -1,6 +1,7 @@
-from sqlmodel import SQLModel, Field, Relationship, Column
-from sqlalchemy.types import JSON
 from typing import Optional, List
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy import Column
+from sqlalchemy.types import JSON
 from datetime import datetime
 import uuid
 
@@ -22,6 +23,23 @@ class Tag(SQLModel, table=True):
     )
 
 
+class Face(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    media_id: int = Field(foreign_key="media.id")
+    person_id: Optional[int] = Field(foreign_key="person.id")
+    thumbnail_path: str
+    bbox: List[int] = Field(sa_column=Column(JSON))
+    embedding: Optional[List[float]] = Field(
+        sa_column=Column(JSON, nullable=True)
+    )
+
+    media: "Media" = Relationship(back_populates="faces")
+    person: Optional["Person"] = Relationship(
+        back_populates="faces",
+        sa_relationship_kwargs={"foreign_keys": "[Face.person_id]"},
+    )
+
+
 class Media(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     path: str
@@ -33,7 +51,6 @@ class Media(SQLModel, table=True):
     views: int = 0
     inserted_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # ← New flags:
     faces_extracted: bool = Field(default=False, index=True)
     embeddings_created: bool = Field(default=False, index=True)
 
@@ -49,21 +66,21 @@ class Person(SQLModel, table=True):
     age: Optional[int]
     gender: Optional[str]
     ethnicity: Optional[str]
-    faces: List["Face"] = Relationship(back_populates="person")
-
-
-class Face(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-    media_id: int = Field(foreign_key="media.id")
-    person_id: Optional[int] = Field(default=None, foreign_key="person.id")
-    # ← Make embedding nullable until created
-    embedding: Optional[List[float]] = Field(
-        sa_column=Column(JSON, nullable=True)
+    faces: List["Face"] = Relationship(
+        back_populates="person",
+        sa_relationship_kwargs={
+            # same idea: this relationship uses Face.person_id to point back
+            "foreign_keys": "[Face.person_id]"
+        },
     )
-    media: Media = Relationship(back_populates="faces")
-    person: Optional[Person] = Relationship(back_populates="faces")
-    thumbnail_path: Optional[str] = Field(default=None)
-    bbox: Optional[List[int]] = Field(sa_column=Column(JSON), default=None)
+    profile_face_id: Optional[int] = Field(foreign_key="face.id", default=None)
+    profile_face: Optional[Face] = Relationship(
+        sa_relationship_kwargs={
+            "primaryjoin": "Person.profile_face_id==Face.id",
+            "foreign_keys": "[Person.profile_face_id]",
+            "uselist": False,
+        }
+    )
 
 
 class ProcessingTask(SQLModel, table=True):

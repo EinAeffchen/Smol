@@ -7,7 +7,7 @@ import cv2
 import ffmpeg
 from deepface import DeepFace
 from PIL import Image
-from sqlmodel import select
+from sqlmodel import select, delete
 import numpy as np
 from app.config import (
     IMAGE_SUFFIXES,
@@ -25,29 +25,6 @@ from app.models import Face, Media
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-def _load_image_or_video_frame(path: Path) -> np.ndarray:
-    """
-    Return an RGB numpy array:
-     - if image: load with cv2
-     - if video: capture first frame
-    """
-    ext = path.suffix.lower()
-    if ext in VIDEO_SUFFIXES:
-        cap = cv2.VideoCapture(str(path))
-        ret, frame = cap.read()
-        cap.release()
-        if not ret:
-            raise ValueError(f"Could not read frame from video {path}")
-        # frame is BGR; convert to RGB
-        img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    else:
-        # image file
-        img = cv2.cvtColor(cv2.imread(str(path)), cv2.COLOR_BGR2RGB)
-    if img is None:
-        raise ValueError(f"Could not load image data from {path}")
-    return img
 
 
 def scan_folder(media_dir: Path = MEDIA_DIR):
@@ -82,16 +59,17 @@ def detect_faces(
             conf = fo.get("confidence", 0.0)
             if conf < FACE_RECOGNITION_MIN_CONFIDENCE:
                 continue  # skip low‑confidence
-            face_np = fo["face"]
-            h, w = face_np.shape[:2]
+
+            face_bgr = fo["face"]
+
+            if np.issubdtype(face_bgr.dtype, np.floating):
+                face_uint8 = (face_bgr * 255).clip(0, 255).astype("uint8")
+            else:
+                face_uint8 = face_bgr
+
+            h, w = face_bgr.shape[:2]
             if h * w < FACE_RECOGNITION_MIN_FACE_PIXELS:
                 continue  # skip tiny crops
-
-            # convert floats→uint8 if needed
-            if np.issubdtype(face_np.dtype, np.floating):
-                face_uint8 = np.clip(face_np * 255, 0, 255).astype(np.uint8)
-            else:
-                face_uint8 = face_np
 
             ts = int(time.time() * 1000)
             name = f"{stem}_{frame_idx}_{i}_{ts}.jpg"
@@ -125,8 +103,7 @@ def detect_faces(
             ret, frame = cap.read()
             if not ret:
                 break
-            rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            dets = _run_detection(rgb, idx)
+            dets = _run_detection(frame, idx)
             if dets:
                 results.extend(dets)
                 found += 1
@@ -136,8 +113,8 @@ def detect_faces(
         img_bgr = cv2.imread(str(path))
         if img_bgr is None:
             raise ValueError(f"Cannot load image {path}")
-        rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
-        results = _run_detection(rgb, 0)
+        # pass raw BGR image to DeepFace
+        results = _run_detection(img_bgr, 0)
 
     return results
 
@@ -188,12 +165,12 @@ def process_file(filepath: Path):
         img.save(thumb_path, format="JPEG")
 
 
-def create_embedding_for_face(face) -> List[float]:
+def create_embedding_for_face(face: Face) -> List[float]:
     """
     Load the thumbnail from THUMB_DIR using face.thumbnail_path,
     then call DeepFace.represent() to get a 1×N embedding.
     """
-    thumb_file = THUMB_DIR / face.thumbnail_path
+    thumb_file: Path = THUMB_DIR / face.thumbnail_path
     if not thumb_file.exists():
         raise FileNotFoundError(f"Missing thumbnail: {thumb_file}")
 

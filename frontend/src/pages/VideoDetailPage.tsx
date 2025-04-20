@@ -1,21 +1,26 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
-import { Media, Person, Tag, Face } from '../types'
+import { Media, Person, Tag, Face, MediaDetail } from '../types'
+import { Header } from '../components/Header'
+
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
 export default function VideoDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const navigate = useNavigate()
   const [media, setMedia] = useState<Media | null>(null)
+  const [faces, setFaces] = useState<Face[]>([])
+  const [matchedPersons, setMatchedPersons] = useState<Person[]>([])
 
   useEffect(() => {
     if (!id) return
-    fetch(`${API}/media/${id}`)
-      .then(res => res.json())
-      .then((m: Media) => setMedia(m))
-      .catch(console.error)
+      ; (async () => {
+        const res = await fetch(`${API}/media/${id}`)
+        const { media, persons } = await res.json() as MediaDetail
+        setMedia(media)
+        setMatchedPersons(persons)
+      })().catch(console.error)
   }, [id])
 
   if (!media) return <div className="p-4">Loading…</div>
@@ -55,6 +60,7 @@ export default function VideoDetailPage() {
 
   return (
     <div className="bg-background text-text min-h-screen">
+      <Header />
       <header className="flex items-center p-4 space-x-4">
         <Link to="/" className="text-accent hover:underline">← Back</Link>
         <h1 className="text-2xl font-semibold">{media.filename}</h1>
@@ -83,14 +89,12 @@ export default function VideoDetailPage() {
           src={`/originals/${media.path}`}
         />
 
-        {/* Persons Detected */}
+        {/* Detected Persons */}
         <section>
-          <h2 className="text-xl font-semibold mb-2">Detected Persons</h2>
-          <div className="flex flex-wrap gap-4">
-            {(media.faces ?? []).map((face: Face) => (
-              face.person
-                ? <PersonCard key={face.id} person={face.person} />
-                : <div key={face.id} className="p-4 bg-gray-800 rounded">Unassigned</div>
+          <h2>Detected Persons</h2>
+          <div className="flex gap-4">
+            {(matchedPersons ?? []).map(p => (
+              <PersonCard person={p} />
             ))}
           </div>
         </section>

@@ -2,17 +2,20 @@ from pathlib import Path
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import delete
+from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
 from app.config import MEDIA_DIR, THUMB_DIR
 from app.database import get_session
-from app.models import Face, Media, MediaTagLink, Tag
-from sqlalchemy import delete
+from app.models import Face, Media, MediaTagLink, Person, Tag
+from app.schemas import MediaRead
+from typing import Any
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[Media])
+@router.get("/", response_model=List[MediaRead])
 def list_media(
     tags: Optional[List[str]] = Query(
         None, description="Filter by tag name(s), comma-separated"
@@ -35,12 +38,54 @@ def list_media(
     return session.exec(q).all()
 
 
-@router.get("/{media_id}", response_model=Media)
-def get_media(media_id: int, session: Session = Depends(get_session)):
+@router.get("/{media_id}")
+def get_media(media_id: int, session=Depends(get_session)):
     media = session.get(Media, media_id)
     if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-    return media
+        raise HTTPException(404, "Media not found")
+
+    # 1) load the media and its faces, each with its person
+    q = (
+        select(Face)
+        .where(Face.media_id == media_id)
+        .options(selectinload(Face.person))
+    )
+    faces: List[Face] = session.exec(q).all()
+
+    # 2) collect unique persons
+    seen = set()
+    persons_data: List[dict[str, Any]] = []
+    for f in faces:
+        p = f.person
+        if not p or p.id in seen:
+            continue
+        seen.add(p.id)
+
+        # 4) load that person's profile_face row (if set)
+        profile = None
+        if p.profile_face_id:
+            pf = session.get(Face, p.profile_face_id)
+            if pf:
+                profile = {
+                    "id": pf.id,
+                    "thumbnail_path": pf.thumbnail_path,
+                }
+
+        # 5) build a minimal person dict including profile_face
+        persons_data.append(
+            {
+                "id": p.id,
+                "name": p.name,
+                "age": p.age,
+                "gender": p.gender,
+                "ethnicity": p.ethnicity,
+                "profile_face_id": p.profile_face_id,
+                "profile_face": profile,
+            }
+        )
+
+    # 3) return a dict with exactly what the frontend needs
+    return {"media": media, "persons": persons_data}
 
 
 @router.delete(
@@ -83,7 +128,7 @@ def delete_media_record(
 
     # 1) delete all Face rows referencing this media
     session.exec(delete(Face).where(Face.media_id == media_id))
-    #TODO add thumbnail deletion
+    # TODO add thumbnail deletion
     # 2) delete all tag links for this media
     session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
 

@@ -8,8 +8,10 @@ from datetime import datetime, timezone
 from app.database import get_session, engine
 from app.models import Media, Face, Person, ProcessingTask
 from app.utils import detect_faces, create_embedding_for_face
-from app.config import MEDIA_DIR
+from app.config import MEDIA_DIR, THUMB_DIR
+from pathlib import Path
 from app.utils import logger
+
 
 router = APIRouter()
 
@@ -39,7 +41,7 @@ def start_media_processing(
     session.add(task)
     session.commit()
     session.refresh(task)
-
+    logger.info("Starting processing!")
     background_tasks.add_task(_run_media_processing, task.id)
     return task
 
@@ -58,6 +60,7 @@ def _run_media_processing(task_id: str):
     ).all()
 
     for media in medias:
+        logger.info("Processing: %s", media.filename)
         # allow cancellation
         task = sess.get(ProcessingTask, task_id)
         if task.status == "cancelled":
@@ -72,27 +75,28 @@ def _run_media_processing(task_id: str):
                 media_id=media.id,
                 thumbnail_path=det["thumbnail_path"],
                 bbox=det["bbox"],
-                embedding=None,
             )
             sess.add(face)
         sess.commit()
 
         # 2) compute embeddings immediately
-        faces_to_embed = sess.exec(
-            select(Face).where(
-                Face.media_id == media.id, Face.embedding == None
-            )
-        ).all()
-
+        query = select(Face).where(
+            Face.media_id == media.id, Face.embedding.is_(None)
+        )
+        faces_to_embed = sess.exec(query).all()
         for face in faces_to_embed:
             try:
                 emb = create_embedding_for_face(face)
                 face.embedding = emb
                 sess.add(face)
-            except Exception as e:
-                logger.debug(
+            except ValueError as e:
+                logger.exception(
                     f"[process_media] embedding failed for face {face.id}: {e}"
                 )
+                thumb_file: Path = THUMB_DIR / face.thumbnail_path
+                if thumb_file.exists():
+                    thumb_file.unlink()
+                sess.delete(face)
         sess.commit()
 
         # 3) mark media done
@@ -201,6 +205,20 @@ def _run_person_clustering(task_id: str):
         # bump progress
         task.processed += 1
         sess.add(task)
+
+        # ── AUTO‑ASSIGN DEFAULT PROFILE FACE ───────────────────────────────
+        all_persons = sess.exec(select(Person)).all()
+        for person in all_persons:
+            if person.profile_face_id is None:
+                # grab one face for this person
+                first_face = sess.exec(
+                    select(Face)
+                    .where(Face.person_id == person.id)
+                    .order_by(Face.id)
+                ).first()
+                if first_face:
+                    person.profile_face_id = first_face.id
+                    sess.add(person)
         sess.commit()
 
     # finalize

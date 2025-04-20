@@ -10,7 +10,7 @@ from app.database import init_db
 from app.utils import scan_folder
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 logging.getLogger("uvicorn.error").setLevel(logging.INFO)

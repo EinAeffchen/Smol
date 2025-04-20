@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
-import { Media, Face, Tag } from '../types'
+import { Media, Face, Tag, Person } from '../types'
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -38,17 +38,11 @@ export default function ImageDetailPage() {
 
                 {/* Detected Persons */}
                 <section>
-                    <h2 className="text-xl font-semibold mb-2">Detected Persons</h2>
-                    <div className="flex flex-wrap gap-4">
-                        {(media.faces ?? []).map((face: Face) =>
-                            face.person ? (
-                                <PersonCard key={face.id} person={face.person} />
-                            ) : (
-                                <div key={face.id} className="p-4 bg-gray-800 rounded">
-                                    Unassigned
-                                </div>
-                            )
-                        )}
+                    <h2>Detected Persons</h2>
+                    <div className="flex gap-4">
+                        {persons.map(p => (
+                            <PersonCard person={p} />
+                        ))}
                     </div>
                 </section>
 
