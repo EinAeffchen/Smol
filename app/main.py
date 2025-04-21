@@ -1,10 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import media, person, tasks
+from app.api import media, person, tasks, face
 from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
 from app.database import init_db
 from app.utils import scan_folder
@@ -30,6 +31,7 @@ app = FastAPI(lifespan=lifespan)
 app.include_router(media, prefix="/media", tags=["media"])
 app.include_router(person, prefix="/persons", tags=["persons"])
 app.include_router(tasks, prefix="/tasks", tags=["tasks"])
+app.include_router(face, prefix="/faces", tags=["faces"])
 
 app.mount(
     "/thumbnails",
@@ -42,7 +44,12 @@ app.mount(
     name="originals",
 )
 app.mount(
-    "/",
-    StaticFiles(directory=str(STATIC_DIR), html=True),
-    name="frontend",
+    "/static",
+    StaticFiles(directory=str(STATIC_DIR)),
+    name="static",
 )
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_catch_all(full_path: str):
+    return FileResponse(STATIC_DIR / "index.html")

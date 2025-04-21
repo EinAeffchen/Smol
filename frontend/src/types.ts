@@ -41,4 +41,9 @@ export interface MediaDetail {
   media: Media;
   persons: Person[];
 }
+export interface PersonDetail {
+  person: Person;
+  faces: Face[];
+  medias: Media[];
+}
 

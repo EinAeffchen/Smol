@@ -3,7 +3,7 @@ uvicorn==0.34.2
 sqlmodel==0.0.24
 pydantic==2.11.3
 python-multipart==0.0.20
-ffmpeg-python==1.0.0
+ffmpeg-python==0.2.0
 opencv-python==4.11.0.86
 deepface==0.0.93
 watchdog==6.0.0

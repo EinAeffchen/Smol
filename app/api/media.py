@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete
@@ -9,8 +9,7 @@ from sqlmodel import Session, select
 from app.config import MEDIA_DIR, THUMB_DIR
 from app.database import get_session
 from app.models import Face, Media, MediaTagLink, Person, Tag
-from app.schemas import MediaRead
-from typing import Any
+from app.schemas.media import MediaRead
 
 router = APIRouter()
 

@@ -1,20 +1,25 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
-import { Media, Face, Tag, Person } from '../types'
+import { Media, Person, Tag, Face, MediaDetail } from '../types'
+import { Header } from '../components/Header'
+
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
 export default function ImageDetailPage() {
     const { id } = useParams<{ id: string }>()
     const [media, setMedia] = useState<Media | null>(null)
+    const [matchedPersons, setMatchedPersons] = useState<Person[]>([])
 
     useEffect(() => {
         if (!id) return
-        fetch(`${API}/media/${id}`)
-            .then(res => res.json())
-            .then((m: Media) => setMedia(m))
-            .catch(console.error)
+            ; (async () => {
+                const res = await fetch(`${API}/media/${id}`)
+                const { media, persons } = await res.json() as MediaDetail
+                setMedia(media)
+                setMatchedPersons(persons)
+            })().catch(console.error)
     }, [id])
 
     if (!media) return <div className="p-4">Loading…</div>
@@ -40,7 +45,7 @@ export default function ImageDetailPage() {
                 <section>
                     <h2>Detected Persons</h2>
                     <div className="flex gap-4">
-                        {persons.map(p => (
+                        {(matchedPersons ?? []).map(p => (
                             <PersonCard person={p} />
                         ))}
                     </div>
