@@ -5,7 +5,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import media, person, tasks, face
+from app.api import media, person, tasks, face, tags
 from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
 from app.database import init_db
 from app.utils import scan_folder
@@ -32,6 +32,7 @@ app.include_router(media, prefix="/media", tags=["media"])
 app.include_router(person, prefix="/persons", tags=["persons"])
 app.include_router(tasks, prefix="/tasks", tags=["tasks"])
 app.include_router(face, prefix="/faces", tags=["faces"])
+app.include_router(tags, prefix="/tags", tags=["tags"])
 
 app.mount(
     "/thumbnails",

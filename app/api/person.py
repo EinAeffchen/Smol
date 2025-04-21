@@ -72,6 +72,7 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         "age": person.age,
         "gender": person.gender,
         "ethnicity": person.ethnicity,
+        "tags": person.tags,
     }
     logger.error(person.profile_face_id)
     if person.profile_face_id and person.profile_face:
@@ -83,6 +84,7 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         logger.debug("PERSON: %s", dict_person)
     return {
         "person": dict_person,
+        "tags": person.tags,
         "faces": [
             {
                 "id": face.id,

@@ -4,9 +4,10 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import MediaCard from '../components/MediaCard'
 import FaceCard from '../components/FaceCard'
 import { Header } from '../components/Header'
-import { Person, Face, Media, PersonDetail } from '../types'
+import { Person, Media, PersonDetail, Tag } from '../types'
+import TagAdder from '../components/TagAdder'
 
-const API = import.meta.env.VITE_API_BASE_URL || ''
+const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export default function PersonDetailPage() {
     const { id } = useParams<{ id: string }>()
@@ -104,9 +105,6 @@ export default function PersonDetailPage() {
         navigate(`/person/${targetId}`, { replace: true })
     }
 
-    // 4) Face & thumbnail APIs
-
-
     // assign a face to an existing person
     async function assignFace(faceId: number, personId: number) {
         await fetch(`${API}/faces/${faceId}/assign`, {
@@ -170,7 +168,7 @@ export default function PersonDetailPage() {
 
             <header className="flex items-center p-4 space-x-4">
                 <Link to="/" className="text-accent hover:underline">← Back</Link>
-                <h1 className="text-2xl font-semibold">{person.name || 'Unnamed'}</h1>
+                <h1 className="text-2xl font-semibold">{person.name ?? 'Unnamed'}</h1>
                 <button
                     onClick={() => setMergeOpen(true)}
                     className="ml-auto px-3 py-1 bg-accent rounded hover:bg-accent2"
@@ -254,6 +252,46 @@ export default function PersonDetailPage() {
                         </div>
                     </form>
                 </section>
+
+                {/* Add tag to person */}
+                <TagAdder
+                    ownerType="persons"
+                    ownerId={person.id}
+                    existingTags={person.tags || []}
+                    onTagAdded={tag => {
+                        setPerson({
+                            ...person,
+                            tags: [...(person.tags || []), tag],
+                        })
+                    }}
+                />
+
+                {/* Tags */}
+                <section className="mb-8">
+                    <h2 className="text-2xl font-medium mb-2">Tags</h2>
+                    <div className="flex flex-wrap gap-2">
+                        {(person.tags ?? []).map((tag: Tag) => (
+                            <div
+                                key={tag.id}
+                                className="flex items-center bg-accent2 text-background px-3 py-1 rounded-full space-x-2"
+                            >
+                                <Link to={`/tag/${tag.id}`}>{tag.name}</Link>
+                                {/* remove button */}
+                                <button
+                                    onClick={async () => {
+                                        await fetch(`${API}/tags/persons/${person.id}/${tag.id}`, { method: 'DELETE' })
+                                        setPerson({
+                                            ...person,
+                                            tags: person.tags!.filter(t => t.id !== tag.id)
+                                        })
+                                    }}
+                                    className="font-bold"
+                                >×</button>
+                            </div>
+                        ))}
+                    </div>
+                </section>
+
 
                 {/* Detected Faces Carousel */}
                 <section>

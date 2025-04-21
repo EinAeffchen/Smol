@@ -103,15 +103,23 @@ export default function VideoDetailPage() {
                     <h2 className="text-xl font-semibold mb-2">Tags</h2>
                     <div className="flex flex-wrap gap-2">
                         {(media.tags ?? []).map((tag: Tag) => (
-                            <span
-                                key={tag.id}
-                                className="px-3 py-1 rounded-full bg-accent2 text-background text-sm"
-                            >
-                                {tag.name}
-                            </span>
+                            <div key={tag.id} className="flex items-center bg-accent2 text-background px-3 py-1 rounded-full space-x-1">
+                                <Link to={`/tag/${tag.id}`}>{tag.name}</Link>
+                                <button
+                                    onClick={async () => {
+                                        await fetch(`${API}/media/${media.id}/${tag.id}`, { method: 'DELETE' })
+                                        setMedia({
+                                            ...media,
+                                            tags: media.tags!.filter(t => t.id !== tag.id)
+                                        })
+                                    }}
+                                    className="font-bold"
+                                >×</button>
+                            </div>
                         ))}
                     </div>
                 </section>
+
 
                 {/* Related (stub; implement via your /media?person_id=… or /media?tags=…) */}
                 <section>

@@ -89,9 +89,9 @@ def _run_media_processing(task_id: str):
                 emb = create_embedding_for_face(face)
                 face.embedding = emb
                 sess.add(face)
-            except ValueError as e:
+            except ValueError:
                 logger.exception(
-                    f"[process_media] embedding failed for face {face.id}: {e}"
+                    f"[process_media] embedding failed for face {face.id}. Removing file."
                 )
                 thumb_file: Path = THUMB_DIR / face.thumbnail_path
                 if thumb_file.exists():

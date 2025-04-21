@@ -3,7 +3,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
 import { Media, Person, Tag, Face, MediaDetail } from '../types'
 import { Header } from '../components/Header'
-
+import TagAdder from '../components/TagAdder'
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -50,21 +50,42 @@ export default function ImageDetailPage() {
                         ))}
                     </div>
                 </section>
-
+                {/* Add tag to media */}
+                <div className="px-4 py-2">
+                    <TagAdder
+                        ownerType="media"
+                        ownerId={media.id}
+                        existingTags={media.tags || []}
+                        onTagAdded={tag => {
+                            setMedia({
+                                ...media,
+                                tags: [...(media.tags ?? []), tag],
+                            })
+                        }}
+                    />
+                </div>
                 {/* Tags */}
                 <section>
                     <h2 className="text-xl font-semibold mb-2">Tags</h2>
                     <div className="flex flex-wrap gap-2">
                         {(media.tags ?? []).map((tag: Tag) => (
-                            <span
-                                key={tag.id}
-                                className="px-3 py-1 rounded-full bg-accent2 text-background text-sm"
-                            >
-                                {tag.name}
-                            </span>
+                            <div key={tag.id} className="flex items-center bg-accent2 text-background px-3 py-1 rounded-full space-x-1">
+                                <Link to={`/tag/${tag.id}`}>{tag.name}</Link>
+                                <button
+                                    onClick={async () => {
+                                        await fetch(`${API}/media/${media.id}/${tag.id}`, { method: 'DELETE' })
+                                        setMedia({
+                                            ...media,
+                                            tags: media.tags!.filter(t => t.id !== tag.id)
+                                        })
+                                    }}
+                                    className="font-bold"
+                                >×</button>
+                            </div>
                         ))}
                     </div>
                 </section>
+
 
                 {/* Related */}
                 <section>

@@ -10,6 +10,7 @@ from app.config import MEDIA_DIR, THUMB_DIR
 from app.database import get_session
 from app.models import Face, Media, MediaTagLink, Person, Tag
 from app.schemas.media import MediaRead
+from app.utils import logger
 
 router = APIRouter()
 
@@ -42,7 +43,7 @@ def get_media(media_id: int, session=Depends(get_session)):
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(404, "Media not found")
-
+    logger.info("TAGS: %s", media.tags)
     # 1) load the media and its faces, each with its person
     q = (
         select(Face)
@@ -84,6 +85,7 @@ def get_media(media_id: int, session=Depends(get_session)):
         )
 
     # 3) return a dict with exactly what the frontend needs
+    media = dict(media)
     return {"media": media, "persons": persons_data}
 
 

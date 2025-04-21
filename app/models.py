@@ -15,11 +15,28 @@ class MediaTagLink(SQLModel, table=True):
     )
 
 
+class PersonTagLink(SQLModel, table=True):
+    person_id: Optional[int] = Field(
+        default=None, foreign_key="person.id", primary_key=True
+    )
+    tag_id: Optional[int] = Field(
+        default=None, foreign_key="tag.id", primary_key=True
+    )
+
+#TODO fix missing profile_face
 class Tag(SQLModel, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
+
     media: List["Media"] = Relationship(
-        back_populates="tags", link_model=MediaTagLink
+        back_populates="tags",
+        link_model=MediaTagLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+    persons: list["Person"] = Relationship(
+        back_populates="tags",
+        link_model=PersonTagLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
     )
 
 
@@ -80,6 +97,9 @@ class Person(SQLModel, table=True):
             "foreign_keys": "[Person.profile_face_id]",
             "uselist": False,
         }
+    )
+    tags: List[Tag] = Relationship(
+        back_populates="persons", link_model=PersonTagLink
     )
 
 
