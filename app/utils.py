@@ -27,14 +27,6 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def scan_folder(media_dir: Path = MEDIA_DIR):
-    for media_type in VIDEO_SUFFIXES + IMAGE_SUFFIXES:
-        for path in media_dir.rglob(f"*{media_type}"):
-            if ".smol" in path.parts:
-                continue
-            process_file(path)
-
-
 def detect_faces(
     media_path: str,
     detector_backend: str = "retinaface",

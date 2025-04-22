@@ -2,11 +2,11 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select, update
-
+from sqlmodel import Session, select, update, delete
+from app.config import THUMB_DIR
 from pydantic import BaseModel
 from app.database import get_session
-from app.models import Face, Person
+from app.models import Face, Person, PersonTagLink
 from app.schemas.person import (
     PersonRead,
     FaceRead,
@@ -20,10 +20,20 @@ router = APIRouter()
 
 
 @router.get("/", response_model=list[PersonRead])
-def list_persons(session=Depends(get_session)):
+def list_persons(
+    name: str | None = Query(
+        None, description="Filter by substring match on name"
+    ),
+    skip: int = 0,
+    limit: int = 50,
+    session: Session = Depends(get_session),
+):
     q = select(Person).options(
         selectinload(Person.profile_face)
     )  # load the FK’d face
+    if name:
+        q = q.where(Person.name.ilike(f"%{name}%"))
+    q = q.offset(skip).limit(limit)
     people = session.exec(q).all()
     return [
         PersonRead(
@@ -173,17 +183,33 @@ def merge_persons(
     return target
 
 
-@router.get("/", response_model=list[Person])
-def search_persons(
-    name: str | None = Query(
-        None, description="Filter by substring match on name"
-    ),
-    skip: int = 0,
-    limit: int = 50,
-    session: Session = Depends(get_session),
-):
-    q = select(Person)
-    if name:
-        q = q.where(Person.name.ilike(f"%{name}%"))
-    q = q.offset(skip).limit(limit)
-    return session.exec(q).all()
+@router.delete(
+    "/{person_id}",
+    summary="Delete a person and all their faces",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_person(person_id: int, session: Session = Depends(get_session)):
+    person = session.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    # 1) delete all Face rows for this person (and remove thumbnails)
+    faces = session.exec(select(Face).where(Face.person_id == person_id)).all()
+    for face in faces:
+        # delete thumbnail file if it exists
+        try:
+            thumb_path = THUMB_DIR / face.thumbnail_path
+            if thumb_path.exists():
+                thumb_path.unlink()
+        except Exception:
+            pass
+        session.delete(face)
+
+    # 2) remove any person–tag links
+    session.exec(
+        delete(PersonTagLink).where(PersonTagLink.person_id == person_id)
+    )
+
+    # 3) delete the Person record itself
+    session.delete(person)
+    session.commit()

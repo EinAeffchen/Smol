@@ -1,21 +1,14 @@
 // frontend/src/components/TasksPanel.tsx
 import React, { useState, useEffect } from 'react'
+import { Task, TaskType } from '..types'
 
-type TaskType = 'process_media' | 'cluster_persons'
-type TaskStatus = 'pending' | 'running' | 'completed' | 'cancelled'
 
-interface Task {
-    id: string
-    task_type: TaskType
-    status: TaskStatus
-    total: number
-    processed: number
-}
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
 // map API task_type to a human‐readable label
 const TASK_LABELS: Record<TaskType, string> = {
+    scan_folder: 'Scan Folder',
     process_media: 'Process Media',
     cluster_persons: 'Cluster Persons',
 }
@@ -96,6 +89,12 @@ export default function TasksPanel() {
             })}
 
             <div className="pt-4 flex space-x-2">
+                <button
+                    onClick={() => startTask('scan')}
+                    className="px-3 py-1 bg-accent rounded hover:bg-accent2 text-background"
+                >
+                    Scan Folder
+                </button>
                 <button
                     onClick={() => startTask('process_media')}
                     className="px-3 py-1 bg-accent rounded hover:bg-accent2 text-background"

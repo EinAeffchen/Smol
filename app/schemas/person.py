@@ -26,6 +26,8 @@ class PersonRead(SQLModel):
     profile_face_id: int | None
     profile_face: FaceRead | None
 
+    class Config:
+        orm_mode = True
 
 class MergePersonsRequest(BaseModel):
     source_id: int

@@ -47,5 +47,15 @@ export interface PersonDetail {
   person: Person;
   faces: Face[];
   medias: Media[];
-  tags: Tag[];
+}
+
+type TaskType = "process_media" | "cluster_persons" | "scan_folder";
+type TaskStatus = "pending" | "running" | "completed" | "cancelled";
+
+interface Task {
+  id: string;
+  task_type: TaskType;
+  status: TaskStatus;
+  total: number;
+  processed: number;
 }

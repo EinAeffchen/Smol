@@ -4,7 +4,7 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import MediaCard from '../components/MediaCard'
 import FaceCard from '../components/FaceCard'
 import { Header } from '../components/Header'
-import { Person, Media, PersonDetail, Tag } from '../types'
+import { Person, PersonDetail, Tag } from '../types'
 import TagAdder from '../components/TagAdder'
 
 const API = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -70,8 +70,20 @@ export default function PersonDetailPage() {
                 body: JSON.stringify(payload),
             })
             if (!res.ok) throw new Error(await res.text())
-            const updated: Person = await res.json()
-            setDetail(d => d ? { ...d, person: updated } : d)
+            const updated: PersonDetail = await res.json()
+            setDetail(d =>
+                d
+                    ? {
+                        ...d,
+                        person: {
+                            // keep existing nested data (profile_face, tags, etc.)
+                            ...d.person,
+                            // overwrite only the top‑level fields returned by the PATCH
+                            ...updated,
+                        }
+                    }
+                    : d
+            )
             alert('Saved successfully')
         } catch (err) {
             console.error(err)
@@ -87,7 +99,7 @@ export default function PersonDetailPage() {
             setCandidates([])
             return
         }
-        fetch(`${API}/persons?name=${encodeURIComponent(searchTerm)}`)
+        fetch(`${API}/persons/?name=${encodeURIComponent(searchTerm)}`)
             .then(r => r.json())
             .then(setCandidates)
             .catch(console.error)
@@ -128,7 +140,8 @@ export default function PersonDetailPage() {
         })
         if (!res.ok) throw new Error('Failed to create person')
         // redirect to the new profile
-        const p: Person = await res.json()
+        const json = await res.json()
+        const p: Person = (json as any).person ?? (json as Person)
         navigate(`/person/${p.id}`, { replace: true })
         return p
     }
@@ -159,7 +172,7 @@ export default function PersonDetailPage() {
         setDetail(d)
     }
 
-    if (loading || !detail) return <div className="p-4">Loading…</div>
+    if (loading ?? !detail) return <div className="p-4">Loading…</div>
     const { person, faces, medias } = detail
 
     return (
@@ -174,6 +187,25 @@ export default function PersonDetailPage() {
                     className="ml-auto px-3 py-1 bg-accent rounded hover:bg-accent2"
                 >
                     Merge with…
+                </button>
+                <button
+                    onClick={async () => {
+                        if (!window.confirm(
+                            '⚠️ This will delete the person and all their faces. Continue?'
+                        )) return;
+                        const res = await fetch(`${API}/persons/${person.id}`, {
+                            method: 'DELETE'
+                        });
+                        if (res.ok) {
+                            alert('Person deleted.');
+                            navigate('/', { replace: true });
+                        } else {
+                            alert('Failed to delete person.');
+                        }
+                    }}
+                    className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                >
+                    Delete Person
                 </button>
             </header>
 
@@ -233,12 +265,23 @@ export default function PersonDetailPage() {
                         {/* Ethnicity */}
                         <div>
                             <label className="block text-sm">Ethnicity</label>
-                            <input
+                            <select
                                 name="ethnicity"
                                 value={form.ethnicity}
                                 onChange={onChange}
                                 className="w-full px-3 py-2 rounded bg-gray-700 focus:ring-accent"
-                            />
+                            >
+                                <option value="">-- select --</option>
+                                <option>African</option>
+                                <option>Arabian</option>
+                                <option>Asian</option>
+                                <option>Caucasian</option>
+                                <option>Hispanic</option>
+                                <option>Middle Eastern</option>
+                                <option>Mixed</option>
+                                <option>Native American</option>
+                                <option>Pacific</option>
+                            </select>
                         </div>
                         {/* Save */}
                         <div className="sm:col-span-2 text-right">
@@ -257,13 +300,20 @@ export default function PersonDetailPage() {
                 <TagAdder
                     ownerType="persons"
                     ownerId={person.id}
-                    existingTags={person.tags || []}
-                    onTagAdded={tag => {
-                        setPerson({
-                            ...person,
-                            tags: [...(person.tags || []), tag],
-                        })
-                    }}
+                    existingTags={person.tags ?? []}
+                    onTagAdded={(tag) =>
+                        setDetail((d) =>
+                            d
+                                ? {
+                                    ...d,
+                                    person: {
+                                        ...d.person,
+                                        tags: [...(d.person.tags ?? []), tag],
+                                    },
+                                }
+                                : d
+                        )
+                    }
                 />
 
                 {/* Tags */}
@@ -280,10 +330,17 @@ export default function PersonDetailPage() {
                                 <button
                                     onClick={async () => {
                                         await fetch(`${API}/tags/persons/${person.id}/${tag.id}`, { method: 'DELETE' })
-                                        setPerson({
-                                            ...person,
-                                            tags: person.tags!.filter(t => t.id !== tag.id)
-                                        })
+                                        setDetail((d) =>
+                                            d
+                                                ? {
+                                                    ...d,
+                                                    person: {
+                                                        ...d.person,
+                                                        tags: d.person.tags!.filter((t) => t.id !== tag.id),
+                                                    },
+                                                }
+                                                : d
+                                        );
                                     }}
                                     className="font-bold"
                                 >×</button>
@@ -322,43 +379,45 @@ export default function PersonDetailPage() {
             </main>
 
             {/* Merge Modal */}
-            {mergeOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-30">
-                    <div className="bg-gray-800 p-6 rounded-lg w-96 space-y-4">
-                        <h4 className="text-lg font-semibold">
-                            Merge "{person.name}" into…
-                        </h4>
-                        <input
-                            type="text"
-                            placeholder="Search by name…"
-                            value={searchTerm}
-                            onChange={e => setSearchTerm(e.target.value)}
-                            className="w-full px-3 py-2 rounded bg-gray-700"
-                        />
-                        <div className="max-h-60 overflow-y-auto space-y-2">
-                            {candidates.map(c => (
-                                <div
-                                    key={c.id}
-                                    className="flex items-center justify-between p-2 bg-gray-900 rounded hover:bg-gray-700 cursor-pointer"
-                                    onClick={() => doMerge(c.id)}
-                                >
-                                    <span>{c.name || 'Unknown'}</span>
-                                    <span className="text-accent">Merge →</span>
-                                </div>
-                            ))}
-                            {searchTerm && candidates.length === 0 && (
-                                <div className="italic text-gray-500">No matches</div>
-                            )}
+            {
+                mergeOpen && (
+                    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-30">
+                        <div className="bg-gray-800 p-6 rounded-lg w-96 space-y-4">
+                            <h4 className="text-lg font-semibold">
+                                Merge "{person.name}" into…
+                            </h4>
+                            <input
+                                type="text"
+                                placeholder="Search by name…"
+                                value={searchTerm}
+                                onChange={e => setSearchTerm(e.target.value)}
+                                className="w-full px-3 py-2 rounded bg-gray-700"
+                            />
+                            <div className="max-h-60 overflow-y-auto space-y-2">
+                                {candidates.map(c => (
+                                    <div
+                                        key={c.id}
+                                        className="flex items-center justify-between p-2 bg-gray-900 rounded hover:bg-gray-700 cursor-pointer"
+                                        onClick={() => doMerge(c.id)}
+                                    >
+                                        <span>{c.name ?? 'Unknown'}</span>
+                                        <span className="text-accent">Merge →</span>
+                                    </div>
+                                ))}
+                                {searchTerm && candidates.length === 0 && (
+                                    <div className="italic text-gray-500">No matches</div>
+                                )}
+                            </div>
+                            <button
+                                className="mt-4 px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
+                                onClick={() => setMergeOpen(false)}
+                            >
+                                Cancel
+                            </button>
                         </div>
-                        <button
-                            className="mt-4 px-4 py-2 bg-gray-700 rounded hover:bg-gray-600"
-                            onClick={() => setMergeOpen(false)}
-                        >
-                            Cancel
-                        </button>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     )
 }

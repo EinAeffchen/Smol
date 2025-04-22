@@ -3,6 +3,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
 import { Media, Person, Tag, Face, MediaDetail } from '../types'
 import { Header } from '../components/Header'
+import TagAdder from '../components/TagAdder'
+
 
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
@@ -97,7 +99,20 @@ export default function VideoDetailPage() {
                         ))}
                     </div>
                 </section>
-
+                {/* Add tag to media */}
+                <div className="px-4 py-2">
+                    <TagAdder
+                        ownerType="media"
+                        ownerId={media.id}
+                        existingTags={media.tags || []}
+                        onTagAdded={tag => {
+                            setMedia({
+                                ...media,
+                                tags: [...(media.tags ?? []), tag],
+                            })
+                        }}
+                    />
+                </div>
                 {/* Tags */}
                 <section>
                     <h2 className="text-xl font-semibold mb-2">Tags</h2>

@@ -23,7 +23,7 @@ class PersonTagLink(SQLModel, table=True):
         default=None, foreign_key="tag.id", primary_key=True
     )
 
-#TODO fix missing profile_face
+
 class Tag(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
@@ -90,12 +90,15 @@ class Person(SQLModel, table=True):
             "foreign_keys": "[Face.person_id]"
         },
     )
-    profile_face_id: Optional[int] = Field(foreign_key="face.id", default=None)
+    profile_face_id: Optional[int] = Field(
+        foreign_key="face.id", default=None, index=True
+    )
     profile_face: Optional[Face] = Relationship(
         sa_relationship_kwargs={
             "primaryjoin": "Person.profile_face_id==Face.id",
             "foreign_keys": "[Person.profile_face_id]",
             "uselist": False,
+            "lazy": "selectin",
         }
     )
     tags: List[Tag] = Relationship(

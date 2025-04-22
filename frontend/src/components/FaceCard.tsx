@@ -1,7 +1,6 @@
 // src/components/FaceCard.tsx
 import React, { useState, useEffect } from "react"
-import { Face, Person, PersonDetail } from "../types"
-import { useParams } from 'react-router-dom'
+import { Face, Person } from "../types"
 
 
 const API = import.meta.env.VITE_API_BASE_URL ?? ""

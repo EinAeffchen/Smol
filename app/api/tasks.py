@@ -7,9 +7,10 @@ from datetime import datetime, timezone
 
 from app.database import get_session, engine
 from app.models import Media, Face, Person, ProcessingTask
-from app.utils import detect_faces, create_embedding_for_face
+from app.utils import detect_faces, create_embedding_for_face, process_file
 from app.config import MEDIA_DIR, THUMB_DIR
 from pathlib import Path
+from app.config import VIDEO_SUFFIXES, IMAGE_SUFFIXES
 from app.utils import logger
 
 
@@ -276,3 +277,67 @@ def get_task(task_id: str, session: Session = Depends(get_session)):
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
+
+
+# ─── 4) SCAN FOLDER  ─────────────────────────────────────────────
+
+
+@router.post(
+    "/scan", response_model=ProcessingTask, summary="Enqueue a media‐scan task"
+)
+def start_scan(
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+):
+    # 1) discover all NEW files
+    existing = {m for m in session.exec(select(Media.path)).all()}
+    new_files = []
+    for media_type in VIDEO_SUFFIXES + IMAGE_SUFFIXES:
+        for path in MEDIA_DIR.rglob(f"*{media_type}"):
+            relative_path = path.relative_to(MEDIA_DIR)
+            if (
+                ".smol" in path.parts
+                or session.exec(
+                    select(Media.id).where(Media.path == str(relative_path))
+                ).first()
+            ):
+                continue
+            new_files.append(path)
+
+    # 2) make a ProcessingTask
+    task = ProcessingTask(task_type="scan", total=len(new_files), processed=0)
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+
+    # 3) enqueue the runner
+    background_tasks.add_task(_run_scan, task.id, new_files)
+    return task
+
+
+def _run_scan(task_id: str, files: list[Path]):
+    sess = Session(engine)
+    task = sess.get(ProcessingTask, task_id)
+    task.status = "running"
+    sess.add(task)
+    sess.commit()
+
+    for filepath in files:
+        # bail if cancelled
+        task = sess.get(ProcessingTask, task_id)
+        if task.status == "cancelled":
+            break
+
+        # insert into DB + thumbnail
+        process_file(
+            filepath
+        )  # you’ll extract the per‐file logic out of scan_folder
+        task.processed += 1
+        sess.add(task)
+        sess.commit()
+
+    task.status = "completed" if task.status != "cancelled" else "cancelled"
+    task.finished_at = datetime.utcnow()
+    sess.add(task)
+    sess.commit()
+    sess.close()
