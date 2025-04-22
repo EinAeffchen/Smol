@@ -40,7 +40,7 @@ class Tag(SQLModel, table=True):
     )
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class Face(SQLModel, table=True):
@@ -60,7 +60,7 @@ class Face(SQLModel, table=True):
     )
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class Media(SQLModel, table=True):
@@ -81,9 +81,10 @@ class Media(SQLModel, table=True):
     tags: List[Tag] = Relationship(
         back_populates="media", link_model=MediaTagLink
     )
+    exif: List["ExifData"] = Relationship(back_populates="media")
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class Person(SQLModel, table=True):
@@ -114,7 +115,7 @@ class Person(SQLModel, table=True):
     )
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProcessingTask(SQLModel, table=True):
@@ -130,7 +131,7 @@ class ProcessingTask(SQLModel, table=True):
     finished_at: Optional[datetime] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class PersonSimilarity(SQLModel, table=True):
@@ -141,4 +142,26 @@ class PersonSimilarity(SQLModel, table=True):
     calculated_at: datetime = Field(default_factory=datetime.utcnow)
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+
+class ExifData(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    media_id: int = Field(foreign_key="media.id", index=True)
+
+    # camera & capture
+    make: str | None = Field(default=None, index=True)
+    model: str | None = Field(default=None, index=True)
+    timestamp: datetime | None = Field(default=None, index=True)
+
+    # lens / exposure
+    iso: int | None = Field(default=None, index=True)
+    exposure_time: str | None = Field(default=None)
+    aperture: str | None = Field(default=None)
+    focal_length: float | None = Field(default=None)
+
+    # GPS
+    lat: float | None = Field(default=None, index=True)
+    lon: float | None = Field(default=None, index=True)
+
+    media: Media = Relationship(back_populates="exif")

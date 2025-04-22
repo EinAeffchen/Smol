@@ -18,6 +18,7 @@ STATIC_DIR: Path = SMOL_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True, parents=True)
 # Where thumbnails are written
 THUMB_DIR = SMOL_DIR / "thumbnails"
+PLUGINS_DIR = Path(__file__).parent / "plugins"
 
 VIDEO_SUFFIXES = [
     ".mp4",
@@ -44,7 +45,7 @@ IMAGE_SUFFIXES = [
 # face recognition settings
 VIDEO_SAMPLING_FACTOR = 3
 MAX_FRAMES_PER_VIDEO = 30
-FACE_RECOGNITION_MIN_CONFIDENCE = 0.85
+FACE_RECOGNITION_MIN_CONFIDENCE = 0.75
 FACE_MATCH_COSINE_THRESHOLD = 0.7
 FACE_RECOGNITION_MIN_FACE_PIXELS = 50 * 50
 MINIMUM_SIMILARITY = 0.3

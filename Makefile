@@ -3,7 +3,7 @@ up:
 	uvicorn app.main:app --reload --log-level debug --host 0.0.0.0 --port 8000
 
 build:
-	cd frontend && npm ci && npm run build
+	cd frontend && npm install && npm run build
 	mkdir -p media/.smol/static
 	cp -r frontend/dist/* media/.smol/static
 	python -m venv media/.smol/venv

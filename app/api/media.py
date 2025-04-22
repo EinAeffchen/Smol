@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -8,7 +7,7 @@ from sqlmodel import Session, select
 
 from app.config import MEDIA_DIR, THUMB_DIR
 from app.database import get_session
-from app.models import Face, Media, MediaTagLink, Person, Tag
+from app.models import Face, Media, MediaTagLink, Tag, ExifData
 from app.schemas.media import MediaRead
 from app.utils import logger
 
@@ -110,8 +109,6 @@ def delete_media_file(media_id: int, session: Session = Depends(get_session)):
     if thumb.exists():
         thumb.unlink()
 
-    return
-
 
 @router.delete(
     "/{media_id}",
@@ -128,7 +125,6 @@ def delete_media_record(
 
     # 1) delete all Face rows referencing this media
     session.exec(delete(Face).where(Face.media_id == media_id))
-    # TODO add thumbnail deletion
     # 2) delete all tag links for this media
     session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
 
@@ -136,4 +132,13 @@ def delete_media_record(
     session.delete(media)
 
     session.commit()
-    return
+
+
+@router.get("/exif/{media_id}", response_model=ExifData)
+def read_exif(media_id: int, session=Depends(get_session)):
+    ex = session.exec(
+        select(ExifData).where(ExifData.media_id == media_id)
+    ).first()
+    if not ex:
+        raise HTTPException(404, "No EXIF data")
+    return ex

@@ -1,14 +1,17 @@
 import logging
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, BackgroundTasks
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import media, person, tasks, face, tags
 from app.api.tasks import start_scan
 from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
 from app.database import init_db, get_session
+from app.api.processors import router as proc_router
+from app.processor_registry import load_processors
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -22,9 +25,7 @@ logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 async def lifespan(app: FastAPI):
     # Load the ML model
     init_db()
-    session = get_session()
-    background_tasks = BackgroundTasks()
-    start_scan(background_tasks, session=session)
+    load_processors()
     yield
 
 
@@ -35,6 +36,7 @@ app.include_router(person, prefix="/persons", tags=["persons"])
 app.include_router(tasks, prefix="/tasks", tags=["tasks"])
 app.include_router(face, prefix="/faces", tags=["faces"])
 app.include_router(tags, prefix="/tags", tags=["tags"])
+app.include_router(proc_router, prefix="/api", tags=["processors"])
 
 app.mount(
     "/thumbnails",

@@ -56,13 +56,13 @@ export default function IndexPage() {
         const sortedByDate = [...data].sort((a, b) =>
           new Date(b.inserted_at).getTime() - new Date(a.inserted_at).getTime()
         )
-        setNewest(sortedByDate.slice(0, 8))
+        setNewest(sortedByDate.slice(0, 30))
 
         // Sort by views for “Most Viewed”
         const sortedByViews = [...data].sort((a, b) =>
           b.views - a.views
         )
-        setPopular(sortedByViews.slice(0, 8))
+        setPopular(sortedByViews.slice(0, 30))
       } catch (err) {
         console.error('Error fetching media:', err)
       }

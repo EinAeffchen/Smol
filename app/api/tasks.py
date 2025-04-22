@@ -1,11 +1,11 @@
 from typing import List
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, status
-from sqlmodel import Session, select, func
+from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
+from sqlmodel import Session, select, func, update, delete
 import numpy as np
 from datetime import datetime, timezone
 
 from app.database import get_session, engine
-from app.models import Media, Face, Person, ProcessingTask
+from app.models import Media, Face, Person, ProcessingTask, PersonSimilarity
 from app.utils import detect_faces, create_embedding_for_face, process_file
 from app.config import MEDIA_DIR, THUMB_DIR
 from pathlib import Path
@@ -15,6 +15,7 @@ from app.config import (
     FACE_MATCH_COSINE_THRESHOLD,
 )
 from app.utils import logger
+from app.processor_registry import processors
 
 
 router = APIRouter()
@@ -51,22 +52,23 @@ def start_media_processing(
 
 
 def _run_media_processing(task_id: str):
-    sess = Session(engine)
-    task = sess.get(ProcessingTask, task_id)
+    logger.info("Processing with %s", [p.name for p in processors])
+    session = Session(engine)
+    task = session.get(ProcessingTask, task_id)
     task.status = "running"
     task.started_at = datetime.now(timezone.utc)
-    sess.add(task)
-    sess.commit()
+    session.add(task)
+    session.commit()
 
     # iterate unprocessed media
-    medias = sess.exec(
-        select(Media).where(Media.faces_extracted == False)
+    medias = session.exec(
+        select(Media).where(Media.faces_extracted.is_(False))
     ).all()
 
     for media in medias:
         logger.info("Processing: %s", media.filename)
         # allow cancellation
-        task = sess.get(ProcessingTask, task_id)
+        task = session.get(ProcessingTask, task_id)
         if task.status == "cancelled":
             break
 
@@ -80,19 +82,19 @@ def _run_media_processing(task_id: str):
                 thumbnail_path=det["thumbnail_path"],
                 bbox=det["bbox"],
             )
-            sess.add(face)
-        sess.commit()
+            session.add(face)
+        session.commit()
 
         # 2) compute embeddings immediately
         query = select(Face).where(
             Face.media_id == media.id, Face.embedding.is_(None)
         )
-        faces_to_embed = sess.exec(query).all()
+        faces_to_embed = session.exec(query).all()
         for face in faces_to_embed:
             try:
                 emb = create_embedding_for_face(face)
                 face.embedding = emb
-                sess.add(face)
+                session.add(face)
             except ValueError:
                 logger.exception(
                     f"[process_media] embedding failed for face {face.id}. Removing file."
@@ -100,25 +102,34 @@ def _run_media_processing(task_id: str):
                 thumb_file: Path = THUMB_DIR / face.thumbnail_path
                 if thumb_file.exists():
                     thumb_file.unlink()
-                sess.delete(face)
-        sess.commit()
+                session.delete(face)
+        session.commit()
 
         # 3) mark media done
         media.faces_extracted = True
         media.embeddings_created = True
-        sess.add(media)
+        session.add(media)
 
         # 4) update task progress
         task.processed += 1
-        sess.add(task)
-        sess.commit()
+        session.add(task)
+        session.commit()
+
+        for proc in processors:
+            logger.info("Running Processor: %s", proc.name)
+            try:
+                proc.process(media, session)
+            except Exception:
+                logger.exception(
+                    "processor %r failed on media %d", proc.name, media.id
+                )
 
     # finalize
     task.status = "cancelled" if task.status == "cancelled" else "completed"
     task.finished_at = datetime.now(timezone.utc)
-    sess.add(task)
-    sess.commit()
-    sess.close()
+    session.add(task)
+    session.commit()
+    session.close()
 
 
 # ─── 2) CLUSTER PERSONS ────────────────────────────────────────────────────────
@@ -313,6 +324,26 @@ def start_scan(
     # 3) enqueue the runner
     background_tasks.add_task(_run_scan, task.id, new_files)
     return task
+
+
+# ─── 5) HELPER ─────────────────────────────────
+
+
+@router.post("/reset/processing", summary="Resets media processing status")
+def reset_processing(session: Session = Depends(get_session)):
+    session.exec(update(Media).values(faces_extracted=False))
+    session.commit()
+    return "OK"
+
+
+@router.post("/reset/clustering", summary="Resets person clustering")
+def reset_clustering(session: Session = Depends(get_session)):
+    session.exec(update(Media).values(embeddings_created=False))
+    session.exec(delete(PersonSimilarity))
+    session.exec(update(Face).values(person_id=None))
+    session.exec(delete(Person))
+    session.commit()
+    return "OK"
 
 
 def _run_scan(task_id: str, files: list[Path]):
