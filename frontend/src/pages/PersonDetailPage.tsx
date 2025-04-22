@@ -240,140 +240,134 @@ export default function PersonDetailPage() {
         <div className="bg-background text-text min-h-screen">
             <Header />
 
-            <header className="flex items-center p-4 space-x-4">
+            {/* === CONTROLS BAR === */}
+            <div className="max-w-screen-lg mx-auto px-4 flex items-center space-x-4 py-4">
                 <Link to="/" className="text-accent hover:underline">← Back</Link>
-                <h1 className="text-2xl font-semibold">{person.name ?? 'Unnamed'}</h1>
-                <button
-                    onClick={() => setMergeOpen(true)}
-                    className="ml-auto px-3 py-1 bg-accent rounded hover:bg-accent2"
-                >
-                    Merge with…
-                </button>
-                <button
-                    onClick={async () => {
-                        if (!window.confirm(
-                            '⚠️ This will delete the person and all their faces. Continue?'
-                        )) return;
-                        const res = await fetch(`${API}/persons/${person.id}`, {
-                            method: 'DELETE'
-                        });
-                        if (res.ok) {
-                            alert('Person deleted.');
-                            navigate('/', { replace: true });
-                        } else {
-                            alert('Failed to delete person.');
-                        }
-                    }}
-                    className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
-                >
-                    Delete Person
-                </button>
-                <button
-                    onClick={handleRefreshSims}
-                    disabled={loadingSim}
-                    className="px-3 py-1 bg-accent rounded hover:bg-accent2"
-                >
-                    {loadingSim ? 'Refreshing…' : 'Refresh Similar People'}
-                </button>
-            </header>
+                <h1 className="text-2xl font-semibold">{person.name || 'Unnamed'}</h1>
 
-            <main className="max-w-4xl mx-auto p-4 space-y-8">
+                <div className="ml-auto flex space-x-2">
+                    <button
+                        onClick={() => setMergeOpen(true)}
+                        className="px-3 py-1 bg-accent text-sm rounded hover:bg-accent2"
+                    >Merge</button>
+                    <button
+                        onClick={handleRefreshSims}
+                        disabled={loadingSim}
+                        className="px-3 py-1 bg-accent text-sm rounded hover:bg-accent2"
+                    >
+                        {loadingSim ? 'Refreshing…' : 'Refresh Similar'}
+                    </button>
+                    <button
+                        onClick={async () => {
+                            if (!confirm('Delete this person?')) return
+                            const res = await fetch(`${API}/persons/${person.id}`, { method: 'DELETE' })
+                            if (res.ok) navigate('/', { replace: true })
+                            else alert('Delete failed')
+                        }}
+                        className="px-3 py-1 bg-red-600 text-sm rounded hover:bg-red-700"
+                    >Delete</button>
+                </div>
+            </div>
 
-                {/* Profile Face */}
-                <section className="text-center">
-                    <h3 className="text-lg font-semibold mb-2">Profile Face</h3>
-                    <div className="inline-block w-40 h-40 rounded-full overflow-hidden border-4 border-accent">
-                        <img
-                            src={`/thumbnails/${person.profile_face?.thumbnail_path}`}
-                            alt="Profile face"
-                            className="w-full h-full object-cover"
-                        />
+            <main className="max-w-screen-lg mx-auto px-4 space-y-8">
+
+                {/* === PROFILE & EDIT === */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    {/* Profile Face */}
+                    <div className="flex flex-col items-center">
+                        <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-accent mb-2">
+                            <img
+                                src={`/thumbnails/${person.profile_face?.thumbnail_path}`}
+                                alt="Profile"
+                                className="object-cover w-full h-full"
+                            />
+                        </div>
+                        <span className="font-medium">Profile Face</span>
                     </div>
-                </section>
 
-                {/* Edit Form */}
-                <section className="bg-gray-800 p-6 rounded-lg shadow">
-                    <h2 className="text-xl font-semibold mb-4">Edit Profile</h2>
-                    <form onSubmit={onSave} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {/* Name */}
-                        <div>
-                            <label className="block text-sm">Name</label>
-                            <input
-                                name="name"
-                                value={form.name}
-                                onChange={onChange}
-                                className="w-full px-3 py-2 rounded bg-gray-700 focus:ring-accent"
-                            />
+                    {/* Edit Form (span 2 cols on md+) */}
+                    <form
+                        onSubmit={onSave}
+                        className="md:col-span-2 bg-gray-800 p-4 rounded-lg shadow space-y-4"
+                    >
+                        <h2 className="text-lg font-semibold">Edit Profile</h2>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm mb-1">Name</label>
+                                <input
+                                    name="name" value={form.name}
+                                    onChange={onChange}
+                                    className="w-full px-2 py-1 rounded bg-gray-700"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm mb-1">Age</label>
+                                <input
+                                    name="age" type="number" min="0"
+                                    value={form.age}
+                                    onChange={onChange}
+                                    className="w-full px-2 py-1 rounded bg-gray-700"
+                                />
+                            </div>
+                            <div className="sm:col-span-2">
+                                <label className="block text-sm mb-1">Gender</label>
+                                <select
+                                    name="gender"
+                                    value={form.gender}
+                                    onChange={onChange}
+                                    className="w-full px-2 py-1 rounded bg-gray-700"
+                                >
+                                    <option value="">— select —</option>
+                                    <option>male</option>
+                                    <option>female</option>
+                                    <option>other</option>
+                                </select>
+                            </div>
                         </div>
-                        {/* Age */}
-                        <div>
-                            <label className="block text-sm">Age</label>
-                            <input
-                                name="age" type="number" min="0"
-                                value={form.age}
-                                onChange={onChange}
-                                className="w-full px-3 py-2 rounded bg-gray-700 focus:ring-accent"
-                            />
-                        </div>
-                        {/* Gender */}
-                        <div>
-                            <label className="block text-sm">Gender</label>
-                            <select
-                                name="gender"
-                                value={form.gender}
-                                onChange={onChange}
-                                className="w-full px-3 py-2 rounded bg-gray-700 focus:ring-accent"
-                            >
-                                <option value="">-- select --</option>
-                                <option>male</option>
-                                <option>female</option>
-                                <option>other</option>
-                            </select>
-                        </div>
-                        {/* Save */}
-                        <div className="sm:col-span-2 text-right">
+
+                        <div className="text-right">
                             <button
                                 type="submit"
                                 disabled={saving}
-                                className="px-4 py-2 bg-accent hover:bg-accent2 rounded text-background"
+                                className="px-4 py-1 bg-accent rounded text-background hover:bg-accent2"
                             >
                                 {saving ? 'Saving…' : 'Save'}
                             </button>
                         </div>
                     </form>
-                </section>
+                </div>
 
-                {/* Add tag to person */}
-                <TagAdder
-                    ownerType="persons"
-                    ownerId={person.id}
-                    existingTags={person.tags ?? []}
-                    onTagAdded={(tag) =>
-                        setDetail((d) =>
-                            d
-                                ? {
-                                    ...d,
-                                    person: {
-                                        ...d.person,
-                                        tags: [...(d.person.tags ?? []), tag],
-                                    },
-                                }
-                                : d
-                        )
-                    }
-                />
 
-                {/* Tags */}
-                <section className="mb-8">
-                    <h2 className="text-2xl font-medium mb-2">Tags</h2>
+                {/* === TAGS === */}
+                <div className="bg-gray-800 p-4 rounded-lg shadow space-y-2">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-lg font-semibold">Tags</h2>
+                        <TagAdder
+                            ownerType="persons"
+                            ownerId={person.id}
+                            existingTags={person.tags ?? []}
+                            onTagAdded={(tag) =>
+                                setDetail((d) =>
+                                    d
+                                        ? {
+                                            ...d,
+                                            person: {
+                                                ...d.person,
+                                                tags: [...(d.person.tags ?? []), tag],
+                                            },
+                                        }
+                                        : d
+                                )
+                            }
+                        />
+                    </div>
                     <div className="flex flex-wrap gap-2">
                         {(person.tags ?? []).map((tag: Tag) => (
                             <div
                                 key={tag.id}
-                                className="flex items-center bg-accent2 text-background px-3 py-1 rounded-full space-x-2"
+                                className="flex items-center bg-accent2 text-background px-3 py-1 rounded-full space-x-1 text-sm"
                             >
                                 <Link to={`/tag/${tag.id}`}>{tag.name}</Link>
-                                {/* remove button */}
                                 <button
                                     onClick={async () => {
                                         await fetch(`${API}/tags/persons/${person.id}/${tag.id}`, { method: 'DELETE' })
@@ -389,17 +383,26 @@ export default function PersonDetailPage() {
                                                 : d
                                         );
                                     }}
-                                    className="font-bold"
                                 >×</button>
                             </div>
                         ))}
                     </div>
+                </div>
+
+
+                {/* === MEDIA GRID === */}
+                <section>
+                    <h2 className="text-lg font-semibold mb-2">Media Appearances</h2>
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
+                        {medias.map(m => <MediaCard key={m.id} media={m} />)}
+                    </div>
                 </section>
 
-                {/* Detected Faces Carousel */}
+
+                {/* === DETECTED FACES === */}
                 <section>
-                    <h3 className="text-lg font-semibold mb-2">Detected Faces</h3>
-                    <div className="flex gap-4 overflow-x-auto py-2">
+                    <h2 className="text-lg font-semibold mb-2">Detected Faces</h2>
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3">
                         {faces.map(face => (
                             <FaceCard
                                 face={face}
@@ -413,19 +416,12 @@ export default function PersonDetailPage() {
                     </div>
                 </section>
 
-                {/* Media Grid */}
+
+
+                {/* === SIMILAR PEOPLE === */}
                 <section>
-                    <h3 className="text-xl font-semibold mb-4">
-                        Media Featuring {person.name}
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {medias.map(m => <MediaCard key={m.id} media={m} />)}
-                    </div>
-                </section>
-                {/* Similar People */}
-                <section className="space-y-2">
-                    <h3 className="text-lg font-semibold mb-2">Similar People</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    <h2 className="text-lg font-semibold mb-2">Similar People</h2>
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-4">
                         {richSimilar.map(p => (
                             <SimilarPersonCard
                                 key={p.id}
@@ -437,6 +433,7 @@ export default function PersonDetailPage() {
                         ))}
                     </div>
                 </section>
+
             </main>
 
             {/* Merge Modal */}
