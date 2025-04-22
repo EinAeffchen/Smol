@@ -13,7 +13,6 @@ class PersonUpdate(BaseModel):
     name: str | None = None
     age: int | None = None
     gender: str | None = None
-    ethnicity: str | None = None
     profile_face_id: int | None = None
 
 
@@ -22,13 +21,18 @@ class PersonRead(SQLModel):
     name: str | None
     age: int | None
     gender: str | None
-    ethnicity: str | None
     profile_face_id: int | None
     profile_face: FaceRead | None
 
-    class Config:
-        orm_mode = True
+
 
 class MergePersonsRequest(BaseModel):
     source_id: int
     target_id: int
+
+
+class SimilarPerson(SQLModel):
+    id: int
+    name: str | None
+    similarity: float
+

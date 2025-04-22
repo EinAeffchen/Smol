@@ -4,8 +4,9 @@ import { useParams, Link, useNavigate } from 'react-router-dom'
 import MediaCard from '../components/MediaCard'
 import FaceCard from '../components/FaceCard'
 import { Header } from '../components/Header'
-import { Person, PersonDetail, Tag } from '../types'
+import { Person, PersonDetail, Tag, SimilarPerson } from '../types'
 import TagAdder from '../components/TagAdder'
+import SimilarPersonCard from '../components/SimilarPersonCard'
 
 const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -17,13 +18,53 @@ export default function PersonDetailPage() {
     const [loading, setLoading] = useState(true)
 
     // form state for editing person
-    const [form, setForm] = useState({ name: '', age: '' as string | number, gender: '', ethnicity: '' })
+    const [form, setForm] = useState({ name: '', age: '' as string | number, gender: '' })
     const [saving, setSaving] = useState(false)
 
     // merge modal state
     const [mergeOpen, setMergeOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
     const [candidates, setCandidates] = useState<Person[]>([])
+
+    // Similarity measures
+    const [similar, setSimilar] = useState<SimilarPerson[]>([])
+    const [richSimilar, setRichSimilar] = useState<SimilarPerson[]>([])
+    const [loadingSim, setLoadingSim] = useState(false)
+
+    // fetch stored similarities on mount
+    async function loadSimilar() {
+        if (!id) return
+        setLoadingSim(true)
+        const res = await fetch(`${API}/persons/${id}/similarities`)
+        if (res.ok) {
+            setSimilar(await res.json())
+        }
+        setLoadingSim(false)
+    }
+
+    useEffect(() => {
+        if (similar.length === 0) {
+            setRichSimilar([])
+            return
+        }
+
+        Promise.all(similar.map(async (p) => {
+            // fetch the PersonDetail so we can grab profile_face
+            const res = await fetch(`${API}/persons/${p.id}`)
+            if (!res.ok) return p
+            const detail = await res.json() as PersonDetail
+            return {
+                ...p,
+                name: detail.person.name ?? p.name,
+                thumbnail: detail.person.profile_face?.thumbnail_path
+            }
+        })).then(setRichSimilar)
+            .catch(console.error)
+    }, [similar])
+
+    useEffect(() => {
+        loadSimilar()
+    }, [id])
 
     // 1) Load the full PersonDetail on mount / id change
     useEffect(() => {
@@ -39,7 +80,6 @@ export default function PersonDetailPage() {
                     name: d.person.name ?? '',
                     age: d.person.age ?? '',
                     gender: d.person.gender ?? '',
-                    ethnicity: d.person.ethnicity ?? '',
                 })
             })
             .catch(console.error)
@@ -60,7 +100,6 @@ export default function PersonDetailPage() {
             const payload: any = {
                 name: form.name,
                 gender: form.gender,
-                ethnicity: form.ethnicity,
             }
             if (form.age !== '') payload.age = Number(form.age)
 
@@ -136,14 +175,26 @@ export default function PersonDetailPage() {
         const res = await fetch(`${API}/faces/${faceId}/create_person`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        })
-        if (!res.ok) throw new Error('Failed to create person')
-        // redirect to the new profile
-        const json = await res.json()
-        const p: Person = (json as any).person ?? (json as Person)
-        navigate(`/person/${p.id}`, { replace: true })
-        return p
+            body: JSON.stringify(data),
+        });
+        const json = await res.json();
+        console.log("⚙️ create_person response JSON:", json);
+
+        // unwrap it safely
+        const p: Person =
+            // if it’s the wrapper { person: Person, … }  
+            (json as any).person
+            // else if it’s bare Person  
+            ?? (json as Person);
+        console.log("⚙️ unwrapped Person:", p);
+
+        if (!p?.id) {
+            console.error("🚨 no p.id!");
+            throw new Error("createPersonFromFace: could not extract person.id");
+        }
+
+        navigate(`/person/${p.id}`, { replace: true });
+        return p;
     }
 
     // delete a face entirely
@@ -174,6 +225,16 @@ export default function PersonDetailPage() {
 
     if (loading ?? !detail) return <div className="p-4">Loading…</div>
     const { person, faces, medias } = detail
+
+    async function handleRefreshSims() {
+        if (!id) return
+        setLoadingSim(true)
+        await fetch(`${API}/persons/${id}/refresh-similarities`, {
+            method: 'POST'
+        })
+        // give the background a moment, then reload
+        setTimeout(loadSimilar, 500)
+    }
 
     return (
         <div className="bg-background text-text min-h-screen">
@@ -206,6 +267,13 @@ export default function PersonDetailPage() {
                     className="ml-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
                 >
                     Delete Person
+                </button>
+                <button
+                    onClick={handleRefreshSims}
+                    disabled={loadingSim}
+                    className="px-3 py-1 bg-accent rounded hover:bg-accent2"
+                >
+                    {loadingSim ? 'Refreshing…' : 'Refresh Similar People'}
                 </button>
             </header>
 
@@ -260,27 +328,6 @@ export default function PersonDetailPage() {
                                 <option>male</option>
                                 <option>female</option>
                                 <option>other</option>
-                            </select>
-                        </div>
-                        {/* Ethnicity */}
-                        <div>
-                            <label className="block text-sm">Ethnicity</label>
-                            <select
-                                name="ethnicity"
-                                value={form.ethnicity}
-                                onChange={onChange}
-                                className="w-full px-3 py-2 rounded bg-gray-700 focus:ring-accent"
-                            >
-                                <option value="">-- select --</option>
-                                <option>African</option>
-                                <option>Arabian</option>
-                                <option>Asian</option>
-                                <option>Caucasian</option>
-                                <option>Hispanic</option>
-                                <option>Middle Eastern</option>
-                                <option>Mixed</option>
-                                <option>Native American</option>
-                                <option>Pacific</option>
                             </select>
                         </div>
                         {/* Save */}
@@ -349,7 +396,6 @@ export default function PersonDetailPage() {
                     </div>
                 </section>
 
-
                 {/* Detected Faces Carousel */}
                 <section>
                     <h3 className="text-lg font-semibold mb-2">Detected Faces</h3>
@@ -373,7 +419,22 @@ export default function PersonDetailPage() {
                         Media Featuring {person.name}
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {medias.map(m => <MediaCard media={m} />)}
+                        {medias.map(m => <MediaCard key={m.id} media={m} />)}
+                    </div>
+                </section>
+                {/* Similar People */}
+                <section className="space-y-2">
+                    <h3 className="text-lg font-semibold mb-2">Similar People</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {richSimilar.map(p => (
+                            <SimilarPersonCard
+                                key={p.id}
+                                id={p.id}
+                                name={p.name}
+                                similarity={p.similarity}
+                                thumbnail={p.thumbnail}
+                            />
+                        ))}
                     </div>
                 </section>
             </main>

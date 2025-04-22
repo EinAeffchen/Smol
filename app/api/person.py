@@ -1,20 +1,29 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.orm import selectinload
-from sqlmodel import Session, select, update, delete
-from app.config import THUMB_DIR
-from pydantic import BaseModel
-from app.database import get_session
-from app.models import Face, Person, PersonTagLink
-from app.schemas.person import (
-    PersonRead,
-    FaceRead,
-    PersonDetail,
-    PersonUpdate,
-    MergePersonsRequest,
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    status,
 )
-from app.utils import logger
+from pydantic import BaseModel
+from sqlalchemy.orm import selectinload
+from sqlmodel import Session, delete, select, update
+
+from app.config import THUMB_DIR
+from app.database import get_session
+from app.models import Face, Person, PersonSimilarity, PersonTagLink
+from app.schemas.person import (
+    FaceRead,
+    MergePersonsRequest,
+    PersonDetail,
+    PersonRead,
+    PersonUpdate,
+    SimilarPerson,
+)
+from app.utils import logger, refresh_similarities_for_person
 
 router = APIRouter()
 
@@ -81,10 +90,8 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         "name": person.name,
         "age": person.age,
         "gender": person.gender,
-        "ethnicity": person.ethnicity,
         "tags": person.tags,
     }
-    logger.error(person.profile_face_id)
     if person.profile_face_id and person.profile_face:
         dict_person["profile_face_id"] = person.profile_face_id
         dict_person["profile_face"] = {
@@ -213,3 +220,63 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
     # 3) delete the Person record itself
     session.delete(person)
     session.commit()
+
+
+@router.get(
+    "/{person_id}/similarities",
+    response_model=list[SimilarPerson],
+    summary="Get stored similarity scores for a person",
+)
+def get_similarities(
+    person_id: int,
+    session: Session = Depends(get_session),
+):
+    # ensure person exists
+    if not session.get(Person, person_id):
+        raise HTTPException(404, "Person not found")
+
+    sims = session.exec(
+        select(PersonSimilarity)
+        .where(PersonSimilarity.person_id == person_id)
+        .order_by(PersonSimilarity.similarity.desc())
+        .limit(16)
+    ).all()
+
+    result: list[SimilarPerson] = []
+
+    for sim in sims:
+        logger.debug("Other: %s", sim)
+        other = session.get(Person, sim.other_id)
+        if not other:
+            session.exec(
+                delete(PersonSimilarity).where(
+                    PersonSimilarity.other_id == sim.other_id
+                )
+            )
+            continue
+        result.append(
+            SimilarPerson(
+                id=other.id, name=other.name, similarity=sim.similarity
+            )
+        )
+    return result
+
+
+@router.post(
+    "/{person_id}/refresh-similarities",
+    summary="Recompute similarity scores for a person",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def refresh_similarities(
+    person_id: int,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+):
+    if not session.get(Person, person_id):
+        raise HTTPException(404, "Person not found")
+
+    # enqueue the compute in the background
+    background_tasks.add_task(
+        refresh_similarities_for_person, get_session(), person_id
+    )
+    return {"detail": "Similarity refresh started"}

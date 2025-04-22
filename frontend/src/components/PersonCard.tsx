@@ -25,10 +25,9 @@ export default function PersonCard({ person }: { person: Person }) {
           {person.name || 'Unknown'}
         </h4>
 
-        {/* Age & Ethnicity */}
+        {/* Age */}
         <div className="mt-2 text-sm text-gray-400 text-center space-y-1">
           {person.age != null && <div>{person.age} yr{person.age !== 1 ? 's' : ''}</div>}
-          {person.ethnicity && <div>{person.ethnicity}</div>}
         </div>
       </div>
     </Link>

@@ -78,7 +78,6 @@ def get_media(media_id: int, session=Depends(get_session)):
                 "name": p.name,
                 "age": p.age,
                 "gender": p.gender,
-                "ethnicity": p.ethnicity,
                 "profile_face_id": p.profile_face_id,
                 "profile_face": profile,
             }

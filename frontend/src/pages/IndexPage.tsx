@@ -21,7 +21,6 @@ interface Person {
   name?: string
   age?: number
   gender?: string
-  ethnicity?: string
 }
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
@@ -102,10 +101,10 @@ export default function IndexPage() {
       <main className="p-4 space-y-12">
         {/* Newest Videos */}
         <section>
-          <h2 className="text-2xl font-semibold mb-4">Newest Videos</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <h2 className="text-2xl font-semibold mb-4">Newest Content</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-6 gap-4">
             {newest.map(m => (
-              <MediaCard media={m} />
+              <MediaCard key={m.id} media={m} />
             ))}
           </div>
         </section>
@@ -113,9 +112,9 @@ export default function IndexPage() {
         {/* Most Viewed */}
         <section>
           <h2 className="text-2xl font-semibold mb-4">Most Viewed</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-4 lg:grid-cols-6 gap-4">
             {popular.map(m => (
-              <MediaCard media={m} />
+              <MediaCard key={m.id} media={m} />
             ))}
           </div>
         </section>

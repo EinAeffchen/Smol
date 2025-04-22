@@ -21,7 +21,6 @@ export default function FaceCard({
         name?: string
         age?: number
         gender?: string
-        ethnicity?: string
     }) => void
     onDelete: () => void
 }) {
@@ -32,7 +31,6 @@ export default function FaceCard({
         name: "",
         age: "",
         gender: "",
-        ethnicity: "",
     })
 
     // whenever we enter “search” mode and have a query, fetch matches
@@ -63,7 +61,6 @@ export default function FaceCard({
         if (form.name) payload.name = form.name
         if (form.age) payload.age = Number(form.age)
         if (form.gender) payload.gender = form.gender
-        if (form.ethnicity) payload.ethnicity = form.ethnicity
 
         await onCreate(payload)
     }
@@ -155,7 +152,7 @@ export default function FaceCard({
             {/* CREATE NEW */}
             {mode === "new" && (
                 <div className="mt-1 text-xs space-y-1">
-                    {["name", "age", "gender", "ethnicity"].map((field) => (
+                    {["name", "age", "gender"].map((field) => (
                         <input
                             key={field}
                             name={field}

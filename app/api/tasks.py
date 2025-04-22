@@ -1,7 +1,6 @@
 from typing import List
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException, status
 from sqlmodel import Session, select, func
-from sqlalchemy import delete
 import numpy as np
 from datetime import datetime, timezone
 
@@ -10,7 +9,11 @@ from app.models import Media, Face, Person, ProcessingTask
 from app.utils import detect_faces, create_embedding_for_face, process_file
 from app.config import MEDIA_DIR, THUMB_DIR
 from pathlib import Path
-from app.config import VIDEO_SUFFIXES, IMAGE_SUFFIXES
+from app.config import (
+    VIDEO_SUFFIXES,
+    IMAGE_SUFFIXES,
+    FACE_MATCH_COSINE_THRESHOLD,
+)
 from app.utils import logger
 
 
@@ -165,8 +168,6 @@ def _run_person_clustering(task_id: str):
         select(Face).where(Face.embedding != None, Face.person_id == None)
     ).all()
 
-    COSINE_THRESHOLD = 0.6
-
     def cosine_sim(a, b):
         return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
@@ -186,7 +187,7 @@ def _run_person_clustering(task_id: str):
             if not embs:
                 continue
             centroid = np.mean(embs, axis=0)
-            if cosine_sim(centroid, emb) >= COSINE_THRESHOLD:
+            if cosine_sim(centroid, emb) >= FACE_MATCH_COSINE_THRESHOLD:
                 face.person_id = person.id
                 assigned = True
                 break
@@ -290,7 +291,6 @@ def start_scan(
     session: Session = Depends(get_session),
 ):
     # 1) discover all NEW files
-    existing = {m for m in session.exec(select(Media.path)).all()}
     new_files = []
     for media_type in VIDEO_SUFFIXES + IMAGE_SUFFIXES:
         for path in MEDIA_DIR.rglob(f"*{media_type}"):
@@ -337,7 +337,7 @@ def _run_scan(task_id: str, files: list[Path]):
         sess.commit()
 
     task.status = "completed" if task.status != "cancelled" else "cancelled"
-    task.finished_at = datetime.utcnow()
+    task.finished_at = datetime.now(timezone.utc)
     sess.add(task)
     sess.commit()
     sess.close()

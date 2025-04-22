@@ -24,7 +24,6 @@ export interface Person {
   name?: string;
   age?: number;
   gender?: string;
-  ethnicity?: string;
   profile_face_id?: number;
   profile_face?: Face;
 }
@@ -58,4 +57,11 @@ interface Task {
   status: TaskStatus;
   total: number;
   processed: number;
+}
+
+export interface SimilarPerson {
+  id: number;
+  name?: string;
+  similarity: number;
+  thumbnail?: string;
 }

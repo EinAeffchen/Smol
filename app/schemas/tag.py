@@ -8,6 +8,3 @@ class TagRead(SQLModel):
     name: str
     media: list[Media]
     persons: list[PersonRead]
-
-    class Config:
-        orm_mode = True

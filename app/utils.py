@@ -1,3 +1,4 @@
+import logging
 import os
 import time
 from pathlib import Path
@@ -5,24 +6,24 @@ from typing import Dict, List
 
 import cv2
 import ffmpeg
+import numpy as np
 from deepface import DeepFace
 from PIL import Image
-from sqlmodel import select, delete
-import numpy as np
+from sqlmodel import Session, select
+from datetime import datetime, timezone
+
 from app.config import (
-    IMAGE_SUFFIXES,
-    MEDIA_DIR,
-    SMOL_DIR,
-    THUMB_DIR,
-    VIDEO_SUFFIXES,
-    MAX_FRAMES_PER_VIDEO,
-    VIDEO_SAMPLING_FACTOR,
     FACE_RECOGNITION_MIN_CONFIDENCE,
     FACE_RECOGNITION_MIN_FACE_PIXELS,
+    MAX_FRAMES_PER_VIDEO,
+    MEDIA_DIR,
+    THUMB_DIR,
+    VIDEO_SAMPLING_FACTOR,
+    VIDEO_SUFFIXES,
+    MINIMUM_SIMILARITY,
 )
 from app.database import get_session
-from app.models import Face, Media
-import logging
+from app.models import Face, Media, PersonSimilarity, Person
 
 logger = logging.getLogger(__name__)
 
@@ -176,3 +177,55 @@ def create_embedding_for_face(face: Face) -> List[float]:
     if not reps or "embedding" not in reps[0]:
         return []
     return reps[0]["embedding"]
+
+
+def get_person_embedding(
+    session: Session, person_id: int
+) -> np.ndarray | None:
+    embeddings = session.exec(
+        select(Face.embedding).where(
+            Face.person_id == person_id, Face.embedding != None
+        )
+    ).all()
+    if not embeddings:
+        return None
+    arr = np.stack([np.array(e, dtype=np.float32) for e in embeddings])
+    return arr.mean(axis=0)
+
+
+def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+    na, nb = np.linalg.norm(a), np.linalg.norm(b)
+    if na == 0 or nb == 0:
+        return 0.0
+    return float(a.dot(b) / (na * nb))
+
+
+def refresh_similarities_for_person(session: Session, person_id: int) -> None:
+    target = get_person_embedding(session, person_id)
+    if target is None:
+        return
+
+    # load all other person ids
+    other_ids = session.exec(select(Person.id)).all()
+    for oid in other_ids:
+        if oid == person_id:
+            continue
+        emb = get_person_embedding(session, oid)
+        if emb is None:
+            continue
+        sim = cosine_similarity(target, emb)
+        if sim < MINIMUM_SIMILARITY:
+            continue
+        # upsert into PersonSimilarity
+        existing = session.get(PersonSimilarity, (person_id, oid))
+        if existing:
+            existing.similarity = sim
+            existing.calculated_at = datetime.now(timezone.utc)
+            session.add(existing)
+        else:
+            session.add(
+                PersonSimilarity(
+                    person_id=person_id, other_id=oid, similarity=sim
+                )
+            )
+    session.commit()

@@ -39,6 +39,9 @@ class Tag(SQLModel, table=True):
         sa_relationship_kwargs={"lazy": "selectin"},
     )
 
+    class Config:
+        orm_mode = True
+
 
 class Face(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -55,6 +58,9 @@ class Face(SQLModel, table=True):
         back_populates="faces",
         sa_relationship_kwargs={"foreign_keys": "[Face.person_id]"},
     )
+
+    class Config:
+        orm_mode = True
 
 
 class Media(SQLModel, table=True):
@@ -76,13 +82,15 @@ class Media(SQLModel, table=True):
         back_populates="media", link_model=MediaTagLink
     )
 
+    class Config:
+        orm_mode = True
+
 
 class Person(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: Optional[str]
     age: Optional[int]
     gender: Optional[str]
-    ethnicity: Optional[str]
     faces: List["Face"] = Relationship(
         back_populates="person",
         sa_relationship_kwargs={
@@ -105,6 +113,9 @@ class Person(SQLModel, table=True):
         back_populates="persons", link_model=PersonTagLink
     )
 
+    class Config:
+        orm_mode = True
+
 
 class ProcessingTask(SQLModel, table=True):
     id: str = Field(
@@ -117,3 +128,17 @@ class ProcessingTask(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
+
+    class Config:
+        orm_mode = True
+
+
+class PersonSimilarity(SQLModel, table=True):
+    # composite PK: for person → other person
+    person_id: int = Field(foreign_key="person.id", primary_key=True)
+    other_id: int = Field(foreign_key="person.id", primary_key=True)
+    similarity: float
+    calculated_at: datetime = Field(default_factory=datetime.utcnow)
+
+    class Config:
+        orm_mode = True
