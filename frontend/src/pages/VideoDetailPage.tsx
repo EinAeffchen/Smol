@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
 import { Media, Person, Tag, Face, MediaDetail } from '../types'
-import { Header } from '../components/Header'
 import TagAdder from '../components/TagAdder'
 
 
@@ -61,7 +60,6 @@ export default function VideoDetailPage() {
 
     return (
         <div className="bg-background text-text min-h-screen">
-            <Header />
             <header className="flex items-center p-4 space-x-4">
                 <Link to="/" className="text-accent hover:underline">← Back</Link>
                 <h1 className="text-2xl font-semibold">{media.filename}</h1>

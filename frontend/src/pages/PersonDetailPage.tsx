@@ -3,7 +3,6 @@ import React, { useState, useEffect, FormEvent } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import MediaCard from '../components/MediaCard'
 import FaceCard from '../components/FaceCard'
-import { Header } from '../components/Header'
 import { Person, PersonDetail, Tag, SimilarPerson } from '../types'
 import TagAdder from '../components/TagAdder'
 import SimilarPersonCard from '../components/SimilarPersonCard'
@@ -238,8 +237,6 @@ export default function PersonDetailPage() {
 
     return (
         <div className="bg-background text-text min-h-screen">
-            <Header />
-
             {/* === CONTROLS BAR === */}
             <div className="max-w-screen-lg mx-auto px-4 flex items-center space-x-4 py-4">
                 <Link to="/" className="text-accent hover:underline">← Back</Link>

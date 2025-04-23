@@ -21,19 +21,24 @@ export function Header() {
           </Link>
         </div>
 
-        <div className="flex flex-1 items-center justify-between px-6 py-3">
-          <form className="flex-1 max-w-xl" role="search" onSubmit={e => e.preventDefault()}>
+        <div className="flex flex-1 items-center justify-evenly px-6 py-3">
+          <form className="flex-2 max-w-xl" role="search" onSubmit={e => e.preventDefault()}>
             <input
               type="text"
               placeholder="Search by tag, person, duration…"
               className="
-                            w-full bg-gray-800 placeholder-gray-400 text-text
-                            rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent
-                            transition
-                          "
+                w-full bg-gray-800 placeholder-gray-400 text-text
+                rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-accent
+                transition
+                "
             />
           </form>
-
+          <nav className="space-x-4 flex-1">
+            <Link to="/images">Images</Link>
+            <Link to="/videos">Videos</Link>
+            <Link to="/tags">Tags</Link>
+            <Link to="/persons">People</Link>
+          </nav>
           {/* MENU BUTTON */}
           <button
             onClick={() => setOpenPanel(true)}

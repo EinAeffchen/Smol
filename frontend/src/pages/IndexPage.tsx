@@ -1,7 +1,6 @@
 import React, { useState, useEffect, FormEvent } from 'react'
 import MediaCard from '../components/MediaCard'
 import PersonCard from '../components/PersonCard'
-import { Header } from '../components/Header'
 
 // Define the shapes you expect from the API
 interface Media {
@@ -96,8 +95,6 @@ export default function IndexPage() {
 
   return (
     <div className="bg-background text-text min-h-screen">
-      <Header />
-
       <main className="p-4 space-y-12">
         {/* Newest Videos */}
         <section>

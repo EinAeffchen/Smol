@@ -36,14 +36,36 @@ def list_media(
     q = q.offset(skip).limit(limit)
     return session.exec(q).all()
 
+@router.get(
+    "/images", response_model=list[MediaRead], summary="List all images"
+)
+def list_images(session: Session = Depends(get_session)):
+    stmt = (
+        select(Media)
+        .where(Media.duration == None)  # images have no duration
+        .order_by(Media.inserted_at.desc())
+    )
+    return session.exec(stmt).all()
+
+
+@router.get(
+    "/videos", response_model=list[MediaRead], summary="List all videos"
+)
+def list_videos(session: Session = Depends(get_session)):
+    stmt = (
+        select(Media)
+        .where(Media.duration != None)  # videos have a duration
+        .order_by(Media.inserted_at.desc())
+    )
+    return session.exec(stmt).all()
 
 @router.get("/{media_id}")
-def get_media(media_id: int, session: Session=Depends(get_session)):
+def get_media(media_id: int, session: Session = Depends(get_session)):
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(404, "Media not found")
     logger.info("TAGS: %s", media.tags)
-    media.views +=1
+    media.views += 1
     session.add(media)
     safe_commit(session)
     session.refresh(media)
@@ -146,3 +168,5 @@ def read_exif(media_id: int, session=Depends(get_session)):
     if not ex:
         raise HTTPException(404, "No EXIF data")
     return ex
+
+
