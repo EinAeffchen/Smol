@@ -14,9 +14,9 @@ from app.config import (
     IMAGE_SUFFIXES,
     FACE_MATCH_COSINE_THRESHOLD,
 )
-from app.utils import logger
+from app.utils import logger, cosine_similarity
 from app.processor_registry import processors
-
+from app.database import safe_commit
 
 router = APIRouter()
 
@@ -44,7 +44,7 @@ def start_media_processing(
         total=int(total),
     )
     session.add(task)
-    session.commit()
+    safe_commit(session)
     session.refresh(task)
     logger.info("Starting processing!")
     background_tasks.add_task(_run_media_processing, task.id)
@@ -58,7 +58,7 @@ def _run_media_processing(task_id: str):
     task.status = "running"
     task.started_at = datetime.now(timezone.utc)
     session.add(task)
-    session.commit()
+    safe_commit(session)
 
     # iterate unprocessed media
     medias = session.exec(
@@ -83,7 +83,7 @@ def _run_media_processing(task_id: str):
                 bbox=det["bbox"],
             )
             session.add(face)
-        session.commit()
+        safe_commit(session)
 
         # 2) compute embeddings immediately
         query = select(Face).where(
@@ -97,13 +97,14 @@ def _run_media_processing(task_id: str):
                 session.add(face)
             except ValueError:
                 logger.exception(
-                    f"[process_media] embedding failed for face {face.id}. Removing file."
+                    f"[process_media] embedding failed for face {face.id}."
+                    " Removing file."
                 )
                 thumb_file: Path = THUMB_DIR / face.thumbnail_path
                 if thumb_file.exists():
                     thumb_file.unlink()
                 session.delete(face)
-        session.commit()
+        safe_commit(session)
 
         # 3) mark media done
         media.faces_extracted = True
@@ -113,7 +114,7 @@ def _run_media_processing(task_id: str):
         # 4) update task progress
         task.processed += 1
         session.add(task)
-        session.commit()
+        safe_commit(session)
 
         for proc in processors:
             logger.info("Running Processor: %s", proc.name)
@@ -128,7 +129,7 @@ def _run_media_processing(task_id: str):
     task.status = "cancelled" if task.status == "cancelled" else "completed"
     task.finished_at = datetime.now(timezone.utc)
     session.add(task)
-    session.commit()
+    safe_commit(session)
     session.close()
 
 
@@ -156,7 +157,7 @@ def start_person_clustering(
         total=int(total),
     )
     session.add(task)
-    session.commit()
+    safe_commit(session)
     session.refresh(task)
 
     background_tasks.add_task(_run_person_clustering, task.id)
@@ -179,9 +180,6 @@ def _run_person_clustering(task_id: str):
         select(Face).where(Face.embedding != None, Face.person_id == None)
     ).all()
 
-    def cosine_sim(a, b):
-        return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
-
     for face in faces:
         # check cancellation
         task = sess.get(ProcessingTask, task_id)
@@ -198,7 +196,7 @@ def _run_person_clustering(task_id: str):
             if not embs:
                 continue
             centroid = np.mean(embs, axis=0)
-            if cosine_sim(centroid, emb) >= FACE_MATCH_COSINE_THRESHOLD:
+            if cosine_similarity(centroid, emb) >= FACE_MATCH_COSINE_THRESHOLD:
                 face.person_id = person.id
                 assigned = True
                 break
@@ -261,7 +259,7 @@ def cancel_task(
     task.status = "cancelled"
     task.finished_at = datetime.now(timezone.utc)
     session.add(task)
-    session.commit()
+    safe_commit(session)
     return task
 
 
@@ -318,7 +316,7 @@ def start_scan(
     # 2) make a ProcessingTask
     task = ProcessingTask(task_type="scan", total=len(new_files), processed=0)
     session.add(task)
-    session.commit()
+    safe_commit(session)
     session.refresh(task)
 
     # 3) enqueue the runner
@@ -332,7 +330,12 @@ def start_scan(
 @router.post("/reset/processing", summary="Resets media processing status")
 def reset_processing(session: Session = Depends(get_session)):
     session.exec(update(Media).values(faces_extracted=False))
-    session.commit()
+    for face in session.exec(select(Face)).all():
+        path = Path(face.thumbnail_path)
+        if path.exists():
+            path.unlink()
+        session.exec(delete(Face).where(Face.id==face.id))
+    safe_commit(session)
     return "OK"
 
 
@@ -342,7 +345,7 @@ def reset_clustering(session: Session = Depends(get_session)):
     session.exec(delete(PersonSimilarity))
     session.exec(update(Face).values(person_id=None))
     session.exec(delete(Person))
-    session.commit()
+    safe_commit(session)
     return "OK"
 
 

@@ -1,5 +1,4 @@
-from typing import Any, List, Optional
-
+from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete
 from sqlalchemy.orm import selectinload
@@ -10,16 +9,17 @@ from app.database import get_session
 from app.models import Face, Media, MediaTagLink, Tag, ExifData
 from app.schemas.media import MediaRead
 from app.utils import logger
+from app.database import safe_commit
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[MediaRead])
+@router.get("/", response_model=list[MediaRead])
 def list_media(
-    tags: Optional[List[str]] = Query(
+    tags: list[str] | None = Query(
         None, description="Filter by tag name(s), comma-separated"
     ),
-    person_id: Optional[int] = Query(
+    person_id: int | None = Query(
         None, description="Filter by detected person ID"
     ),
     skip: int = Query(0, ge=0),
@@ -38,22 +38,26 @@ def list_media(
 
 
 @router.get("/{media_id}")
-def get_media(media_id: int, session=Depends(get_session)):
+def get_media(media_id: int, session: Session=Depends(get_session)):
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(404, "Media not found")
     logger.info("TAGS: %s", media.tags)
+    media.views +=1
+    session.add(media)
+    safe_commit(session)
+    session.refresh(media)
     # 1) load the media and its faces, each with its person
     q = (
         select(Face)
         .where(Face.media_id == media_id)
         .options(selectinload(Face.person))
     )
-    faces: List[Face] = session.exec(q).all()
+    faces: list[Face] = session.exec(q).all()
 
     # 2) collect unique persons
     seen = set()
-    persons_data: List[dict[str, Any]] = []
+    persons_data: list[dict[str, Any]] = []
     for f in faces:
         p = f.person
         if not p or p.id in seen:
@@ -131,7 +135,7 @@ def delete_media_record(
     # 3) delete the Media row itself
     session.delete(media)
 
-    session.commit()
+    safe_commit(session)
 
 
 @router.get("/exif/{media_id}", response_model=ExifData)

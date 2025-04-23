@@ -1,8 +1,8 @@
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List
 
 import cv2
 import ffmpeg
@@ -10,20 +10,19 @@ import numpy as np
 from deepface import DeepFace
 from PIL import Image
 from sqlmodel import Session, select
-from datetime import datetime, timezone
 
 from app.config import (
     FACE_RECOGNITION_MIN_CONFIDENCE,
     FACE_RECOGNITION_MIN_FACE_PIXELS,
     MAX_FRAMES_PER_VIDEO,
     MEDIA_DIR,
+    MINIMUM_SIMILARITY,
     THUMB_DIR,
     VIDEO_SAMPLING_FACTOR,
     VIDEO_SUFFIXES,
-    MINIMUM_SIMILARITY,
 )
-from app.database import get_session
-from app.models import Face, Media, PersonSimilarity, Person
+from app.database import get_session, safe_commit
+from app.models import Face, Media, Person, PersonSimilarity
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ def detect_faces(
     enforce_detection: bool = False,
     align: bool = True,
     expand_percentage: int = 0,
-) -> List[Dict]:
+) -> list[dict]:
     path = Path(media_path)
     stem = path.stem
     ext = path.suffix.lower()
@@ -140,7 +139,7 @@ def process_file(filepath: Path):
         embeddings_created=False,
     )
     session.add(media)
-    session.commit()
+    safe_commit(session)
     session.refresh(media)
 
     # generate thumbnails
@@ -158,7 +157,7 @@ def process_file(filepath: Path):
         img.save(thumb_path, format="JPEG")
 
 
-def create_embedding_for_face(face: Face) -> List[float]:
+def create_embedding_for_face(face: Face) -> list[float]:
     """
     Load the thumbnail from THUMB_DIR using face.thumbnail_path,
     then call DeepFace.represent() to get a 1×N embedding.
@@ -169,7 +168,7 @@ def create_embedding_for_face(face: Face) -> List[float]:
 
     reps = DeepFace.represent(
         img_path=str(thumb_file),
-        model_name="Facenet",
+        model_name="Facenet512",
         detector_backend="retinaface",
         enforce_detection=True,
     )
@@ -200,32 +199,31 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     return float(a.dot(b) / (na * nb))
 
 
-def refresh_similarities_for_person(session: Session, person_id: int) -> None:
-    target = get_person_embedding(session, person_id)
-    if target is None:
-        return
+def refresh_similarities_for_person(person_id: int) -> None:
+    with get_session() as session:
+        target = get_person_embedding(session, person_id)
+        if target is None:
+            return
 
-    # load all other person ids
-    other_ids = session.exec(select(Person.id)).all()
-    for oid in other_ids:
-        if oid == person_id:
-            continue
-        emb = get_person_embedding(session, oid)
-        if emb is None:
-            continue
-        sim = cosine_similarity(target, emb)
-        if sim < MINIMUM_SIMILARITY:
-            continue
-        # upsert into PersonSimilarity
-        existing = session.get(PersonSimilarity, (person_id, oid))
-        if existing:
-            existing.similarity = sim
-            existing.calculated_at = datetime.now(timezone.utc)
-            session.add(existing)
-        else:
-            session.add(
-                PersonSimilarity(
-                    person_id=person_id, other_id=oid, similarity=sim
+        # load all other person ids
+        other_ids = session.exec(select(Person.id)).all()
+        for oid in other_ids:
+            if oid == person_id:
+                continue
+            emb = get_person_embedding(session, oid)
+            if emb is None:
+                continue
+            sim = cosine_similarity(target, emb)
+            # upsert into PersonSimilarity
+            existing = session.get(PersonSimilarity, (person_id, oid))
+            if existing:
+                existing.similarity = sim
+                existing.calculated_at = datetime.now(timezone.utc)
+                session.add(existing)
+            else:
+                session.add(
+                    PersonSimilarity(
+                        person_id=person_id, other_id=oid, similarity=sim
+                    )
                 )
-            )
-    session.commit()
+        safe_commit(session)

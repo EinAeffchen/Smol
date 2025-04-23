@@ -24,6 +24,7 @@ from app.schemas.person import (
     SimilarPerson,
 )
 from app.utils import logger, refresh_similarities_for_person
+from app.database import safe_commit
 
 router = APIRouter()
 
@@ -60,6 +61,13 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
+    
+    if person.profile_face_id and not person.profile_face:
+        person.profile_face_id = None
+        session.add(person)
+        session.commit()
+        session.refresh(person)
+        
     q = (
         select(Face)
         .where(Face.person_id == person.id)
@@ -133,7 +141,7 @@ def update_person(
     for key, val in updates.items():
         setattr(person, key, val)
     session.add(person)
-    session.commit()
+    safe_commit(session)
     session.refresh(person)
     return person
 
@@ -149,7 +157,7 @@ def set_profile_face(
         raise HTTPException(404, "Person not found")
     person.profile_face_id = face_id
     session.add(person)
-    session.commit()
+    safe_commit(session)
     session.refresh(person)
     return person
 
@@ -183,7 +191,7 @@ def merge_persons(
 
     # Delete the now-empty source person
     session.delete(source)
-    session.commit()
+    safe_commit(session)
 
     # Return the updated target person
     session.refresh(target)
@@ -219,7 +227,7 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
 
     # 3) delete the Person record itself
     session.delete(person)
-    session.commit()
+    safe_commit(session)
 
 
 @router.get(
@@ -277,6 +285,6 @@ def refresh_similarities(
 
     # enqueue the compute in the background
     background_tasks.add_task(
-        refresh_similarities_for_person, get_session(), person_id
+        refresh_similarities_for_person, person_id
     )
     return {"detail": "Similarity refresh started"}

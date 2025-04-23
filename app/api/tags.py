@@ -1,4 +1,3 @@
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlmodel import Session, select
 from sqlalchemy import delete
@@ -6,11 +5,12 @@ from sqlalchemy import delete
 from app.database import get_session
 from app.models import Tag, Media, Person, MediaTagLink, PersonTagLink
 from app.schemas.tag import TagRead
+from app.database import safe_commit
 
 router = APIRouter()
 
 
-@router.get("/", response_model=List[Tag])
+@router.get("/", response_model=list[Tag])
 def list_tags(session: Session = Depends(get_session)):
     return session.exec(select(Tag)).all()
 
@@ -23,7 +23,7 @@ def create_tag(
 ):
     tag = Tag(name=name)
     session.add(tag)
-    session.commit()
+    safe_commit(session)
     session.refresh(tag)
     return tag
 
@@ -51,7 +51,7 @@ def add_tag_to_media(
         raise HTTPException(404, "Tag not found")
     link = MediaTagLink(media_id=media_id, tag_id=tag_id)
     session.add(link)
-    session.commit()
+    safe_commit(session)
 
 
 @router.delete(
@@ -65,7 +65,7 @@ def remove_tag_from_media(
             MediaTagLink.media_id == media_id, MediaTagLink.tag_id == tag_id
         )
     )
-    session.commit()
+    safe_commit(session)
 
 
 # Assign / remove on Person
@@ -81,7 +81,7 @@ def add_tag_to_person(
         raise HTTPException(404, "Tag not found")
     link = PersonTagLink(person_id=person_id, tag_id=tag_id)
     session.add(link)
-    session.commit()
+    safe_commit(session)
 
 
 @router.delete(
@@ -96,4 +96,4 @@ def remove_tag_from_person(
             PersonTagLink.tag_id == tag_id,
         )
     )
-    session.commit()
+    safe_commit(session)

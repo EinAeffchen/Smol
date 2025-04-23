@@ -1,13 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
-from sqlmodel import Session, select, delete
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from pydantic import BaseModel
-from fastapi.encoders import jsonable_encoder
-from app.database import get_session
-from app.models import Face, Person, PersonTagLink, PersonSimilarity
-from app.schemas.face import FaceAssign
+from sqlmodel import Session, delete, select
+
 from app.config import THUMB_DIR
+from app.database import get_session, safe_commit
+from app.models import Face, Person, PersonSimilarity, PersonTagLink
+from app.schemas.face import FaceAssign
 from app.utils import logger
-from fastapi.responses import JSONResponse
 
 router = APIRouter()
 
@@ -33,7 +32,7 @@ def assign_face(
     old_person_id = face.person_id
     face.person_id = person.id
     session.add(face)
-    session.commit()
+    safe_commit(session)
 
     if old_person_id is not None and old_person_id != body.person_id:
         remaining = session.exec(
@@ -60,7 +59,7 @@ def assign_face(
             person = session.get(Person, old_person_id)
             if person:
                 session.delete(person)
-            session.commit()
+            safe_commit(session)
     session.refresh(face)
     return face
 
@@ -81,7 +80,7 @@ def delete_face(face_id: int, session: Session = Depends(get_session)):
         thumb.unlink()
 
     session.delete(face)
-    session.commit()
+    safe_commit(session)
 
 
 class FaceCreatePerson(BaseModel):
@@ -113,13 +112,13 @@ def create_person_from_face(
         profile_face_id=face.id,
     )
     session.add(person)
-    session.commit()
+    safe_commit(session)
     session.refresh(person)
 
     # 2) Assign the face
     face.person_id = person.id
     session.add(face)
-    session.commit()
+    safe_commit(session)
     logger.debug("Person.id: %s", person.id)
     logger.debug(type(person))
     return person

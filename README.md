@@ -40,6 +40,12 @@ A **self‑contained**, **volume‑mounted** media server with face detection, r
 
 ## ⚙️ Installation & Setup
 
+
+### Prerequisites
+* Install [npm](https://docs.npmjs.com/cli/v9/configuring-npm/install?v=trues) 
+
+
+
 1. Clone the repo
     ```sh
     git clone [git@github.com:EinAeffchen/Smol.git](https://github.com/EinAeffchen/Smol.git)

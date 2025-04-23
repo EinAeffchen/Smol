@@ -6,6 +6,7 @@ from sqlmodel import select
 from app.processors.base import MediaProcessor
 from app.models import Media, ExifData
 from app.config import MEDIA_DIR
+from app.database import safe_commit
 
 
 def _decode_bytes(val: bytes) -> str:
@@ -99,7 +100,7 @@ class ExifProcessor(MediaProcessor):
                 lon=lon,
             )
             session.add(rec)
-            session.commit()
+            safe_commit(session)
 
         except Exception:
             # on any decode error, skip silently
