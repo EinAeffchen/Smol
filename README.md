@@ -1,5 +1,5 @@
 # Smol Media Platform
-
+![logo](frontend/public/logo.png)
 [![Python](https://img.shields.io/badge/Python-%3E%3D3.10-blue)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-%5E0.95-lightgrey)](https://fastapi.tiangolo.com)
 [![React](https://img.shields.io/badge/React-%5E18.0-61DAFB)](https://reactjs.org)
