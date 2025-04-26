@@ -16,10 +16,18 @@ export default function TagCard({ tag }: { tag: Tag }) {
             className="w-12 h-12 object-cover rounded"
         />
     ))
+    const profiles = tag.persons.slice(0, 4).map(p => (
+        <img
+            key={p.id}
+            src={`/thumbnails/${p.profile_face?.thumbnail_path}`}
+            alt=""
+            className="w-12 h-12 object-cover rounded"
+        />
+    ))
 
     return (
         <Link
-            to={`/tags/${tag.id}`}
+            to={`/tag/${tag.id}`}
             className="
         block bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition
       "
@@ -31,6 +39,7 @@ export default function TagCard({ tag }: { tag: Tag }) {
             </div>
             <div className="flex -space-x-1">
                 {thumbs}
+                {profiles}
                 {countMedia > 4 && (
                     <div className="w-12 h-12 flex items-center justify-center bg-gray-700 rounded text-xs">
                         +{countMedia - 4}

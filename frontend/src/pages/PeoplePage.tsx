@@ -1,22 +1,17 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback } from 'react'
 import PersonCard from '../components/PersonCard'
+import { useInfinite } from '../hooks/useInfinite'
 import { Person } from '../types'
 
 const API = import.meta.env.VITE_API_BASE_URL
 
 export default function VideosPage() {
-    const [persons, setPersons] = useState<Person[]>([])
-    const [loading, setLoading] = useState(true)
+    const fetchPeople = useCallback((skip: number, limit: number) =>
+        fetch(`${API}/persons/?skip=${skip}&limit=${limit}`)
+            .then(r => r.json() as Promise<Person[]>), [API])
+    const { items: persons, hasMore, loading, loaderRef } = useInfinite<Person>(fetchPeople, 12)
 
-    useEffect(() => {
-        fetch(`${API}/persons/`)
-            .then(r => r.json())
-            .then(setPersons)
-            .catch(console.error)
-            .finally(() => setLoading(false))
-    }, [])
-
-    if (loading) return <div className="p-4">Loading peiple...</div>
+    if (loading) return <div className="p-4">Loading people...</div>
 
     return (
         <div className="max-w-screen-lg mx-auto px-4 py-8">
@@ -26,6 +21,19 @@ export default function VideosPage() {
                     <PersonCard key={person.id} person={person} />
                 ))}
             </div>
+            {loading && (
+                <div className="py-4 text-center text-gray-500">
+                    Loading…
+                </div>
+            )}
+            {!loading && hasMore && (
+                <div
+                    ref={loaderRef}
+                    className="py-4 text-center text-gray-500"
+                >
+                    Scroll to load more…
+                </div>
+            )}
         </div>
     )
 }

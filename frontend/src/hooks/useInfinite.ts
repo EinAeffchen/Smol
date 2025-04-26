@@ -8,17 +8,20 @@ export function useInfinite<T>(
   const [items, setItems] = useState<T[]>([]);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [loading, setLoading] = useState(false);
   const loaderRef = useRef<HTMLDivElement>(null);
 
   // when `page` changes, fetch exactly that page
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
     const skip = page * limit;
 
     fetchPage(skip, limit).then((newItems) => {
       if (cancelled) return;
       setItems((prev) => (page === 0 ? newItems : [...prev, ...newItems]));
       setHasMore(newItems.length === limit);
+      setLoading(false);
     });
 
     return () => {
@@ -28,7 +31,7 @@ export function useInfinite<T>(
 
   // observe the loader element once (or whenever hasMore flips)
   useEffect(() => {
-    if (!hasMore) return;
+    if (!hasMore || loading) return;
     const el = loaderRef.current;
     if (!el) return;
 
@@ -36,7 +39,8 @@ export function useInfinite<T>(
       (entries) => {
         if (entries[0].isIntersecting) {
           // advance to next page exactly once per intersection
-          setPage((p) => p + 1);
+          obs.disconnect();
+          setPage((current) => current + 1);
         }
       },
       { rootMargin: "200px" }
@@ -46,7 +50,7 @@ export function useInfinite<T>(
     return () => {
       obs.disconnect();
     };
-  }, [hasMore]);
+  }, [hasMore, loading]);
 
-  return { items, hasMore, loaderRef };
+  return { items, hasMore, loading, loaderRef };
 }

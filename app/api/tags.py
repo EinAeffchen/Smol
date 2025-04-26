@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlmodel import Session, select
 from sqlalchemy import delete
+from sqlalchemy.orm import selectinload
 
 from app.database import get_session
 from app.models import Tag, Media, Person, MediaTagLink, PersonTagLink
@@ -10,9 +11,13 @@ from app.database import safe_commit
 router = APIRouter()
 
 
-@router.get("/", response_model=list[Tag])
-def list_tags(session: Session = Depends(get_session)):
-    return session.exec(select(Tag)).all()
+@router.get("/", response_model=list[TagRead])
+def list_tags(
+    skip: int = 0, limit: int = 50, session: Session = Depends(get_session)
+):
+    return session.exec(
+        select(Tag).options(selectinload(Tag.media)).offset(skip).limit(limit)
+    ).all()
 
 
 @router.post("/", response_model=Tag, status_code=status.HTTP_201_CREATED)

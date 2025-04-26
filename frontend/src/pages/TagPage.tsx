@@ -1,5 +1,4 @@
-// src/pages/TagsPage.tsx
-import React from 'react'
+import React, { useCallback } from 'react'
 import TagCard from '../components/TagCard'
 import { useInfinite } from '../hooks/useInfinite'
 import { Tag } from '../types'
@@ -7,11 +6,10 @@ import { Tag } from '../types'
 const API = import.meta.env.VITE_API_BASE_URL
 
 export default function TagsPage() {
-  const fetchTags = (skip: number, limit: number) =>
-    fetch(`${API}/tags?skip=${skip}&limit=${limit}`)
-      .then(r => r.json() as Promise<Tag[]>)
-
-  const { items: tags, hasMore, loader } = useInfinite<Tag>(fetchTags, 30)
+  const fetchTags = useCallback((skip: number, limit: number) =>
+    fetch(`${API}/tags/?skip=${skip}&limit=${limit}`)
+      .then(r => r.json() as Promise<Tag[]>), [API])
+  const { items: tags, hasMore, loading, loaderRef } = useInfinite<Tag>(fetchTags, 20)
 
   return (
     <div className="max-w-screen-lg mx-auto px-4 py-8">
@@ -19,9 +17,17 @@ export default function TagsPage() {
       <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-6">
         {tags.map(tag => <TagCard key={tag.id} tag={tag} />)}
       </div>
-      {hasMore && (
-        <div ref={loader} className="py-8 text-center text-gray-500">
-          Loading more tags…
+      {loading && (
+        <div className="py-4 text-center text-gray-500">
+          Loading…
+        </div>
+      )}
+      {!loading && hasMore && (
+        <div
+          ref={loaderRef}
+          className="py-4 text-center text-gray-500"
+        >
+          Scroll to load more…
         </div>
       )}
     </div>

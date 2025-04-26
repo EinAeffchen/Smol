@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
-import { Media, Person, Tag, Face, MediaDetail } from '../types'
+import { Media, Person, Tag, MediaDetail } from '../types'
 import TagAdder from '../components/TagAdder'
 
 
@@ -14,8 +14,7 @@ export default function VideoDetailPage() {
     const [matchedPersons, setMatchedPersons] = useState<Person[]>([])
 
     const [showExif, setShowExif] = useState(false)
-    const [exif, setExif] = useState<any>(null)
-    const [loadingExif, setLoadingExif] = useState(false)
+    const [exif, setExif] = useState<Record<string, any> | null | undefined>(undefined)
 
     useEffect(() => {
         if (!id) return
@@ -28,15 +27,14 @@ export default function VideoDetailPage() {
     }, [id])
 
     useEffect(() => {
-        if (showExif && exif === null && !loadingExif) {
-            setLoadingExif(true)
-            fetch(`${API}/media/${id}/processors/exif`)
-                .then(r => r.ok ? r.json() : null)
-                .then(data => setExif(data))
-                .catch(() => setExif({}))
-                .finally(() => setLoadingExif(false))
+        if (showExif && exif === undefined) {
+            fetch(`${API}/api/media/${id}/processors/exif`)
+                .then(r => (r.ok ? r.json() : null))
+                .then(body => setExif(body))       // body is object or null
+                .catch(() => setExif(null))
         }
-    }, [showExif])
+    }, [showExif, id])
+
 
     if (!media) return <div className="p-4">Loading…</div>
 
@@ -97,11 +95,58 @@ export default function VideoDetailPage() {
 
             <main className="p-4 space-y-8">
                 {/* Video Player */}
-                <video
-                    controls
-                    className="w-full max-h-[60vh] rounded-lg bg-black mx-auto"
-                    src={`/originals/${media.path}`}
-                />
+                <figure
+                    className="relative mx-auto max-w-xl"
+                    onMouseEnter={() => setShowExif(true)}
+                    onMouseLeave={() => setShowExif(false)}
+                >
+                    <video
+                        controls
+                        className="w-full max-h-[60vh] rounded-lg bg-black mx-auto"
+                        src={`/originals/${media.path}`}
+                    />
+                    {/* only render overlay when showExif===true */}
+                    {showExif && (
+                        <div className="absolute inset-0 pointer-events-none transition-opacity opacity-100">
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white p-4 max-h-1/3 overflow-auto pointer-events-auto">
+                                {
+                                    // 2.1 still loading?
+                                    exif === undefined ? (
+                                        <p>Loading EXIF…</p>
+                                    ) : (
+                                        <>
+                                            {
+                                                // 2.2 we got an object → render fields
+                                                exif && typeof exif === 'object' ? (
+                                                    <>
+                                                        {exif.make && <p><strong>Camera:</strong> {exif.make} {exif.model}</p>}
+                                                        {exif.timestamp && <p><strong>Shot:</strong> {new Date(exif.timestamp).toLocaleString()}</p>}
+                                                        {exif.iso && <p><strong>ISO:</strong> {exif.iso}</p>}
+                                                        {exif.exposure_time && <p><strong>Shutter:</strong> {exif.exposure_time}s</p>}
+                                                        {exif.aperture && <p><strong>Aperture:</strong> {exif.aperture}</p>}
+                                                        {exif.focal_length && <p><strong>Focal:</strong> {exif.focal_length} mm</p>}
+
+                                                        {exif.lat != null && exif.lon != null && (
+                                                            <Link
+                                                                to={`/map?focus=${media.id}`}
+                                                                className="mt-2 inline-block text-blue-300 hover:underline pointer-events-auto"
+                                                            >
+                                                                View on map 📍
+                                                            </Link>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    // 2.3 exif===null or non-object → no data
+                                                    <p>No EXIF data available.</p>
+                                                )
+                                            }
+                                        </>
+                                    )
+                                }
+                            </div>
+                        </div>
+                    )}
+                </figure>
                 {/* IMAGE  INFO ICON */}
                 <div className="relative inline-block">
                     <img
