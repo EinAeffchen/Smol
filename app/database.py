@@ -1,14 +1,19 @@
-from sqlmodel import SQLModel, create_engine, Session
-from sqlalchemy.pool import StaticPool
-from app.config import DATABASE_URL
-from sqlalchemy.exc import OperationalError
 import time
+
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, SQLModel, create_engine
+from contextlib import contextmanager
+from app.config import DATABASE_URL
 
 engine = create_engine(
     DATABASE_URL,
     echo=False,
     connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
+    # poolclass=StaticPool,
+    pool_size=5,
+    max_overflow=10,
 )
 
 
@@ -26,11 +31,12 @@ def safe_commit(session, retries=3, delay=0.5):
 
 
 def init_db():
-    from app.models import Media, Person, Face, Tag, MediaTagLink
+    from app.models import Face, Media, MediaTagLink, Person, Tag
 
     print("Using DATABASE_URL:", engine.url)
     SQLModel.metadata.create_all(engine)
 
 
 def get_session():
-    return Session(engine)
+    with Session(engine) as session:
+        yield session

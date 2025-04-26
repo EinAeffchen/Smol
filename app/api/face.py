@@ -29,37 +29,13 @@ def assign_face(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    old_person_id = face.person_id
+    old_person = face.person
     face.person_id = person.id
     session.add(face)
     safe_commit(session)
 
-    if old_person_id is not None and old_person_id != body.person_id:
-        remaining = session.exec(
-            select(Face).where(Face.person_id == old_person_id)
-        ).all()
-        if not remaining:
-            # delete any tag links
-            session.exec(
-                delete(PersonTagLink).where(
-                    PersonTagLink.person_id == old_person_id
-                )
-            )
-            session.exec(
-                delete(PersonSimilarity).where(
-                    PersonSimilarity.person_id == old_person_id
-                )
-            )
-            session.exec(
-                delete(PersonSimilarity).where(
-                    PersonSimilarity.other_id == old_person_id
-                )
-            )
-            # delete the person row
-            person = session.get(Person, old_person_id)
-            if person:
-                session.delete(person)
-            safe_commit(session)
+    if old_person.id != body.person_id:
+        old_person_can_be_deleted(session, old_person)
     session.refresh(face)
     return face
 
@@ -78,8 +54,8 @@ def delete_face(face_id: int, session: Session = Depends(get_session)):
     thumb = THUMB_DIR / face.thumbnail_path
     if thumb.exists():
         thumb.unlink()
-
     session.delete(face)
+    old_person_can_be_deleted(session, face.person)
     safe_commit(session)
 
 
@@ -103,7 +79,7 @@ def create_person_from_face(
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
-
+    previous_person = face.person
     # 1) Create the Person
     person = Person(
         name=body.name,
@@ -119,6 +95,28 @@ def create_person_from_face(
     face.person_id = person.id
     session.add(face)
     safe_commit(session)
-    logger.debug("Person.id: %s", person.id)
-    logger.debug(type(person))
+    if previous_person.id != person.id:
+        old_person_can_be_deleted(session, previous_person)
     return person
+
+
+def old_person_can_be_deleted(session, person: Person):
+    if person is None:
+        return
+    remaining = session.exec(
+        select(Face).where(Face.person_id == person.id)
+    ).all()
+    if remaining:
+        return
+    # delete any tag links
+    session.exec(
+        delete(PersonTagLink).where(PersonTagLink.person_id == person.id)
+    )
+    session.exec(
+        delete(PersonSimilarity).where(PersonSimilarity.person_id == person.id)
+    )
+    session.exec(
+        delete(PersonSimilarity).where(PersonSimilarity.other_id == person.id)
+    )
+    session.delete(person)
+    safe_commit(session)

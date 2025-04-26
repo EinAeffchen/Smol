@@ -3,6 +3,7 @@ from pathlib import Path
 
 MEDIA_DIR = Path(os.getenv("MEDIA_DIR", "./media"))
 assert MEDIA_DIR.is_dir()
+print(MEDIA_DIR.absolute())
 
 # Internal storage
 SMOL_DIR = MEDIA_DIR / ".smol"

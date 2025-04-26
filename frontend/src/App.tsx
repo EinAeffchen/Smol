@@ -8,6 +8,9 @@ import { Layout } from './components/Layout'
 import TagDetailPage from './pages/TagDetailPage';
 import ImagesPage from './pages/ImagesPage'
 import VideosPage from './pages/VideosPage'
+import PeoplePage from './pages/PeoplePage'
+import TagsPage from './pages/TagPage';
+import MapPage from './pages/MapPage';
 
 export default function App() {
   return (
@@ -17,7 +20,10 @@ export default function App() {
           <Route index element={<IndexPage />} />
           <Route path="/video/:id" element={<VideoDetailPage />} />
           <Route path="/images" element={<ImagesPage />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/tags" element={<TagsPage />} />
           <Route path="/videos" element={<VideosPage />} />
+          <Route path="/people" element={<PeoplePage />} />
           <Route path="/image/:id" element={<ImageDetailPage />} />
           <Route path="/person/:id" element={<PersonDetailPage />} />
           <Route path="/tag/:id" element={<TagDetailPage />} />

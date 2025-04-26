@@ -11,6 +11,9 @@ export default function ImageDetailPage() {
     const [media, setMedia] = useState<Media | null>(null)
     const [matchedPersons, setMatchedPersons] = useState<Person[]>([])
 
+    const [showExif, setShowExif] = useState(false)
+    const [exif, setExif] = useState<Record<string, any> | null | undefined>(undefined)
+
     useEffect(() => {
         if (!id) return
             ; (async () => {
@@ -21,9 +24,20 @@ export default function ImageDetailPage() {
             })().catch(console.error)
     }, [id])
 
+    useEffect(() => {
+        if (showExif && exif === undefined) {
+            fetch(`${API}/api/media/${id}/processors/exif`)
+                .then(r => (r.ok ? r.json() : null))
+                .then(body => setExif(body))       // body is object or null
+                .catch(() => setExif(null))
+        }
+    }, [showExif, id])
+
+
     if (!media) return <div className="p-4">Loading…</div>
 
     return (
+
         <div className="bg-background text-text min-h-screen">
             <header className="flex items-center p-4 space-x-4">
                 <Link to="/" className="text-accent hover:underline">← Back</Link>
@@ -31,22 +45,68 @@ export default function ImageDetailPage() {
             </header>
 
             <main className="p-4 space-y-8">
-                {/* Photo Display */}
-                <figure className="mx-auto max-w-xl">
+                {/* IMAGE  INFO ICON */}
+                <figure
+                    className="relative mx-auto max-w-xl"
+                    onMouseEnter={() => setShowExif(true)}
+                    onMouseLeave={() => setShowExif(false)}
+                >
                     <img
                         src={`/originals/${media.path}`}
                         alt={media.filename}
-                        className="w-full rounded-lg shadow-lg"
+                        className="w-full rounded shadow-lg"
                     />
-                </figure>
+                    {/* only render overlay when showExif===true */}
+                    {showExif && (
+                        <div className="absolute inset-0 pointer-events-none transition-opacity opacity-100">
+                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white p-4 max-h-1/3 overflow-auto pointer-events-auto">
+                                {
+                                    // 2.1 still loading?
+                                    exif === undefined ? (
+                                        <p>Loading EXIF…</p>
+                                    ) : (
+                                        <>
+                                            {
+                                                // 2.2 we got an object → render fields
+                                                exif && typeof exif === 'object' ? (
+                                                    <>
+                                                        {exif.make && <p><strong>Camera:</strong> {exif.make} {exif.model}</p>}
+                                                        {exif.timestamp && <p><strong>Shot:</strong> {new Date(exif.timestamp).toLocaleString()}</p>}
+                                                        {exif.iso && <p><strong>ISO:</strong> {exif.iso}</p>}
+                                                        {exif.exposure_time && <p><strong>Shutter:</strong> {exif.exposure_time}s</p>}
+                                                        {exif.aperture && <p><strong>Aperture:</strong> {exif.aperture}</p>}
+                                                        {exif.focal_length && <p><strong>Focal:</strong> {exif.focal_length} mm</p>}
 
+                                                        {exif.lat != null && exif.lon != null && (
+                                                            <Link
+                                                                to={`/map?focus=${media.id}`}
+                                                                className="mt-2 inline-block text-blue-300 hover:underline pointer-events-auto"
+                                                            >
+                                                                View on map 📍
+                                                            </Link>
+                                                        )}
+                                                    </>
+                                                ) : (
+                                                    // 2.3 exif===null or non-object → no data
+                                                    <p>No EXIF data available.</p>
+                                                )
+                                            }
+                                        </>
+                                    )
+                                }
+                            </div>
+                        </div>
+                    )}
+                </figure>
                 {/* Detected Persons */}
                 <section>
-                    <h2>Detected Persons</h2>
-                    <div className="flex gap-4">
-                        {(matchedPersons ?? []).map(p => (
-                            <PersonCard person={p} />
-                        ))}
+                    <h3 className="text-lg font-semibold mb-2">Detected Persons</h3>
+                    <div className="max-w-full overflow-x-auto py-2">
+                        <div className="inline-flex space-x-4">
+                            {(matchedPersons ?? []).map(p => (
+                                <PersonCard person={p} />
+                            ))}
+                        </div>
                     </div>
                 </section>
                 {/* Add tag to media */}
@@ -94,6 +154,6 @@ export default function ImageDetailPage() {
                     </div>
                 </section>
             </main>
-        </div>
+        </div >
     )
 }

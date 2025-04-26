@@ -1,5 +1,10 @@
 {
   "devDependencies": {
-    "@tailwindcss/aspect-ratio": "^0.4.2"
+    "@tailwindcss/aspect-ratio": "^0.4.2",
+    "@types/leaflet": "^1.9.17"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^4.2.1"
   }
 }

@@ -37,7 +37,8 @@ export function Header() {
             <Link to="/images">Images</Link>
             <Link to="/videos">Videos</Link>
             <Link to="/tags">Tags</Link>
-            <Link to="/persons">People</Link>
+            <Link to="/people">People</Link>
+            <Link to="/map">Map</Link>
           </nav>
           {/* MENU BUTTON */}
           <button

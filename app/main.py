@@ -31,12 +31,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.include_router(proc_router, prefix="/api", tags=["processors"])
 app.include_router(media, prefix="/media", tags=["media"])
 app.include_router(person, prefix="/persons", tags=["persons"])
 app.include_router(tasks, prefix="/tasks", tags=["tasks"])
 app.include_router(face, prefix="/faces", tags=["faces"])
 app.include_router(tags, prefix="/tags", tags=["tags"])
-app.include_router(proc_router, prefix="/api", tags=["processors"])
 
 app.mount(
     "/thumbnails",

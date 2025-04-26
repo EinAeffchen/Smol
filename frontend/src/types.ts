@@ -65,3 +65,21 @@ export interface SimilarPerson {
   similarity: number;
   thumbnail?: string;
 }
+
+export interface MediaPreview {
+  id: number;
+  filename: string;
+  thumbnail: string;
+  duration?: number;
+  width?: number;
+  height?: number;
+  views: number;
+  inserted_at: string;
+}
+
+interface MediaLocation {
+  id: number
+  latitude: number
+  longitude: number
+  thumbnail: string
+}

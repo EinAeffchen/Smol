@@ -21,7 +21,7 @@ from app.config import (
     VIDEO_SAMPLING_FACTOR,
     VIDEO_SUFFIXES,
 )
-from app.database import get_session, safe_commit
+from app.database import engine, safe_commit, get_session
 from app.models import Face, Media, Person, PersonSimilarity
 
 logger = logging.getLogger(__name__)
@@ -113,34 +113,36 @@ def detect_faces(
 
 def process_file(filepath: Path):
     path = filepath.relative_to(MEDIA_DIR)
-    session = get_session()
-    exists = session.exec(select(Media).where(Media.path == str(path))).first()
-    if exists:
-        return
+    with Session(engine) as session:
+        exists = session.exec(
+            select(Media).where(Media.path == str(path))
+        ).first()
+        if exists:
+            return
 
-    probe = ffmpeg.probe(filepath)
-    size = os.path.getsize(filepath)
-    if filepath.suffix in VIDEO_SUFFIXES:
-        duration = float(probe["format"].get("duration", 0))
-    else:
-        duration = None
-    vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
-    width = int(vs[0]["width"]) if vs else None
-    height = int(vs[0]["height"]) if vs else None
+        probe = ffmpeg.probe(filepath)
+        size = os.path.getsize(filepath)
+        if filepath.suffix in VIDEO_SUFFIXES:
+            duration = float(probe["format"].get("duration", 0))
+        else:
+            duration = None
+        vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
+        width = int(vs[0]["width"]) if vs else None
+        height = int(vs[0]["height"]) if vs else None
 
-    media = Media(
-        path=str(path),
-        filename=filepath.name,
-        size=size,
-        duration=duration,
-        width=width,
-        height=height,
-        faces_extracted=False,
-        embeddings_created=False,
-    )
-    session.add(media)
-    safe_commit(session)
-    session.refresh(media)
+        media = Media(
+            path=str(path),
+            filename=filepath.name,
+            size=size,
+            duration=duration,
+            width=width,
+            height=height,
+            faces_extracted=False,
+            embeddings_created=False,
+        )
+        session.add(media)
+        safe_commit(session)
+        session.refresh(media)
 
     # generate thumbnails
     thumb_path = THUMB_DIR / f"{media.id}.jpg"
@@ -200,7 +202,7 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def refresh_similarities_for_person(person_id: int) -> None:
-    with get_session() as session:
+    with Session(engine) as session:
         target = get_person_embedding(session, person_id)
         if target is None:
             return

@@ -22,7 +22,6 @@ def load_processors() -> List[MediaProcessor]:
 
     pkg_path = Path(__file__).parent / "processors"
     for finder, name, ispkg in pkgutil.iter_modules([str(pkg_path)]):
-        logger.debug(name)
         module = importlib.import_module(f"app.processors.{name}")
         for attr in dir(module):
             cls = getattr(module, attr)

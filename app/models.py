@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column
 from sqlalchemy.types import JSON
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
 from typing import Optional
 
@@ -72,7 +72,9 @@ class Media(SQLModel, table=True):
     width: int | None = None
     height: int | None = None
     views: int = 0
-    inserted_at: datetime = Field(default_factory=datetime.utcnow)
+    inserted_at: datetime = Field(
+        default_factory=datetime.now, index=True
+    )
 
     faces_extracted: bool = Field(default=False, index=True)
     embeddings_created: bool = Field(default=False, index=True)

@@ -12,7 +12,7 @@ install: $(VENV)/bin/activate
 	@$(PIP) install -r requirements.txt
 
 up: $(UVICORN)
-	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port 8001
+	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port 8000
 
 build: install
 	cd frontend && npm install && npm run build

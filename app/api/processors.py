@@ -23,7 +23,6 @@ def get_processor(
     session: Session = Depends(get_session),
 ):
     for p in load_processors():
-        logger.debug(p.name)
         if p.name == processor_name:
             return p.get_results(media_id, session)
     raise HTTPException(404, f"Processor {processor_name} not found")

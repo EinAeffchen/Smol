@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 from app.config import MEDIA_DIR, THUMB_DIR
 from app.database import get_session
 from app.models import Face, Media, MediaTagLink, Tag, ExifData
-from app.schemas.media import MediaRead
+from app.schemas.media import MediaRead, MediaPreview, MediaLocation
 from app.utils import logger
 from app.database import safe_commit
 
@@ -23,7 +23,7 @@ def list_media(
         None, description="Filter by detected person ID"
     ),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1),
+    limit: int = Query(100, ge=1, le=200),
     session: Session = Depends(get_session),
 ):
     q = select(Media)
@@ -36,28 +36,69 @@ def list_media(
     q = q.offset(skip).limit(limit)
     return session.exec(q).all()
 
+
+@router.get("/locations", response_model=list[MediaLocation])
+def list_locations(session: Session = Depends(get_session)):
+    stmt = (
+        select(
+            Media.id,
+            ExifData.lat.label("latitude"),
+            ExifData.lon.label("longitude"),
+        )
+        .join(ExifData, ExifData.media_id == Media.id)
+        .where(ExifData.lat.is_not(None), ExifData.lon.is_not(None))
+    )
+    rows = session.exec(stmt).all()
+    return [
+        MediaLocation(
+            id=row.id,
+            latitude=row.latitude,
+            longitude=row.longitude,
+            thumbnail=f"/thumbnails/{row.id}.jpg",
+        )
+        for row in rows
+    ]
+
+
 @router.get(
-    "/images", response_model=list[MediaRead], summary="List all images"
+    "/images", response_model=list[MediaPreview], summary="List all images"
 )
-def list_images(session: Session = Depends(get_session)):
+def list_images(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
     stmt = (
         select(Media)
         .where(Media.duration == None)  # images have no duration
         .order_by(Media.inserted_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
-    return session.exec(stmt).all()
+    medias = session.exec(stmt).all()
+    return [
+        MediaPreview(**m.model_dump(), thumb_url=f"/thumbnails/{m.id}.jpg")
+        for m in medias
+    ]
 
 
 @router.get(
     "/videos", response_model=list[MediaRead], summary="List all videos"
 )
-def list_videos(session: Session = Depends(get_session)):
+def list_videos(
+    skip: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=200),
+    session: Session = Depends(get_session),
+):
     stmt = (
         select(Media)
         .where(Media.duration != None)  # videos have a duration
         .order_by(Media.inserted_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
     return session.exec(stmt).all()
+
 
 @router.get("/{media_id}")
 def get_media(media_id: int, session: Session = Depends(get_session)):
@@ -168,5 +209,3 @@ def read_exif(media_id: int, session=Depends(get_session)):
     if not ex:
         raise HTTPException(404, "No EXIF data")
     return ex
-
-
