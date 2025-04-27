@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
-import { Media, Person, Tag, MediaDetail } from '../types'
+import { Media, Person, Tag, MediaDetail, Task } from '../types'
 import TagAdder from '../components/TagAdder'
 
 
@@ -10,11 +10,15 @@ const API = import.meta.env.VITE_API_BASE_URL || ''
 
 export default function VideoDetailPage() {
     const { id } = useParams<{ id: string }>()
+    const navigate = useNavigate()
     const [media, setMedia] = useState<Media | null>(null)
     const [matchedPersons, setMatchedPersons] = useState<Person[]>([])
 
     const [showExif, setShowExif] = useState(false)
     const [exif, setExif] = useState<Record<string, any> | null | undefined>(undefined)
+    const [task, setTask] = useState<Task | null>(null)
+
+
 
     useEffect(() => {
         if (!id) return
@@ -34,9 +38,34 @@ export default function VideoDetailPage() {
                 .catch(() => setExif(null))
         }
     }, [showExif, id])
-
+    useEffect(() => {
+        if (!task) return
+        const iv = setInterval(async () => {
+            const res = await fetch(`${API}/tasks/${task.id}`)
+            if (!res.ok) {
+                clearInterval(iv)
+                return
+            }
+            const updated: Task = await res.json()
+            setTask(updated)
+            if (updated.status !== "running") {
+                clearInterval(iv)
+                window.location.reload()
+            }
+        }, 1000)
+        return () => clearInterval(iv)
+    }, [task])
 
     if (!media) return <div className="p-4">Loading…</div>
+
+    const url = `/media/${media.path}`
+    const mimeType = (() => {
+        const name = media.filename.toLowerCase()
+        if (name.endsWith('.mp4')) return 'video/mp4'
+        if (name.endsWith('.webm')) return 'video/webm'
+        if (name.endsWith('.ogg')) return 'video/ogg'
+        return 'application/octet-stream'
+    })()
 
     // Handler: delete file
     async function handleDeleteFile() {
@@ -71,6 +100,22 @@ export default function VideoDetailPage() {
         }
     }
 
+    async function handleConversion() {
+        if (!confirm("⚠️ This might break your file, make sure to create a copy first. Continue?")) return
+
+        const res = await fetch(`${API}/api/media/${media.id}/converter`, {
+            method: "POST",
+        })
+        if (!res.ok) {
+            alert("Failed to start conversion")
+            return
+        }
+        const t: Task = await res.json()
+        setTask(t)
+    }
+
+
+
     return (
         <div className="bg-background text-text min-h-screen">
             <header className="flex items-center p-4 space-x-4">
@@ -80,10 +125,10 @@ export default function VideoDetailPage() {
 
             <div className="px-4 space-x-2">
                 <button
-                    onClick={handleDeleteFile}
-                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                    onClick={handleConversion}
+                    className="px-3 py-1 bg-red-800 hover:bg-red-900 text-white rounded"
                 >
-                    Delete File
+                    Convert Video format
                 </button>
                 <button
                     onClick={handleDeleteRecord}
@@ -91,6 +136,22 @@ export default function VideoDetailPage() {
                 >
                     Delete Record
                 </button>
+                <button
+                    onClick={handleDeleteFile}
+                    className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white rounded"
+                >
+                    Delete File from disk
+                </button>
+                {task && (
+                    <div className="mt-4">
+                        <div>Status: {task.status}</div>
+                        <progress
+                            className="w-full"
+                            value={task.processed}
+                            max={task.total}
+                        />
+                    </div>
+                )}
             </div>
 
             <main className="p-4 space-y-8">
@@ -102,13 +163,21 @@ export default function VideoDetailPage() {
                 >
                     <video
                         controls
+                        preload="metadata"
+                        poster={`/thumbnails/${media.id}.jpg`}
                         className="w-full max-h-[60vh] rounded-lg bg-black mx-auto"
                         src={`/originals/${media.path}`}
-                    />
+                    >
+                        <source
+                            src={url}
+                            type={mimeType}
+                        />
+                        Your browser doesn't support this video format.
+                    </video>
                     {/* only render overlay when showExif===true */}
                     {showExif && (
                         <div className="absolute inset-0 pointer-events-none transition-opacity opacity-100">
-                            <div className="absolute bottom-0 left-0 right-0 bg-black bg-opacity-60 text-white p-4 max-h-1/3 overflow-auto pointer-events-auto">
+                            <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-60 text-white p-4 max-h-1/3 overflow-auto pointer-events-auto">
                                 {
                                     // 2.1 still loading?
                                     exif === undefined ? (
@@ -147,48 +216,6 @@ export default function VideoDetailPage() {
                         </div>
                     )}
                 </figure>
-                {/* IMAGE  INFO ICON */}
-                <div className="relative inline-block">
-                    <img
-                        src={`/thumbnails/${media.id}.jpg`}
-                        alt={media.filename}
-                        className="max-w-full rounded"
-                    />
-                    <button
-                        onMouseEnter={() => setShowExif(true)}
-                        onMouseLeave={() => setShowExif(false)}
-                        className="absolute top-2 right-2 bg-black bg-opacity-50 text-white rounded-full p-1"
-                        title="Show EXIF info"
-                    >ℹ️</button>
-
-                    {/* EXIF TOOLTIP */}
-                    {showExif && exif && (
-                        <div className="absolute top-10 right-2 w-64 bg-white text-black text-xs p-2 rounded shadow-lg z-20">
-                            {loadingExif
-                                ? <p>Loading…</p>
-                                : (
-                                    <>
-                                        {exif.make && <p><strong>Camera:</strong> {exif.make} {exif.model}</p>}
-                                        {exif.timestamp && <p><strong>Shot:</strong> {new Date(exif.timestamp).toLocaleString()}</p>}
-                                        {exif.iso && <p><strong>ISO:</strong> {exif.iso}</p>}
-                                        {exif.exposure_time && <p><strong>Shutter:</strong> {exif.exposure_time}s</p>}
-                                        {exif.aperture && <p><strong>Aperture:</strong> {exif.aperture}</p>}
-                                        {exif.focal_length && <p><strong>Focal:</strong> {exif.focal_length} mm</p>}
-
-                                        {/* link to map if GPS exists */}
-                                        {(exif.lat && exif.lon) && (
-                                            <Link
-                                                to={`/map?focus=${media.id}`}
-                                                className="mt-2 inline-block text-blue-600 hover:underline"
-                                            >
-                                                View on map 📍
-                                            </Link>
-                                        )}
-                                    </>
-                                )}
-                        </div>
-                    )}
-                </div>
                 {/* Detected Persons */}
                 <section>
                     <h3 className="text-lg font-semibold mb-2">Detected Persons</h3>
@@ -245,6 +272,6 @@ export default function VideoDetailPage() {
                     </div>
                 </section>
             </main>
-        </div>
+        </div >
     )
 }

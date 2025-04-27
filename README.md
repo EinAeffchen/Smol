@@ -42,9 +42,11 @@ A **self‑contained**, **volume‑mounted** media server with face detection, r
 
 
 ### Prerequisites
-* Install [npm](https://docs.npmjs.com/cli/v9/configuring-npm/install?v=trues) 
 
+* Install [npm](https://docs.npmjs.com/cli/v9/configuring-npm/install?v=trues)
+* Install [ffmpeg](https://ffmpeg.org/download.html)
 
+### setup
 
 1. Clone the repo
     ```sh
@@ -68,7 +70,7 @@ Mount (or create) a folder for your images/videos, e.g.:
     ```sh
     make up
     ````
-    The API & SPA are both served from http://localhost:8000/.
+    The API & frontend are both served from http://localhost:8000/.
 
 ## Usage
 ### Initial Scan

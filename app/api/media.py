@@ -194,7 +194,7 @@ def delete_media_record(
     session.exec(delete(Face).where(Face.media_id == media_id))
     # 2) delete all tag links for this media
     session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
-
+    session.exec(delete(ExifData).where(ExifData.media_id == media_id))
     # 3) delete the Media row itself
     session.delete(media)
 

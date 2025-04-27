@@ -53,7 +53,7 @@ export default function MediaCard({ media }: { media: Media }) {
       <div className="bg-black bg-opacity-50 text-text text-sm flex justify-between px-3 py-2">
         {isVideo
           ? <span>{formatDuration(media.duration)}</span>
-          : <span className="italic">Photo</span>
+          : <span></span>
         }
         {isVideo && media.width && media.height && (
           <span>{media.width}×{media.height}</span>

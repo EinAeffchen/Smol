@@ -1,15 +1,13 @@
 import logging
-import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import media, person, tasks, face, tags, search
-from app.api.tasks import start_scan
 from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
-from app.database import init_db, get_session
+from app.database import init_db
 from app.api.processors import router as proc_router
 from app.processor_registry import load_processors
 
@@ -54,6 +52,7 @@ app.mount(
     StaticFiles(directory=str(STATIC_DIR)),
     name="static",
 )
+app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 
 @app.get("/{full_path:path}", include_in_schema=False)

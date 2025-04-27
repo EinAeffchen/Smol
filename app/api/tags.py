@@ -26,6 +26,7 @@ def create_tag(
     name: str = Body(..., embed=True),
     session: Session = Depends(get_session)
 ):
+    name = name.lower()
     tag = Tag(name=name)
     session.add(tag)
     safe_commit(session)
