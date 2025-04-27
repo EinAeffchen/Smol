@@ -177,7 +177,6 @@ export default function PersonDetailPage() {
             body: JSON.stringify(data),
         });
         const json = await res.json();
-        console.log("⚙️ create_person response JSON:", json);
 
         // unwrap it safely
         const p: Person =
@@ -185,7 +184,6 @@ export default function PersonDetailPage() {
             (json as any).person
             // else if it’s bare Person  
             ?? (json as Person);
-        console.log("⚙️ unwrapped Person:", p);
 
         if (!p?.id) {
             console.error("🚨 no p.id!");

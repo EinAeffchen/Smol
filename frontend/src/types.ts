@@ -51,7 +51,7 @@ export interface PersonDetail {
 type TaskType = "process_media" | "cluster_persons" | "scan_folder";
 type TaskStatus = "pending" | "running" | "completed" | "cancelled";
 
-interface Task {
+export interface Task {
   id: string;
   task_type: TaskType;
   status: TaskStatus;
@@ -77,9 +77,15 @@ export interface MediaPreview {
   inserted_at: string;
 }
 
-interface MediaLocation {
-  id: number
-  latitude: number
-  longitude: number
-  thumbnail: string
+export interface MediaLocation {
+  id: number;
+  latitude: number;
+  longitude: number;
+  thumbnail: string;
+}
+
+export interface SearchResult {
+  media: Media[];
+  persons: Person[];
+  tags: Tag[];
 }

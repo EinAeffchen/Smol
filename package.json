@@ -4,6 +4,7 @@
     "@types/leaflet": "^1.9.17"
   },
   "dependencies": {
+    "core-js": "^3.41.0",
     "leaflet": "^1.9.4",
     "react-leaflet": "^4.2.1"
   }

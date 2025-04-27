@@ -6,7 +6,7 @@ from fastapi import FastAPI, BackgroundTasks
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import media, person, tasks, face, tags
+from app.api import media, person, tasks, face, tags, search
 from app.api.tasks import start_scan
 from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
 from app.database import init_db, get_session
@@ -37,6 +37,7 @@ app.include_router(person, prefix="/persons", tags=["persons"])
 app.include_router(tasks, prefix="/tasks", tags=["tasks"])
 app.include_router(face, prefix="/faces", tags=["faces"])
 app.include_router(tags, prefix="/tags", tags=["tags"])
+app.include_router(search, prefix="/search", tags=["search"])
 
 app.mount(
     "/thumbnails",

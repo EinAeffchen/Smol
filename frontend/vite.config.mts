@@ -8,6 +8,10 @@ import path from "path";
 export default defineConfig({
   base: "/static/", // ← here
   plugins: [react()],
+  build: {
+    sourcemap: true,
+    minify: false,
+  },
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

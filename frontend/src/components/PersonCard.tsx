@@ -7,7 +7,6 @@ export default function PersonCard({ person }: { person: Person }) {
   const src = person.profile_face
     ? `/thumbnails/${person.profile_face.thumbnail_path}`
     : '/logo.png'
-
   return (
     <Link to={`/person/${person.id}`} className="group block h-full">
       <div className="flex flex-col items-center p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-md hover:shadow-lg transition-shadow h-full">

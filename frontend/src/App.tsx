@@ -11,6 +11,7 @@ import VideosPage from './pages/VideosPage'
 import PeoplePage from './pages/PeoplePage'
 import TagsPage from './pages/TagPage';
 import MapPage from './pages/MapPage';
+import SearchPage from './pages/SearchResultPage';
 
 export default function App() {
   return (
@@ -18,6 +19,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<IndexPage />} />
+          <Route path="/searchresults" element={<SearchPage />} />
           <Route path="/video/:id" element={<VideoDetailPage />} />
           <Route path="/images" element={<ImagesPage />} />
           <Route path="/map" element={<MapPage />} />

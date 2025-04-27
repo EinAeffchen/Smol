@@ -1,31 +1,78 @@
 // frontend/src/components/ControlPanelModal.tsx
 import React from 'react'
+import { NavLink } from 'react-router-dom'
 import TasksPanel from './TasksPanel'
 
-interface Props {
-  onClose: () => void
-}
-
-export default function ControlPanelModal({ onClose }: Props) {
+export default function ControlPanelModal({ onClose }: { onClose(): void }) {
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-60 z-30 flex justify-end">
-      {/* click on the backdrop to close */}
-      <div className="flex-1" onClick={onClose} />
-      {/* Drawer */}
-      <div className="w-80 max-w-full bg-background shadow-xl overflow-y-auto">
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-          <h3 className="text-lg font-semibold text-text">Control Panel</h3>
-          <button 
-            onClick={onClose} 
-            className="text-text hover:text-accent text-2xl leading-none"
+    <div
+      className="fixed inset-0 bg-black bg-opacity-60 z-30 flex justify-end"
+      onClick={onClose}
+    >
+      {/* drawer panel */}
+      <div
+        className="w-64 max-w-full h-full bg-background p-4 overflow-y-auto"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* close button */}
+        <button
+          onClick={onClose}
+          className="mb-6 px-2 py-1 bg-gray-700 rounded text-text hover:bg-gray-600"
+        >
+          Close
+        </button>
+
+        {/* --- Mobile nav links --- */}
+        <nav className="md:hidden flex flex-col space-y-3 mb-6">
+          <NavLink
+            to="/images"
+            className={({ isActive }) =>
+              `block px-2 py-1 rounded ${isActive ? 'bg-accent text-background' : 'hover:bg-gray-700'
+              }`
+            }
           >
-            &times;
-          </button>
-        </div>
-        <div className="p-4">
-          <TasksPanel />
-          {/* you can add more panels here */}
-        </div>
+            Images
+          </NavLink>
+          <NavLink
+            to="/videos"
+            className={({ isActive }) =>
+              `block px-2 py-1 rounded ${isActive ? 'bg-accent text-background' : 'hover:bg-gray-700'
+              }`
+            }
+          >
+            Videos
+          </NavLink>
+          <NavLink
+            to="/tags"
+            className={({ isActive }) =>
+              `block px-2 py-1 rounded ${isActive ? 'bg-accent text-background' : 'hover:bg-gray-700'
+              }`
+            }
+          >
+            Tags
+          </NavLink>
+          <NavLink
+            to="/people"
+            className={({ isActive }) =>
+              `block px-2 py-1 rounded ${isActive ? 'bg-accent text-background' : 'hover:bg-gray-700'
+              }`
+            }
+          >
+            People
+          </NavLink>
+          <NavLink
+            to="/map"
+            className={({ isActive }) =>
+              `block px-2 py-1 rounded ${isActive ? 'bg-accent text-background' : 'hover:bg-gray-700'
+              }`
+            }
+          >
+            Map
+          </NavLink>
+        </nav>
+
+        {/* --- Your existing task panel component below --- */}
+        <TasksPanel />
       </div>
     </div>
   )

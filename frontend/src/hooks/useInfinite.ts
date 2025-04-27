@@ -3,7 +3,8 @@ import { useState, useRef, useEffect, useCallback } from "react";
 
 export function useInfinite<T>(
   fetchPage: (skip: number, limit: number) => Promise<T[]>,
-  limit = 50
+  limit = 50,
+  resetDeps: any[] = []
 ) {
   const [items, setItems] = useState<T[]>([]);
   const [page, setPage] = useState(0);
@@ -28,7 +29,11 @@ export function useInfinite<T>(
       cancelled = true;
     };
   }, [page, limit, fetchPage]);
-
+  useEffect(() => {
+    setItems([]);
+    setPage(0);
+    setHasMore(true);
+  }, resetDeps);
   // observe the loader element once (or whenever hasMore flips)
   useEffect(() => {
     if (!hasMore || loading) return;

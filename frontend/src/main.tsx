@@ -2,8 +2,9 @@ import './index.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
-import { BrowserRouter } from 'react-router-dom';
+// import { BrowserRouter } from 'react-router-dom';
 import 'leaflet/dist/leaflet.css'
+
 
 import L from 'leaflet'
 import iconUrl       from 'leaflet/dist/images/marker-icon.png'
