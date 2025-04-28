@@ -19,7 +19,7 @@ STATIC_DIR: Path = SMOL_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True, parents=True)
 # Where thumbnails are written
 THUMB_DIR = SMOL_DIR / "thumbnails"
-PLUGINS_DIR = Path(__file__).parent / "plugins"
+MODELS_DIR = Path(__file__).parent/"models"
 
 VIDEO_SUFFIXES = [
     ".mp4",

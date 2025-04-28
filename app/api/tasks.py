@@ -117,6 +117,9 @@ def _run_media_processing(task_id: str):
         safe_commit(session)
 
         for proc in processors:
+            proc.load_model()
+
+        for proc in processors:
             logger.info("Running Processor: %s", proc.name)
             try:
                 proc.process(media, session)

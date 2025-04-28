@@ -16,6 +16,10 @@ class MediaProcessor(ABC):
         """unique key, e.g. "exif" or "face_extraction" """
 
     @abstractmethod
+    def load_model(self):
+        """Used to load models into memory before use"""
+
+    @abstractmethod
     def process(self, media: Media, session: Session) -> None:
         """
         Called once for each new or updated Media.

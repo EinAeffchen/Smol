@@ -106,6 +106,9 @@ class ExifProcessor(MediaProcessor):
             # on any decode error, skip silently
             pass
 
+    def load_model(self):
+        """Doesn't need a model"""
+
     def get_results(self, media_id: int, session):
         return session.exec(
             select(ExifData).where(ExifData.media_id == media_id)

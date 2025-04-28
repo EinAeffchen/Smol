@@ -1,26 +1,11 @@
 import React, { useState, useEffect, FormEvent } from 'react'
 import MediaCard from '../components/MediaCard'
 import PersonCard from '../components/PersonCard'
-
+import { MediaIndex, PersonIndex } from '../types'
 // Define the shapes you expect from the API
-interface Media {
-  id: number
-  path: string
-  filename: string
-  size: number
-  duration?: number
-  width?: number
-  height?: number
-  views: number
-  inserted_at: string  // ISO date
-}
 
-interface Person {
-  id: number
-  name?: string
-  age?: number
-  gender?: string
-}
+
+
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
@@ -30,9 +15,9 @@ export default function IndexPage() {
   // Tags array for filtering; useEffect will run whenever this changes
   const [tags, setTags] = useState<string[]>([])
 
-  const [newest, setNewest] = useState<Media[]>([])
-  const [popular, setPopular] = useState<Media[]>([])
-  const [people, setPeople] = useState<Person[]>([])
+  const [newest, setNewest] = useState<MediaIndex[]>([])
+  const [popular, setPopular] = useState<MediaIndex[]>([])
+  const [people, setPeople] = useState<PersonIndex[]>([])
 
   // Called whenever `tags` updates (including initially, when tags=[])
   useEffect(() => {
@@ -81,17 +66,6 @@ export default function IndexPage() {
     fetchMedia()
     fetchPeople()
   }, [tags])
-
-  // Handle form submit (either button or Enter key)
-  function handleSearchSubmit(e: FormEvent) {
-    e.preventDefault()
-    // parse comma‑separated tags, trim, remove empties
-    const parsed = searchInput
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean)
-    setTags(parsed)
-  }
 
   return (
     <div className="bg-background text-text min-h-screen">

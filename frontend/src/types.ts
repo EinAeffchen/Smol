@@ -28,6 +28,12 @@ export interface Person {
   profile_face?: Face;
 }
 
+export interface PersonIndex {
+  id: number
+  name?: string
+  age?: number
+  gender?: string
+}
 export interface Face {
   id: number;
   media_id: number;
@@ -88,4 +94,16 @@ export interface SearchResult {
   media: Media[];
   persons: Person[];
   tags: Tag[];
+}
+
+export interface MediaIndex {
+  id: number
+  path: string
+  filename: string
+  size: number
+  duration?: number
+  width?: number
+  height?: number
+  views: number
+  inserted_at: string  // ISO date
 }

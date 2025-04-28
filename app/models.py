@@ -66,18 +66,17 @@ class Face(SQLModel, table=True):
 class Media(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     path: str
-    filename: str
+    filename: str = Field(index=True)
     size: int
     duration: float | None = None
     width: int | None = None
     height: int | None = None
     views: int = 0
-    inserted_at: datetime = Field(
-        default_factory=datetime.now, index=True
-    )
+    inserted_at: datetime = Field(default_factory=datetime.now, index=True)
 
     faces_extracted: bool = Field(default=False, index=True)
     embeddings_created: bool = Field(default=False, index=True)
+    ran_auto_tagging: bool = Field(default=False)
 
     faces: list["Face"] = Relationship(back_populates="media")
     tags: list[Tag] = Relationship(

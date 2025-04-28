@@ -136,3 +136,5 @@ smol.db
 media
 
 frontend/node_modules
+app/models/*.tar
+app/models/*.txt
