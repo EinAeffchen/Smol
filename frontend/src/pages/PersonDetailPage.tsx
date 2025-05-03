@@ -1,9 +1,9 @@
 // src/pages/PersonDetailPage.tsx
-import React, { useState, useEffect, FormEvent } from 'react'
+import React, { useState, useEffect, FormEvent, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import MediaCard from '../components/MediaCard'
 import FaceCard from '../components/FaceCard'
-import { Person, PersonDetail, Tag, SimilarPerson } from '../types'
+import { Person, PersonDetail, Tag, SimilarPerson, FaceRead } from '../types'
 import TagAdder from '../components/TagAdder'
 import SimilarPersonCard from '../components/SimilarPersonCard'
 
@@ -29,6 +29,21 @@ export default function PersonDetailPage() {
     const [similar, setSimilar] = useState<SimilarPerson[]>([])
     const [richSimilar, setRichSimilar] = useState<SimilarPerson[]>([])
     const [loadingSim, setLoadingSim] = useState(false)
+
+    // Assign orphan faces
+    const [suggestedFaces, setSuggestedFaces] = useState<FaceRead[]>([])
+
+    const loadSuggestedFaces = useCallback(async () => {
+        if (!id) return
+        try {
+            const res = await fetch(`${API}/persons/${id}/suggest-faces`)
+            if (!res.ok) throw new Error("Failed to load suggestions")
+            const data = (await res.json()) as FaceRead[]
+            setSuggestedFaces(data)
+        } catch (err) {
+            console.error(err)
+        }
+    }, [id])
 
     // fetch stored similarities on mount
     async function loadSimilar() {
@@ -83,6 +98,15 @@ export default function PersonDetailPage() {
             })
             .catch(console.error)
             .finally(() => setLoading(false))
+        loadSuggestedFaces()
+    }, [id])
+
+    useEffect(() => {
+        if (!id) return
+        fetch(`${API}/persons/${id}/suggest-faces`)
+            .then(r => r.json())
+            .then(setSuggestedFaces)
+            .catch(console.error)
     }, [id])
 
     // 2) Form handlers
@@ -90,6 +114,19 @@ export default function PersonDetailPage() {
         const { name, value } = e.target
         setForm(f => ({ ...f, [name]: value }))
     }
+
+    const loadDetail = useCallback(async () => {
+        if (!id) return
+        const res = await fetch(`${API}/persons/${id}`)
+        if (!res.ok) throw new Error("couldn’t load detail")
+        setDetail(await res.json())
+    }, [id])
+
+
+    useEffect(() => {
+        loadDetail()
+        loadSuggestedFaces()
+    }, [id])
 
     async function onSave(e: FormEvent) {
         e.preventDefault()
@@ -157,16 +194,15 @@ export default function PersonDetailPage() {
 
     // assign a face to an existing person
     async function assignFace(faceId: number, personId: number) {
-        await fetch(`${API}/faces/${faceId}/assign`, {
+        const res = await fetch(`${API}/faces/${faceId}/assign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ person_id: personId })
         })
-        // remove that face from this profile's carousel
-        setDetail(d => ({
-            ...d!,
-            faces: d!.faces.filter(f => f.id !== faceId)
-        }))
+        if (res.ok) {
+            await loadDetail()
+            await loadSuggestedFaces()
+        }
     }
 
     // create a new person from a face
@@ -179,12 +215,7 @@ export default function PersonDetailPage() {
         const json = await res.json();
 
         // unwrap it safely
-        const p: Person =
-            // if it’s the wrapper { person: Person, … }  
-            (json as any).person
-            // else if it’s bare Person  
-            ?? (json as Person);
-
+        const p: Person = (json as any).person ?? (json as Person);
         if (!p?.id) {
             console.error("🚨 no p.id!");
             throw new Error("createPersonFromFace: could not extract person.id");
@@ -201,10 +232,9 @@ export default function PersonDetailPage() {
             alert('Failed to delete face')
             return
         }
-        setDetail(d => ({
-            ...d!,
-            faces: d!.faces.filter(f => f.id !== faceId)
-        }))
+        setSuggestedFaces(prev => prev.filter(f => f.id !== faceId))
+        await loadSuggestedFaces()
+        await loadDetail()
     }
 
     // set a face as the profile picture
@@ -280,7 +310,7 @@ export default function PersonDetailPage() {
                         <span className="font-medium">Profile Face</span>
                     </div>
 
-                    {/* Edit Form (span 2 cols on md+) */}
+                    {/* Edit Form (span 2 cols on md) */}
                     <form
                         onSubmit={onSave}
                         className="md:col-span-2 bg-gray-800 p-4 rounded-lg shadow space-y-4"
@@ -397,9 +427,10 @@ export default function PersonDetailPage() {
                 {/* === DETECTED FACES === */}
                 <section>
                     <h2 className="text-lg font-semibold mb-2">Detected Faces</h2>
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3">
+                    <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3 max-h-[24rem] overflow-y-auto pr-2">
                         {faces.map(face => (
                             <FaceCard
+                                key={face.id}
                                 face={face}
                                 isProfile={face.id === person.profile_face_id}
                                 onSetProfile={() => setProfileFace(face.id)}
@@ -411,7 +442,24 @@ export default function PersonDetailPage() {
                     </div>
                 </section>
 
-
+                {suggestedFaces.length > 0 && (
+                    <section className="space-y-2">
+                        <h3 className="text-lg font-semibold mb-2">Is this the same person?</h3>
+                        <div className="flex gap-4 overflow-x-auto py-2">
+                            {suggestedFaces.map(face => (
+                                <FaceCard
+                                    key={face.id}
+                                    face={face}
+                                    isProfile={false}
+                                    onSetProfile={() => {/* you could also let them “promote” a suggestion */ }}
+                                    onAssign={pid => assignFace(face.id, pid)}
+                                    onCreate={data => createPersonFromFace(face.id, data)}
+                                    onDelete={() => deleteFace(face.id)}
+                                />
+                            ))}
+                        </div>
+                    </section>
+                )}
 
                 {/* === SIMILAR PEOPLE === */}
                 <section>

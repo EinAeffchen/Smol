@@ -1,5 +1,6 @@
 from typing import Any
 
+import numpy as np
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -13,7 +14,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import Session, delete, select, update
 
 from app.config import THUMB_DIR
-from app.database import get_session
+from app.database import get_session, safe_commit
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
 from app.schemas.person import (
     FaceRead,
@@ -23,8 +24,12 @@ from app.schemas.person import (
     PersonUpdate,
     SimilarPerson,
 )
-from app.utils import logger, refresh_similarities_for_person
-from app.database import safe_commit
+from app.utils import (
+    cosine_similarity,
+    get_person_embedding,
+    logger,
+    refresh_similarities_for_person,
+)
 
 router = APIRouter()
 
@@ -44,15 +49,54 @@ def list_persons(
     if name:
         q = q.where(Person.name.ilike(f"%{name}%"))
     q = q.offset(skip).limit(limit)
+    q = q.order_by(Person.views.desc())
     people = session.exec(q).all()
     return [
         PersonRead(
-            **p.dict(),
+            **p.model_dump(),
             profile_face=(
-                FaceRead(**p.profile_face.dict()) if p.profile_face else None
+                FaceRead(**p.profile_face.model_dump())
+                if p.profile_face
+                else None
             ),
         )
         for p in people
+    ]
+
+
+@router.get("/{person_id}/suggest-faces", response_model=list[FaceRead])
+def suggest_faces(person_id: int, session: Session = Depends(get_session)):
+    # 1) must exist
+    if not session.get(Person, person_id):
+        raise HTTPException(404, "Person not found")
+
+    # 2) get the person’s average embedding
+    target = get_person_embedding(session, person_id)
+    if target is None:
+        return []
+
+    # 3) fetch all unassigned faces with embeddings
+    all_orphans = session.exec(
+        select(Face).where(Face.person_id.is_(None), Face.embedding != None)
+    ).all()
+
+    # 4) compute similarity scores
+    scored = []
+    for f in all_orphans:
+        emb = np.array(f.embedding, dtype=np.float32)
+        sim = cosine_similarity(target, emb)
+        scored.append((f, sim))
+
+    # 5) pick top 10
+    top10 = sorted(scored, key=lambda x: x[1], reverse=True)[:10]
+    return [
+        FaceRead(
+            id=f.id,
+            media_id=f.media_id,
+            thumbnail_path=f.thumbnail_path,
+            bbox=f.bbox,
+        )
+        for f, _ in top10
     ]
 
 
@@ -61,13 +105,13 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
-    
+
     if person.profile_face_id and not person.profile_face:
         person.profile_face_id = None
         session.add(person)
         session.commit()
         session.refresh(person)
-        
+    person.views += 1
     q = (
         select(Face)
         .where(Face.person_id == person.id)
@@ -284,7 +328,22 @@ def refresh_similarities(
         raise HTTPException(404, "Person not found")
 
     # enqueue the compute in the background
-    background_tasks.add_task(
-        refresh_similarities_for_person, person_id
-    )
+    background_tasks.add_task(refresh_similarities_for_person, person_id)
     return {"detail": "Similarity refresh started"}
+
+
+@router.post(
+    "/{person_id}/auto-set-age",
+    summary="Automatically sets age and gender based on faces",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def auto_set_age(
+    person_id: int,
+    session: Session = Depends(get_session),
+):
+    person = session.get(Person, person_id)
+    if not person:
+        raise HTTPException(404, "Person not found")
+
+    session.add(person)
+    safe_commit(session)

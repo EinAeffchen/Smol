@@ -1,12 +1,10 @@
 // frontend/src/components/TasksPanel.tsx
 import React, { useState, useEffect } from 'react'
-import { Task, TaskType } from '..types'
-
-
+import { Task, TaskType } from '../types'
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
-// map API task_type to a human‐readable label
+// map API task_type to a human-readable label
 const TASK_LABELS: Record<TaskType, string> = {
     scan_folder: 'Scan Folder',
     process_media: 'Process Media',
@@ -16,7 +14,6 @@ const TASK_LABELS: Record<TaskType, string> = {
 export default function TasksPanel() {
     const [tasks, setTasks] = useState<Task[]>([])
 
-    // fetch all existing tasks
     const fetchTasks = async () => {
         try {
             const res = await fetch(`${API}/tasks/active`)
@@ -27,7 +24,6 @@ export default function TasksPanel() {
         }
     }
 
-    // kick off a new task
     const startTask = async (type: TaskType) => {
         try {
             const res = await fetch(`${API}/tasks/${type}`, { method: 'POST' })
@@ -41,7 +37,6 @@ export default function TasksPanel() {
         }
     }
 
-    // cancel a running task
     const cancelTask = async (id: string) => {
         try {
             const res = await fetch(`${API}/tasks/${id}/cancel`, { method: 'POST' })
@@ -59,20 +54,20 @@ export default function TasksPanel() {
     }, [])
 
     return (
-        <div className="p-4 bg-gray-900 rounded-lg shadow-lg space-y-4">
-            <h3 className="text-lg font-semibold">Control Panel</h3>
+        <div className="p-4 bg-background/80 backdrop-blur-md rounded-xl border border-accent shadow-lg space-y-4">
+            <h3 className="text-xl font-semibold text-accent">Control Panel</h3>
 
             {tasks.map(t => {
                 const pct = t.total > 0 ? Math.round((t.processed / t.total) * 100) : 0
                 return (
-                    <div key={t.id} className="space-y-1">
-                        <div className="flex justify-between text-sm">
-                            <span>{TASK_LABELS[t.task_type]}</span>
-                            <span>{t.status}{t.status === 'running' ? ` (${pct}%)` : ''}</span>
+                    <div key={t.id} className="p-2 bg-background/70 rounded-lg border-l-4 border-accent space-y-1">
+                        <div className="flex justify-between items-center text-sm text-text">
+                            <span className="font-medium text-accent">{TASK_LABELS[t.task_type]}</span>
+                            <span className="text-xs">{t.status}{t.status === 'running' && ` (${pct}%)`}</span>
                         </div>
-                        <div className="w-full bg-gray-700 h-2 rounded overflow-hidden">
+                        <div className="w-full bg-dark-gray h-1.5 rounded overflow-hidden">
                             <div
-                                className="h-full bg-accent transition-width"
+                                className="h-full bg-accent transition-[width]"
                                 style={{ width: `${pct}%` }}
                             />
                         </div>
@@ -88,23 +83,20 @@ export default function TasksPanel() {
                 )
             })}
 
-            <div className="pt-4 flex space-x-2">
+            <div className="pt-2 flex flex-col space-y-2">
                 <button
                     onClick={() => startTask('scan')}
-                    className="px-3 py-1 bg-accent rounded hover:bg-accent2 text-background"
-                >
+                    className="w-full px-3 py-2 bg-accent rounded-md hover:bg-accent2 text-text transition">
                     Scan Folder
                 </button>
                 <button
                     onClick={() => startTask('process_media')}
-                    className="px-3 py-1 bg-accent rounded hover:bg-accent2 text-background"
-                >
+                    className="w-full px-3 py-2 bg-accent rounded-md hover:bg-accent2 text-text transition">
                     Process Media
                 </button>
                 <button
                     onClick={() => startTask('cluster_persons')}
-                    className="px-3 py-1 bg-accent rounded hover:bg-accent2 text-background"
-                >
+                    className="w-full px-3 py-2 bg-accent rounded-md hover:bg-accent2 text-text transition">
                     Cluster Persons
                 </button>
             </div>

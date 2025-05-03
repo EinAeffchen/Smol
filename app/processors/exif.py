@@ -1,12 +1,18 @@
 # app/processors/exif.py
 from pathlib import Path
 from datetime import datetime
-from PIL import Image, ExifTags
+from PIL import ExifTags
 from sqlmodel import select
 from app.processors.base import MediaProcessor
-from app.models import Media, ExifData
-from app.config import MEDIA_DIR
+from app.models import Media, ExifData, Scene
+from app.config import VIDEO_SUFFIXES, MEDIA_DIR
+from cv2.typing import MatLike
+from PIL.MpoImagePlugin import MpoImageFile
 from app.database import safe_commit
+from sqlalchemy.orm import Session
+import ffmpeg
+from dateutil import parser
+from app.utils import logger
 
 
 def _decode_bytes(val: bytes) -> str:
@@ -26,21 +32,10 @@ def _to_decimal(coord, ref):
 class ExifProcessor(MediaProcessor):
     name = "exif"
 
-    def process(self, media: Media, session):
-        # 1) skip if already extracted
-        if session.exec(
-            select(ExifData).where(ExifData.media_id == media.id)
-        ).first():
-            return
-
-        # 2) only on JPEG/TIFF
-        fn = media.filename.lower()
-        if not fn.endswith((".jpg", ".jpeg", ".tiff")):
-            return
-
-        path = Path(MEDIA_DIR) / media.path
+    def _process_image(
+        self, img: MpoImageFile, session: Session, media: Media
+    ):
         try:
-            img = Image.open(path)
             raw = img._getexif() or {}
 
             # 3) map tag IDs → names and decode byte‑strings
@@ -106,7 +101,62 @@ class ExifProcessor(MediaProcessor):
             # on any decode error, skip silently
             pass
 
+    def _process_video(self, media: Media, session: Session):
+        logger.debug("EXIF FROM VIDEO")
+        try:
+            video_meta = ffmpeg.probe(str(MEDIA_DIR / media.path))
+            tags = video_meta.get("format", {}).get("tags", {})
+            if not tags:
+                return
+
+            location_data = tags.get("location", "").strip("+/")
+            if location_data:
+                lat, lon = location_data.split("+")
+            else:
+                lat, lon = None, None
+            timestamp = tags.get("creation_time")
+            if timestamp:
+                timestamp = parser.parse(timestamp)
+            model = tags.get("com.android.manufacturer", "") + tags.get(
+                "com.android.model"
+            )
+            # 6) persist
+            rec = ExifData(
+                media_id=media.id,
+                model=model,
+                timestamp=timestamp,
+                lat=lat,
+                lon=lon,
+            )
+            session.add(rec)
+            safe_commit(session)
+        except Exception as e:
+            logger.error(e)
+
+    def process(
+        self,
+        media: Media,
+        session,
+        scenes: list[tuple[Scene, MatLike] | MpoImageFile],
+    ):
+        # 1) skip if already extracted
+        if session.exec(
+            select(ExifData).where(ExifData.media_id == media.id)
+        ).first():
+            return
+
+        # 2) only on JPEG/TIFF
+        fn = Path(media.filename)
+        logger.error("Getting exif!")
+        if fn.suffix in ((".jpg", ".jpeg", ".tiff")):
+            self._process_image(scenes[0], session, media)
+        elif fn.suffix in VIDEO_SUFFIXES:
+            self._process_video(media, session)
+
     def load_model(self):
+        """Doesn't need a model"""
+
+    def unload(self):
         """Doesn't need a model"""
 
     def get_results(self, media_id: int, session):

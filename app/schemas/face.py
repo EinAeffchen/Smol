@@ -1,13 +1,12 @@
-from sqlmodel import SQLModel, Field
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
-class FaceRead(SQLModel):
+class FaceRead(BaseModel):
     id: int
     media_id: int
     thumbnail_path: str
-    bbox: list[int]
 
+    model_config = ConfigDict(from_attributes=True)
 
 class FaceAssign(BaseModel):
     person_id: int

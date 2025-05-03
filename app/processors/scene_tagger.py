@@ -1,57 +1,70 @@
+import cv2
+
 import torch
-from torchvision import models, transforms
+from cv2.typing import MatLike
 from PIL import Image
-
-from app.models import Media, Tag
-from app.processors.base import MediaProcessor
+from PIL.ImageFile import ImageFile
 from sqlmodel import select
-from app.config import MEDIA_DIR, MODELS_DIR
-from app.api.tags import create_tag, add_tag_to_media
+
+from app.models import Media, Scene, Tag
+from app.processors.base import MediaProcessor
 from app.utils import logger
+import numpy as np
+from app.config import preprocess, model
 
 
-class ExifProcessor(MediaProcessor):
+class SceneTagger(MediaProcessor):
     name = "scene_tagger"
-    model = None
 
     def load_model(self):
-        self.model = models.resnet18(num_classes=365)
-        self.model.load_state_dict(
-            torch.load(MODELS_DIR / "resnet18_places365.pth.tar")["state_dict"]
-        )
-        self.model.eval()
-        self.transform = transforms.Compose(
-            [
-                transforms.Resize((224, 224)),
-                transforms.ToTensor(),
-                transforms.Normalize(
-                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-                ),
-            ]
-        )
-        self.classes = []
-        with open(MODELS_DIR / "categories.txt") as class_file:
-            for line in class_file:
-                self.classes.append(line.strip().split(" ")[0][3:])
-        self.classes = tuple(self.classes)
+        pass
 
     def unload(self):
-        del self.model
+        pass
 
-    def process(self, media: Media, session):
+    def _get_embedding(self, media: ImageFile | cv2.typing.MatLike):
+        if not isinstance(media, ImageFile):
+            media = Image.fromarray(media).convert("RGB")
+        img_tensor = preprocess(media).unsqueeze(0)
+        with torch.no_grad():
+            img_features = model.encode_image(img_tensor)
+        img_features /= img_features.norm(dim=-1, keepdim=True)
+        return img_features.squeeze(0).tolist()
+
+    def process(
+        self,
+        media: Media,
+        session,
+        scenes: list[tuple[Scene, MatLike] | ImageFile],
+    ):
         # 1) skip if already extracted
         if session.exec(
-            select(Media).where(Media.ran_auto_tagging.is_(True))
+            select(Media).where(
+                Media.ran_auto_tagging.is_(True), Media.id == media.id
+            )
         ).first():
+            logger.debug("Already tagged!")
             return
-        img = Image.open(MEDIA_DIR / media.path)
-        input_tensor = self.transform(img).unsqueeze(0)
-        logits = self.model(input_tensor)
-        _, preds = torch.max(logits, 1)
-        tag = self.classes[preds]
-        tag_obj: Tag = create_tag(tag)
-        add_tag_to_media(media.id, tag_obj.id)
-        logger.debug("Added %s to %d", tag, media.id)
+        embeddings = list()
+        for scene in scenes:
+            if isinstance(scene, ImageFile):
+                embeddings.append(self._get_embedding(scene))
+            elif isinstance(scene, tuple):
+                embedding = self._get_embedding(scene[1])
+                embeddings.append(embedding)
+                scene[0].embedding = embedding
+                session.add(scene[0])
+
+        if not media.duration:  # is photo/picture
+            media.embedding = embeddings[0]
+        else:
+            arr = np.stack([np.array(e, dtype=np.float32) for e in embeddings])
+            media.embedding = arr.mean(axis=0).tolist()
+        # TODO add auto tags as config and perform one-shot tagging
+        # TODO add search over embedding
+        media.ran_auto_tagging = True
+        session.add(media)
+        session.commit()
 
     def get_results(self, media_id: int, session):
         return session.exec(

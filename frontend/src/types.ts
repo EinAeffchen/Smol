@@ -29,10 +29,10 @@ export interface Person {
 }
 
 export interface PersonIndex {
-  id: number
-  name?: string
-  age?: number
-  gender?: string
+  id: number;
+  name?: string;
+  age?: number;
+  gender?: string;
 }
 export interface Face {
   id: number;
@@ -42,6 +42,11 @@ export interface Face {
   bbox: number[];
   embedding?: number[];
   person?: Person;
+}
+export interface FaceRead {
+  id: number;
+  media_id: number;
+  thumbnail_path: string;
 }
 
 export interface MediaDetail {
@@ -54,8 +59,8 @@ export interface PersonDetail {
   medias: Media[];
 }
 
-type TaskType = "process_media" | "cluster_persons" | "scan_folder";
-type TaskStatus = "pending" | "running" | "completed" | "cancelled";
+export type TaskType = "process_media" | "cluster_persons" | "scan";
+export type TaskStatus = "pending" | "running" | "completed" | "cancelled";
 
 export interface Task {
   id: string;
@@ -83,6 +88,14 @@ export interface MediaPreview {
   inserted_at: string;
 }
 
+export interface SceneRead {
+  id: number;
+  start_time: number;
+  end_time: number;
+  thumbnail_path: string;
+  description: string;
+}
+
 export interface MediaLocation {
   id: number;
   latitude: number;
@@ -97,13 +110,13 @@ export interface SearchResult {
 }
 
 export interface MediaIndex {
-  id: number
-  path: string
-  filename: string
-  size: number
-  duration?: number
-  width?: number
-  height?: number
-  views: number
-  inserted_at: string  // ISO date
+  id: number;
+  path: string;
+  filename: string;
+  size: number;
+  duration?: number;
+  width?: number;
+  height?: number;
+  views: number;
+  inserted_at: string; // ISO date
 }

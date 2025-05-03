@@ -31,9 +31,8 @@ def safe_commit(session, retries=3, delay=0.5):
 
 
 def init_db():
-    from app.models import Face, Media, MediaTagLink, Person, Tag
+    from app.models import Face, Media, MediaTagLink, Person, Tag, Scene
 
-    print("Using DATABASE_URL:", engine.url)
     SQLModel.metadata.create_all(engine)
 
 

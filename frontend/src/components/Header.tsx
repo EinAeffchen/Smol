@@ -85,6 +85,14 @@ export function Header() {
               People
             </NavLink>
             <NavLink
+              to="/orphanfaces"
+              className={({ isActive }) =>
+                isActive ? 'text-accent' : 'hover:text-accent'
+              }
+            >
+              Unassigned Faces
+            </NavLink>
+            <NavLink
               to="/map"
               className={({ isActive }) =>
                 isActive ? 'text-accent' : 'hover:text-accent'

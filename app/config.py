@@ -1,9 +1,9 @@
 import os
 from pathlib import Path
+import open_clip
 
 MEDIA_DIR = Path(os.getenv("MEDIA_DIR", "./media"))
 assert MEDIA_DIR.is_dir()
-print(MEDIA_DIR.absolute())
 
 # Internal storage
 SMOL_DIR = MEDIA_DIR / ".smol"
@@ -19,7 +19,7 @@ STATIC_DIR: Path = SMOL_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True, parents=True)
 # Where thumbnails are written
 THUMB_DIR = SMOL_DIR / "thumbnails"
-MODELS_DIR = Path(__file__).parent/"models"
+MODELS_DIR = Path(__file__).parent / "models"
 
 VIDEO_SUFFIXES = [
     ".mp4",
@@ -43,10 +43,20 @@ IMAGE_SUFFIXES = [
     ".bmp",
 ]
 
+# ------- AI Settings -------------
+# Image embedding and text search model
+MIN_CLIP_SEARCH_SIMILARITY = 0.1
+
 # face recognition settings
-VIDEO_SAMPLING_FACTOR = 3
 MAX_FRAMES_PER_VIDEO = 30
 FACE_RECOGNITION_MIN_CONFIDENCE = 0.75
 FACE_MATCH_COSINE_THRESHOLD = 0.6
-FACE_RECOGNITION_MIN_FACE_PIXELS = 50 * 50
-MINIMUM_SIMILARITY = 0.3
+FACE_RECOGNITION_MIN_FACE_PIXELS = 60 * 60
+PERSON_MIN_FACE_COUNT = (
+    2  # how many matching faces must a person have for auto creation
+)
+
+model, preprocess, _ = open_clip.create_model_and_transforms(
+    "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k"
+)
+tokenizer = open_clip.get_tokenizer("xlm-roberta-large-ViT-H-14")

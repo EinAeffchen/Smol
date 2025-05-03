@@ -1,22 +1,31 @@
-from typing import List
-from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
-from sqlmodel import Session, select, func, update, delete
-import numpy as np
 from datetime import datetime, timezone
-
-from app.database import get_session, engine
-from app.models import Media, Face, Person, ProcessingTask, PersonSimilarity
-from app.utils import detect_faces, create_embedding_for_face, process_file
-from app.config import MEDIA_DIR, THUMB_DIR
 from pathlib import Path
+from typing import List
+
+import numpy as np
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from PIL import Image
+from sklearn.cluster import DBSCAN
+from sqlalchemy import or_
+from sqlmodel import Session, delete, func, select, update
+
 from app.config import (
-    VIDEO_SUFFIXES,
-    IMAGE_SUFFIXES,
     FACE_MATCH_COSINE_THRESHOLD,
+    IMAGE_SUFFIXES,
+    MEDIA_DIR,
+    VIDEO_SUFFIXES,
+    PERSON_MIN_FACE_COUNT,
 )
-from app.utils import logger, cosine_similarity
+from app.database import engine, get_session, safe_commit
+from app.models import Face, Media, Person, PersonSimilarity, ProcessingTask
 from app.processor_registry import processors
-from app.database import safe_commit
+from app.utils import (
+    cosine_similarity,
+    get_person_embedding,
+    logger,
+    process_file,
+    split_video,
+)
 
 router = APIRouter()
 
@@ -36,7 +45,13 @@ def start_media_processing(
     total = session.exec(
         select(func.count())
         .select_from(Media)
-        .where(Media.faces_extracted == False)
+        .where(
+            or_(
+                Media.faces_extracted.is_(False),
+                Media.ran_auto_tagging.is_(False),
+                Media.embeddings_created.is_(False),
+            )
+        )
     ).one()
 
     task = ProcessingTask(
@@ -62,7 +77,13 @@ def _run_media_processing(task_id: str):
 
     # iterate unprocessed media
     medias = session.exec(
-        select(Media).where(Media.faces_extracted.is_(False))
+        select(Media).where(
+            or_(
+                Media.faces_extracted.is_(False),
+                Media.ran_auto_tagging.is_(False),
+                Media.embeddings_created.is_(False),
+            )
+        )
     ).all()
 
     for media in medias:
@@ -73,47 +94,15 @@ def _run_media_processing(task_id: str):
             break
 
         full_path = MEDIA_DIR / media.path
+        if full_path.suffix in IMAGE_SUFFIXES:
+            scenes = [Image.open(full_path)]
+        else:
+            scenes = split_video(media, full_path)
 
-        # 1) detect faces
-        dets = detect_faces(str(full_path))
-        for det in dets:
-            face = Face(
-                media_id=media.id,
-                thumbnail_path=det["thumbnail_path"],
-                bbox=det["bbox"],
-            )
-            session.add(face)
-        safe_commit(session)
-
-        # 2) compute embeddings immediately
-        query = select(Face).where(
-            Face.media_id == media.id, Face.embedding.is_(None)
-        )
-        faces_to_embed = session.exec(query).all()
-        for face in faces_to_embed:
-            try:
-                emb = create_embedding_for_face(face)
-                face.embedding = emb
-                session.add(face)
-            except ValueError:
-                logger.exception(
-                    f"[process_media] embedding failed for face {face.id}."
-                    " Removing file."
-                )
-                thumb_file: Path = THUMB_DIR / face.thumbnail_path
-                if thumb_file.exists():
-                    thumb_file.unlink()
-                session.delete(face)
-        safe_commit(session)
-
-        # 3) mark media done
-        media.faces_extracted = True
-        media.embeddings_created = True
-        session.add(media)
-
-        # 4) update task progress
-        task.processed += 1
-        session.add(task)
+        for scene in scenes:
+            logger.debug(scenes)
+            if isinstance(scene, tuple):
+                session.add(scene[0])
         safe_commit(session)
 
         for proc in processors:
@@ -122,11 +111,17 @@ def _run_media_processing(task_id: str):
         for proc in processors:
             logger.info("Running Processor: %s", proc.name)
             try:
-                proc.process(media, session)
+                proc.process(media, session, scenes=scenes)
             except Exception:
                 logger.exception(
                     "processor %r failed on media %d", proc.name, media.id
                 )
+        for proc in processors:
+            proc.unload()
+        # 4) update task progress
+        task.processed += 1
+        session.add(task)
+        safe_commit(session)
 
     # finalize
     task.status = "cancelled" if task.status == "cancelled" else "completed"
@@ -168,79 +163,105 @@ def start_person_clustering(
 
 
 def _run_person_clustering(task_id: str):
-    sess = Session(engine)
-    task = sess.get(ProcessingTask, task_id)
-    task.status = "running"
-    task.started_at = datetime.now(timezone.utc)
-    sess.add(task)
-    sess.commit()
+    with Session(engine) as session:
+        task: ProcessingTask = session.get(ProcessingTask, task_id)
+        task.status = "running"
+        task.started_at = datetime.now(timezone.utc)
+        session.add(task)
+        session.commit()
 
-    # load existing persons
-    persons = sess.exec(select(Person)).all()
+        # fetch faces needing assignment
+        orphans: List[Face] = session.exec(
+            select(Face).where(Face.embedding != None, Face.person_id == None)
+        ).all()
+        if not orphans:
+            return
+        # load existing persons
+        people = session.exec(select(Person.id)).all()
 
-    # fetch faces needing assignment
-    faces = sess.exec(
-        select(Face).where(Face.embedding != None, Face.person_id == None)
+        prototypes: dict[int, np.ndarray] = {}
+        for pid in people:
+            emb = get_person_embedding(session, pid)
+            if emb is not None:
+                prototypes[pid] = emb
+
+        unassigned = []
+
+        for face in orphans:
+            emb = np.array(face.embedding, dtype=np.float32)
+            # find best match
+            best_pid, best_sim = None, 0.0
+            for pid, proto in prototypes.items():
+                sim = cosine_similarity(proto, emb)
+                if sim > best_sim:
+                    best_sim, best_pid = sim, pid
+
+            if (
+                best_pid is not None
+                and best_sim >= FACE_MATCH_COSINE_THRESHOLD
+            ):
+                face.person_id = best_pid
+                session.add(face)
+            else:
+                unassigned.append(face.id)
+
+        safe_commit(session)
+        task.status = (
+            "cancelled" if task.status == "cancelled" else "completed"
+        )
+        task.finished_at = datetime.now(timezone.utc)
+        session.add(task)
+        safe_commit(session)
+        cluster_unassigned_faces_into_new_persons(unassigned, session)
+    return unassigned
+
+
+def cluster_unassigned_faces_into_new_persons(
+    unassigned_ids: List[int],
+    session: Session | None = None,
+    eps: float = 0.5,
+    min_samples: int = 1,
+) -> List[int]:
+    """
+    Run a DBSCAN over just the unassigned faces to create brand-new persons.
+    Returns the list of newly‐created person IDs.
+    """
+    session = session or get_session()
+    if not unassigned_ids:
+        return []
+
+    faces: List[Face] = session.exec(
+        select(Face).where(Face.id.in_(unassigned_ids))
     ).all()
+    embs = np.stack([np.array(f.embedding, dtype=np.float32) for f in faces])
+    ids = [f.id for f in faces]
 
-    for face in faces:
-        # check cancellation
-        task = sess.get(ProcessingTask, task_id)
-        if task.status == "cancelled":
-            break
+    clustering = DBSCAN(metric="cosine", eps=eps, min_samples=min_samples).fit(
+        embs
+    )
+    labels = clustering.labels_
 
-        emb = np.array(face.embedding)
-        assigned = False
+    for lbl in set(labels):
+        if lbl < 0:
+            continue
+        cluster_face_ids = [fid for fid, l in zip(ids, labels) if l == lbl]
+        
+        if len(cluster_face_ids) < PERSON_MIN_FACE_COUNT:
+            continue
+        # create a Person
+        p = Person(name=None)
+        session.add(p)
+        safe_commit(session)
+        session.refresh(p)
 
-        # try assign to existing person
-        for person in persons:
-            # get that person's embeddings
-            embs = [np.array(f.embedding) for f in person.faces if f.embedding]
-            if not embs:
-                continue
-            centroid = np.mean(embs, axis=0)
-            if cosine_similarity(centroid, emb) >= FACE_MATCH_COSINE_THRESHOLD:
-                face.person_id = person.id
-                assigned = True
-                break
-
-        # otherwise create a new Person
-        if not assigned:
-            new_p = Person()
-            sess.add(new_p)
-            sess.commit()
-            sess.refresh(new_p)
-            face.person_id = new_p.id
-            persons.append(new_p)
-
-        sess.add(face)
-        sess.commit()
-
-        # bump progress
-        task.processed += 1
-        sess.add(task)
-
-        # ── AUTO‑ASSIGN DEFAULT PROFILE FACE ───────────────────────────────
-        all_persons = sess.exec(select(Person)).all()
-        for person in all_persons:
-            if person.profile_face_id is None:
-                # grab one face for this person
-                first_face = sess.exec(
-                    select(Face)
-                    .where(Face.person_id == person.id)
-                    .order_by(Face.id)
-                ).first()
-                if first_face:
-                    person.profile_face_id = first_face.id
-                    sess.add(person)
-        sess.commit()
-
-    # finalize
-    task.status = "cancelled" if task.status == "cancelled" else "completed"
-    task.finished_at = datetime.now(timezone.utc)
-    sess.add(task)
-    sess.commit()
-    sess.close()
+        # assign cluster faces
+        for f in faces:
+            if f.id in cluster_face_ids:
+                f.person_id = p.id
+                session.add(f)
+                p.profile_face_id = f.id
+        session.add(p)
+        safe_commit(session)
 
 
 # ─── 3) CANCEL / LIST / GET TASKS ─────────────────────────────────────────────
@@ -337,7 +358,7 @@ def reset_processing(session: Session = Depends(get_session)):
         path = Path(face.thumbnail_path)
         if path.exists():
             path.unlink()
-        session.exec(delete(Face).where(Face.id==face.id))
+        session.exec(delete(Face).where(Face.id == face.id))
     safe_commit(session)
     return "OK"
 

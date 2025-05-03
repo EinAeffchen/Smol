@@ -82,6 +82,8 @@ def _run_conversion(task_id: str, media_path: str):
             "ffmpeg",
             "-i",
             full_path,
+            "-movflags",
+            "use_metadata_tags",
             "-c:v",
             "libx264",
             "-c:a",
@@ -91,6 +93,8 @@ def _run_conversion(task_id: str, media_path: str):
             "-progress",
             "pipe:1",  # emits key=value pairs on stdout
             "-nostats",
+            "-filter:v",
+            "fps=30",
             "-y",
             (MEDIA_DIR / f"{media_path}")
             .with_stem(original_stem)

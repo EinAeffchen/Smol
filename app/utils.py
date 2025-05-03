@@ -1,114 +1,39 @@
 import logging
 import os
-import time
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
 import ffmpeg
 import numpy as np
-from deepface import DeepFace
+import piexif
 from PIL import Image
+from scenedetect import AdaptiveDetector, detect
+from scenedetect.video_splitter import TimecodePair
 from sqlmodel import Session, select
 
 from app.config import (
-    FACE_RECOGNITION_MIN_CONFIDENCE,
-    FACE_RECOGNITION_MIN_FACE_PIXELS,
     MAX_FRAMES_PER_VIDEO,
     MEDIA_DIR,
-    MINIMUM_SIMILARITY,
     THUMB_DIR,
-    VIDEO_SAMPLING_FACTOR,
     VIDEO_SUFFIXES,
 )
-from app.database import engine, safe_commit, get_session
-from app.models import Face, Media, Person, PersonSimilarity
+from app.database import engine, safe_commit
+from app.models import Face, Media, Person, PersonSimilarity, Scene
 
 logger = logging.getLogger(__name__)
+logging.getLogger("PIL.PngImagePlugin").setLevel(logging.CRITICAL + 1)
+logging.getLogger("PIL.TiffImagePlugin").setLevel(logging.CRITICAL + 1)
 
 
-def detect_faces(
-    media_path: str,
-    detector_backend: str = "retinaface",
-    enforce_detection: bool = False,
-    align: bool = True,
-    expand_percentage: int = 0,
-) -> list[dict]:
-    path = Path(media_path)
-    stem = path.stem
-    ext = path.suffix.lower()
-
-    def _run_detection(rgb_img, frame_idx):
-        out = []
-        face_objs = DeepFace.extract_faces(
-            img_path=rgb_img,
-            detector_backend=detector_backend,
-            enforce_detection=enforce_detection,
-            align=align,
-            expand_percentage=expand_percentage,
-        )
-        for i, fo in enumerate(face_objs):
-            conf = fo.get("confidence", 0.0)
-            if conf < FACE_RECOGNITION_MIN_CONFIDENCE:
-                continue  # skip low‑confidence
-
-            face_bgr = fo["face"]
-
-            if np.issubdtype(face_bgr.dtype, np.floating):
-                face_uint8 = (face_bgr * 255).clip(0, 255).astype("uint8")
-            else:
-                face_uint8 = face_bgr
-
-            h, w = face_bgr.shape[:2]
-            if h * w < FACE_RECOGNITION_MIN_FACE_PIXELS:
-                continue  # skip tiny crops
-
-            ts = int(time.time() * 1000)
-            name = f"{stem}_{frame_idx}_{i}_{ts}.jpg"
-            thumb_file = THUMB_DIR / name
-            Image.fromarray(face_uint8).save(thumb_file, format="JPEG")
-
-            fa = fo.get("facial_area", {})
-            out.append(
-                {
-                    "thumbnail_path": name,
-                    "bbox": [
-                        fa.get("x"),
-                        fa.get("y"),
-                        fa.get("w"),
-                        fa.get("h"),
-                    ],
-                    "confidence": conf,
-                }
-            )
-        return out
-
-    results = []
-    if ext in VIDEO_SUFFIXES:
-        cap = cv2.VideoCapture(str(path))
-        total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-        step = max(total // (MAX_FRAMES_PER_VIDEO * VIDEO_SAMPLING_FACTOR), 1)
-        found = 0
-        idx = 0
-        while found < MAX_FRAMES_PER_VIDEO and idx < total:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-            ret, frame = cap.read()
-            if not ret:
-                break
-            dets = _run_detection(frame, idx)
-            if dets:
-                results.extend(dets)
-                found += 1
-            idx += step
-        cap.release()
-    else:
-        img_bgr = cv2.imread(str(path))
-        if img_bgr is None:
-            raise ValueError(f"Cannot load image {path}")
-        # pass raw BGR image to DeepFace
-        results = _run_detection(img_bgr, 0)
-
-    return results
+def get_all_media_embeddings(
+    session: Session,
+) -> list[tuple[int, list[float]]]:
+    # Returns list of (media_id, filename, embedding)
+    return session.exec(
+        select(Media.id, Media.embedding).where(Media.embedding != None)
+    ).all()
 
 
 def process_file(filepath: Path):
@@ -126,6 +51,9 @@ def process_file(filepath: Path):
             duration = float(probe["format"].get("duration", 0))
         else:
             duration = None
+        creation_date = datetime.fromtimestamp(
+            filepath.stat().st_mtime, timezone.utc
+        )
         vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
         width = int(vs[0]["width"]) if vs else None
         height = int(vs[0]["height"]) if vs else None
@@ -139,6 +67,7 @@ def process_file(filepath: Path):
             height=height,
             faces_extracted=False,
             embeddings_created=False,
+            created_at=creation_date,
         )
         session.add(media)
         safe_commit(session)
@@ -157,27 +86,6 @@ def process_file(filepath: Path):
         img = Image.open(filepath)
         img.thumbnail((480, -1))
         img.save(thumb_path, format="JPEG")
-
-
-def create_embedding_for_face(face: Face) -> list[float]:
-    """
-    Load the thumbnail from THUMB_DIR using face.thumbnail_path,
-    then call DeepFace.represent() to get a 1×N embedding.
-    """
-    thumb_file: Path = THUMB_DIR / face.thumbnail_path
-    if not thumb_file.exists():
-        raise FileNotFoundError(f"Missing thumbnail: {thumb_file}")
-
-    reps = DeepFace.represent(
-        img_path=str(thumb_file),
-        model_name="Facenet512",
-        detector_backend="retinaface",
-        enforce_detection=True,
-    )
-    # reps is List[{"embedding": [...] , ...}], so take the first if present
-    if not reps or "embedding" not in reps[0]:
-        return []
-    return reps[0]["embedding"]
 
 
 def get_person_embedding(
@@ -199,6 +107,140 @@ def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
     if na == 0 or nb == 0:
         return 0.0
     return float(a.dot(b) / (na * nb))
+
+
+def _split_by_scenes(
+    media: Media, scenes: Iterable[TimecodePair]
+) -> list[tuple[Scene, cv2.typing.MatLike]]:
+    scene_objs = []
+    for i, (start_time, end_time) in enumerate(scenes):
+        thumbnail_path = THUMB_DIR / f"{i}_{Path(media.path).stem}.jpg"
+        ffmpeg.input(
+            str(MEDIA_DIR / media.path), ss=start_time.get_seconds()
+        ).filter("scale", 480, -1).output(str(thumbnail_path), vframes=1).run(
+            quiet=True, overwrite_output=True
+        )
+        out, _ = (
+            ffmpeg.input(
+                str(MEDIA_DIR / media.path), ss=start_time.get_seconds()
+            )
+            .output(
+                "pipe:",  # send to stdout
+                vframes=1,  # just one frame
+                format="image2",  # raw image container
+                vcodec="mjpeg",  # JPEG in memory
+            )
+            .run(capture_stdout=True, quiet=True)
+        )
+        arr = np.frombuffer(out, np.uint8)
+        frame_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+        scene = Scene(
+            media_id=media.id,
+            start_time=start_time,
+            end_time=end_time,
+            thumbnail_path=str(thumbnail_path.relative_to(THUMB_DIR)),
+        )
+        scene_objs.append((scene, frame_rgb))
+    return scene_objs
+
+
+def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
+    scene_objs = []
+    video_path = MEDIA_DIR / media.path
+    cap = cv2.VideoCapture(str(video_path))
+
+    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    duration = total / fps
+
+    step = max(total // (MAX_FRAMES_PER_VIDEO), 1)
+    frame_indices = list(range(0, total, step))
+
+    for i, idx in enumerate(frame_indices):
+        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+        ret, frame = cap.read()
+        if not ret:
+            continue
+
+        # 1) convert to timestamps
+        start_sec = idx / fps
+        if i + 1 < len(frame_indices):
+            end_sec = frame_indices[i + 1] / fps
+        else:
+            end_sec = duration
+
+        # 2) save a thumbnail
+        thumb_name = f"{media.id}_frame_{i}.jpg"
+        thumb_file = THUMB_DIR / thumb_name
+        (
+            ffmpeg.input(str(video_path), ss=start_sec)
+            .filter("scale", 480, -1)
+            .output(str(thumb_file), vframes=1)
+            .run(quiet=True, overwrite_output=True)
+        )
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        scene = Scene(
+            media_id=media.id,
+            start_time=start_sec,
+            end_time=end_sec,
+            thumbnail_path=str(thumb_name),
+        )
+        scene_objs.append((scene, frame_rgb))
+    cap.release()
+    return scene_objs
+
+
+def _decimal_to_dms(value: float):
+    """
+    Convert decimal degrees into the EXIF rational format:
+    ((deg,1),(min,1),(sec*100,100))
+    """
+    deg = int(abs(value))
+    minutes_full = (abs(value) - deg) * 60
+    minute = int(minutes_full)
+    sec = round((minutes_full - minute) * 60 * 100)  # two‐decimals
+    return ((deg, 1), (minute, 1), (sec, 100))
+
+
+def update_exif_gps(path: str, lon: float, lat: float):
+    image_path = MEDIA_DIR / path
+    try:
+        exif_dict: dict = piexif.load(image_path)
+    except Exception:
+        exif_dict: dict = {
+            "0th": {},
+            "Exif": {},
+            "GPS": {},
+            "1st": {},
+            "thumbnail": None,
+        }
+
+    lat_ref = b"N" if lat >= 0 else b"S"
+    lng_ref = b"E" if lon >= 0 else b"W"
+    lat_dms = _decimal_to_dms(lat)
+    lng_dms = _decimal_to_dms(lon)
+    gps_ifd = {
+        piexif.GPSIFD.GPSLatitudeRef: lat_ref,
+        piexif.GPSIFD.GPSLatitude: lat_dms,
+        piexif.GPSIFD.GPSLongitudeRef: lng_ref,
+        piexif.GPSIFD.GPSLongitude: lng_dms,
+    }
+    exif_dict["GPS"].update(gps_ifd)
+    exif_bytes = piexif.dump(exif_dict)
+    img = Image.open(str(image_path))
+    img.save(str(image_path), exif=exif_bytes)
+
+
+def split_video(
+    media: Media, path: Path
+) -> list[tuple[Scene, cv2.typing.MatLike]]:
+    """Returns select frames from a video and a list of scenes"""
+    scenes = detect(str(path), AdaptiveDetector())
+    if len(scenes) > 3:
+        return _split_by_scenes(media, scenes)
+    else:
+        return _split_by_frames(media)
 
 
 def refresh_similarities_for_person(person_id: int) -> None:

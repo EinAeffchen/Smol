@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from app.schemas.face import FaceRead
 from sqlmodel import SQLModel
 
@@ -21,9 +21,9 @@ class PersonRead(SQLModel):
     name: str | None
     age: int | None
     gender: str | None
-    profile_face_id: int | None
     profile_face: FaceRead | None
 
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MergePersonsRequest(BaseModel):
@@ -35,4 +35,3 @@ class SimilarPerson(SQLModel):
     id: int
     name: str | None
     similarity: float
-

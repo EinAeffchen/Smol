@@ -12,6 +12,8 @@ import PeoplePage from './pages/PeoplePage'
 import TagsPage from './pages/TagPage';
 import MapPage from './pages/MapPage';
 import SearchPage from './pages/SearchResultPage';
+import OrphanFacesPage from './pages/OrphanFaces';
+import MapEditorPage from './pages/MapEditorPage';
 
 export default function App() {
   return (
@@ -23,7 +25,9 @@ export default function App() {
           <Route path="/video/:id" element={<VideoDetailPage />} />
           <Route path="/images" element={<ImagesPage />} />
           <Route path="/map" element={<MapPage />} />
+          <Route path="/maptagger" element={<MapEditorPage />} />
           <Route path="/tags" element={<TagsPage />} />
+          <Route path="/orphanfaces" element={<OrphanFacesPage />} />
           <Route path="/videos" element={<VideosPage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/image/:id" element={<ImageDetailPage />} />

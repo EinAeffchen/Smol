@@ -11,18 +11,13 @@ $(VENV)/bin/activate:
 install: $(VENV)/bin/activate
 	@$(PIP) install -r requirements.txt
 
-load_scene_model:
-ifeq (,$(wildcard ./app/models/resnet18_places365.pth.tar))
-	wget -O ./app/models/resnet18_places365.pth.tar http://places2.csail.mit.edu/models_places365/resnet18_places365.pth.tar
-	wget -O ./app/models/categories.txt https://raw.githubusercontent.com/csailvision/places365/master/categories_places365.txt
-else
-	echo "Model already downloaded"
-endif
-
-up: $(UVICORN)
+up: install
 	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port 8000
 
-build: install load_scene_model
+build: install
 	cd frontend && npm install && npm run build
 	mkdir -p ${MEDIA_DIR}/.smol/static
 	cp -r frontend/dist/* ${MEDIA_DIR}/.smol/static
+
+test:
+	${PYTHON}

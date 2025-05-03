@@ -5,7 +5,8 @@ from sqlmodel import Session, delete, select
 from app.config import THUMB_DIR
 from app.database import get_session, safe_commit
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
-from app.schemas.face import FaceAssign
+from app.schemas.face import FaceAssign, FaceRead
+from app.schemas.person import PersonRead
 from app.utils import logger
 
 router = APIRouter()
@@ -34,7 +35,7 @@ def assign_face(
     session.add(face)
     safe_commit(session)
 
-    if old_person.id != body.person_id:
+    if old_person and old_person.id != body.person_id:
         old_person_can_be_deleted(session, old_person)
     session.refresh(face)
     return face
@@ -65,10 +66,16 @@ class FaceCreatePerson(BaseModel):
     gender: str | None = None
 
 
+@router.get("/orphans", response_model=list[FaceRead])
+def get_orphans(session: Session = Depends(get_session)):
+    orphans = session.exec(select(Face).where(Face.person_id.is_(None))).all()
+    return orphans
+
+
 @router.post(
     "/{face_id}/create_person",
     summary="Create a new person from this face and assign",
-    response_model=Person,
+    response_model=PersonRead,
     status_code=status.HTTP_201_CREATED,
 )
 def create_person_from_face(
@@ -79,6 +86,7 @@ def create_person_from_face(
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
+
     previous_person = face.person
     # 1) Create the Person
     person = Person(
@@ -95,7 +103,7 @@ def create_person_from_face(
     face.person_id = person.id
     session.add(face)
     safe_commit(session)
-    if previous_person.id != person.id:
+    if previous_person and previous_person.id != person.id:
         old_person_can_be_deleted(session, previous_person)
     return person
 

@@ -1,11 +1,13 @@
-import React, { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
+import React, { useEffect, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { MediaExif } from '../components/MediaExif'
+import { SimilarContent } from '../components/MediaRelatedContent'
 import PersonCard from '../components/PersonCard'
-import { Media, Person, Tag, MediaDetail, Task } from '../types'
 import TagAdder from '../components/TagAdder'
-
-
-
+import { Media, MediaDetail, Person, Task, SceneRead } from '../types'
+import { Tags } from '../components/Tags'
+import { VideoWithPreview } from '../components/VideoPlayer'
+import { VideoWithScenes } from '../components/VideoWithScenes'
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
 export default function VideoDetailPage() {
@@ -13,31 +15,23 @@ export default function VideoDetailPage() {
     const navigate = useNavigate()
     const [media, setMedia] = useState<Media | null>(null)
     const [matchedPersons, setMatchedPersons] = useState<Person[]>([])
+    const [scenes, setScenes] = useState<SceneRead[]>([])
 
     const [showExif, setShowExif] = useState(false)
-    const [exif, setExif] = useState<Record<string, any> | null | undefined>(undefined)
     const [task, setTask] = useState<Task | null>(null)
-
 
 
     useEffect(() => {
         if (!id) return
+
             ; (async () => {
                 const res = await fetch(`${API}/media/${id}`)
-                const { media, persons } = await res.json() as MediaDetail
-                setMedia(media)
-                setMatchedPersons(persons)
+                const json = (await res.json()) as MediaDetail
+                setMedia(json.media)
+                setMatchedPersons(json.persons)    // <–– get them here!
             })().catch(console.error)
     }, [id])
 
-    useEffect(() => {
-        if (showExif && exif === undefined) {
-            fetch(`${API}/api/media/${id}/processors/exif`)
-                .then(r => (r.ok ? r.json() : null))
-                .then(body => setExif(body))       // body is object or null
-                .catch(() => setExif(null))
-        }
-    }, [showExif, id])
     useEffect(() => {
         if (!task) return
         const iv = setInterval(async () => {
@@ -56,16 +50,13 @@ export default function VideoDetailPage() {
         return () => clearInterval(iv)
     }, [task])
 
-    if (!media) return <div className="p-4">Loading…</div>
+    useEffect(() => {
+        fetch(`${API}/media/${id}/scenes`)
+            .then(r => r.json())
+            .then(setScenes)
+    }, [id])
 
-    const url = `/media/${media.path}`
-    const mimeType = (() => {
-        const name = media.filename.toLowerCase()
-        if (name.endsWith('.mp4')) return 'video/mp4'
-        if (name.endsWith('.webm')) return 'video/webm'
-        if (name.endsWith('.ogg')) return 'video/ogg'
-        return 'application/octet-stream'
-    })()
+    if (!media) return <div>Loading…</div>
 
     // Handler: delete file
     async function handleDeleteFile() {
@@ -114,8 +105,6 @@ export default function VideoDetailPage() {
         setTask(t)
     }
 
-
-
     return (
         <div className="bg-background text-text min-h-screen">
             <header className="flex items-center p-4 space-x-4">
@@ -161,62 +150,13 @@ export default function VideoDetailPage() {
                     onMouseEnter={() => setShowExif(true)}
                     onMouseLeave={() => setShowExif(false)}
                 >
-                    <video
-                        controls
-                        preload="metadata"
-                        poster={`/thumbnails/${media.id}.jpg`}
-                        className="w-full max-h-[60vh] rounded-lg bg-black mx-auto"
-                        src={`/originals/${media.path}`}
-                    >
-                        <source
-                            src={url}
-                            type={mimeType}
+                    <div key={media.id}>
+                        <VideoWithPreview
+                            media={media}
                         />
-                        Your browser doesn't support this video format.
-                    </video>
-                    {/* only render overlay when showExif===true */}
-                    {showExif && (
-                        <div className="absolute inset-0 pointer-events-none transition-opacity opacity-100">
-                            <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-60 text-white p-4 max-h-1/3 overflow-auto pointer-events-auto">
-                                {
-                                    // 2.1 still loading?
-                                    exif === undefined ? (
-                                        <p>Loading EXIF…</p>
-                                    ) : (
-                                        <>
-                                            {
-                                                // 2.2 we got an object → render fields
-                                                exif && typeof exif === 'object' ? (
-                                                    <>
-                                                        {exif.make && <p><strong>Camera:</strong> {exif.make} {exif.model}</p>}
-                                                        {exif.timestamp && <p><strong>Shot:</strong> {new Date(exif.timestamp).toLocaleString()}</p>}
-                                                        {exif.iso && <p><strong>ISO:</strong> {exif.iso}</p>}
-                                                        {exif.exposure_time && <p><strong>Shutter:</strong> {exif.exposure_time}s</p>}
-                                                        {exif.aperture && <p><strong>Aperture:</strong> {exif.aperture}</p>}
-                                                        {exif.focal_length && <p><strong>Focal:</strong> {exif.focal_length} mm</p>}
-
-                                                        {exif.lat != null && exif.lon != null && (
-                                                            <Link
-                                                                to={`/map?focus=${media.id}`}
-                                                                className="mt-2 inline-block text-blue-300 hover:underline pointer-events-auto"
-                                                            >
-                                                                View on map 📍
-                                                            </Link>
-                                                        )}
-                                                    </>
-                                                ) : (
-                                                    // 2.3 exif===null or non-object → no data
-                                                    <p>No EXIF data available.</p>
-                                                )
-                                            }
-                                        </>
-                                    )
-                                }
-                            </div>
-                        </div>
-                    )}
+                    </div>
+                    {/* <MediaExif showExif={showExif} id={media.id} /> */}
                 </figure>
-                {/* Detected Persons */}
                 <section>
                     <h3 className="text-lg font-semibold mb-2">Detected Persons</h3>
                     <div className="max-w-full overflow-x-auto py-2">
@@ -227,7 +167,7 @@ export default function VideoDetailPage() {
                         </div>
                     </div>
                 </section>
-                {/* Add tag to media */}
+                Add tag to media
                 <div className="px-4 py-2">
                     <TagAdder
                         ownerType="media"
@@ -241,36 +181,10 @@ export default function VideoDetailPage() {
                         }}
                     />
                 </div>
-                {/* Tags */}
-                <section>
-                    <h2 className="text-xl font-semibold mb-2">Tags</h2>
-                    <div className="flex flex-wrap gap-2">
-                        {(media.tags ?? []).map((tag: Tag) => (
-                            <div key={tag.id} className="flex items-center bg-accent2 text-background px-3 py-1 rounded-full space-x-1">
-                                <Link to={`/tag/${tag.id}`}>{tag.name}</Link>
-                                <button
-                                    onClick={async () => {
-                                        await fetch(`${API}/media/${media.id}/${tag.id}`, { method: 'DELETE' })
-                                        setMedia({
-                                            ...media,
-                                            tags: media.tags!.filter(t => t.id !== tag.id)
-                                        })
-                                    }}
-                                    className="font-bold"
-                                >×</button>
-                            </div>
-                        ))}
-                    </div>
-                </section>
 
+                <Tags media={media} onUpdate={setMedia} />
+                <SimilarContent media={media} />
 
-                {/* Related (stub; implement via your /media?person_id=… or /media?tags=…) */}
-                <section>
-                    <h2 className="text-xl font-semibold mb-2">Related Videos</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        {/* TODO: fetch & map related videos */}
-                    </div>
-                </section>
             </main>
         </div >
     )

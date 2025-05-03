@@ -71,21 +71,49 @@ class Media(SQLModel, table=True):
     duration: float | None = None
     width: int | None = None
     height: int | None = None
-    views: int = 0
+    views: int = Field(default=0, index=True)
     inserted_at: datetime = Field(default_factory=datetime.now, index=True)
+    created_at: datetime = Field(default_factory=datetime.now, index=True)
 
     faces_extracted: bool = Field(default=False, index=True)
     embeddings_created: bool = Field(default=False, index=True)
     ran_auto_tagging: bool = Field(default=False)
 
+    is_favorite: bool = Field(default=False)
+    embedding: list[float] | None = Field(
+        sa_column=Column(JSON, nullable=True, index=True)
+    )
     faces: list["Face"] = Relationship(back_populates="media")
+    scenes: list["Scene"] = Relationship(back_populates="media")
     tags: list[Tag] = Relationship(
         back_populates="media", link_model=MediaTagLink
     )
-    exif: list["ExifData"] = Relationship(back_populates="media")
+    exif: "ExifData" = Relationship(back_populates="media")
 
     class Config:
         from_attributes = True
+
+    def __eq__(self, other: "Media"):
+        if not isinstance(other, Media):
+            return False
+
+        if self.id == other.id:
+            return True
+        return False
+
+
+class Scene(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    media_id: int = Field(foreign_key="media.id", index=True)
+    start_time: float  # in seconds
+    end_time: float  # in seconds
+    thumbnail_path: str  # relative path under THUMB_DIR
+    description: str | None
+    embedding: list[float] | None = Field(
+        sa_column=Column(JSON, nullable=True, index=True)
+    )
+
+    media: "Media" = Relationship(back_populates="scenes")
 
 
 class Person(SQLModel, table=True):
@@ -93,6 +121,7 @@ class Person(SQLModel, table=True):
     name: str | None
     age: int | None
     gender: str | None
+    views: int = Field(default=0, index=True)
     faces: list["Face"] = Relationship(
         back_populates="person",
         sa_relationship_kwargs={
@@ -100,6 +129,7 @@ class Person(SQLModel, table=True):
             "foreign_keys": "[Face.person_id]"
         },
     )
+    is_favorite: bool = Field(default=False)
     profile_face_id: int | None = Field(
         foreign_key="face.id", default=None, index=True
     )

@@ -20,17 +20,42 @@ def list_tags(
     ).all()
 
 
+def get_or_create_tag(name: str, session: Session) -> Tag:
+    name = name.lower()
+    tag = session.exec(select(Tag).where(Tag.name == name)).first()
+    if not tag:
+        tag = Tag(name=name)
+        session.add(tag)
+        safe_commit(session)
+        session.refresh(tag)
+    return tag
+
+
+def attach_tag_to_media(media_id: int, tag_id: int, session: Session) -> None:
+    # avoid dupes
+    # ensure both exist
+    if not session.get(Media, media_id):
+        raise HTTPException(404, "Media not found")
+    if not session.get(Tag, tag_id):
+        raise HTTPException(404, "Tag not found")
+    if session.exec(
+        select(MediaTagLink).where(
+            MediaTagLink.tag_id == tag_id, MediaTagLink.media_id == media_id
+        )
+    ).first():
+        return
+    link = MediaTagLink(media_id=media_id, tag_id=tag_id)
+    session.add(link)
+    safe_commit(session)
+
+
 @router.post("/", response_model=Tag, status_code=status.HTTP_201_CREATED)
 def create_tag(
     *,
     name: str = Body(..., embed=True),
     session: Session = Depends(get_session)
 ):
-    name = name.lower()
-    tag = Tag(name=name)
-    session.add(tag)
-    safe_commit(session)
-    session.refresh(tag)
+    tag = get_or_create_tag(name, session)
     return tag
 
 
@@ -50,14 +75,7 @@ def get_tag(tag_id: int, session: Session = Depends(get_session)):
 def add_tag_to_media(
     media_id: int, tag_id: int, session: Session = Depends(get_session)
 ):
-    # ensure both exist
-    if not session.get(Media, media_id):
-        raise HTTPException(404, "Media not found")
-    if not session.get(Tag, tag_id):
-        raise HTTPException(404, "Tag not found")
-    link = MediaTagLink(media_id=media_id, tag_id=tag_id)
-    session.add(link)
-    safe_commit(session)
+    attach_tag_to_media(media_id, tag_id, session)
 
 
 @router.delete(

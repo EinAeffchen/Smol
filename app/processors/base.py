@@ -1,7 +1,9 @@
 # app/processors/base.py
 from abc import ABC, abstractmethod
 from sqlmodel import Session
-from app.models import Media
+from app.models import Media, Scene
+from cv2.typing import MatLike
+from PIL.ImageFile import ImageFile
 
 
 class MediaProcessor(ABC):
@@ -20,7 +22,16 @@ class MediaProcessor(ABC):
         """Used to load models into memory before use"""
 
     @abstractmethod
-    def process(self, media: Media, session: Session) -> None:
+    def unload(self):
+        """Used to load models into memory before use"""
+
+    @abstractmethod
+    def process(
+        self,
+        media: Media,
+        session: Session,
+        scenes: list[tuple[Scene, MatLike] | ImageFile],
+    ) -> None:
         """
         Called once for each new or updated Media.
         Should commit its own changes (e.g. write to its own tables).

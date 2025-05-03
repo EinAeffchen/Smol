@@ -50,15 +50,11 @@ export default function MediaCard({ media }: { media: Media }) {
         )}
       </div>
 
-      <div className="bg-black bg-opacity-50 text-text text-sm flex justify-between px-3 py-2">
-        {isVideo
-          ? <span>{formatDuration(media.duration)}</span>
-          : <span></span>
-        }
-        {isVideo && media.width && media.height && (
-          <span>{media.width}×{media.height}</span>
-        )}
-      </div>
+      {isVideo && (
+        <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+          {formatDuration(media.duration)}
+        </div>
+      )}
     </Link>
   )
 }
