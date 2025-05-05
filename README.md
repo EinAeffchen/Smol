@@ -45,6 +45,7 @@ A **self‑contained**, **volume‑mounted** media server with face detection, r
 
 * Install [npm](https://docs.npmjs.com/cli/v9/configuring-npm/install?v=trues)
 * Install [ffmpeg](https://ffmpeg.org/download.html)
+* at least 7 GB of storage in the target directory for AI models, etc.
 
 ### setup
 

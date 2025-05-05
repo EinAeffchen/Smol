@@ -15,6 +15,7 @@ from sqlmodel import Session, delete, select, update
 
 from app.config import THUMB_DIR
 from app.database import get_session, safe_commit
+from app.logger import logger
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
 from app.schemas.person import (
     FaceRead,
@@ -27,7 +28,6 @@ from app.schemas.person import (
 from app.utils import (
     cosine_similarity,
     get_person_embedding,
-    logger,
     refresh_similarities_for_person,
 )
 
@@ -260,8 +260,8 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
             thumb_path = THUMB_DIR / face.thumbnail_path
             if thumb_path.exists():
                 thumb_path.unlink()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception("FAILED person deletion: %s", e)
         session.delete(face)
 
     # 2) remove any person–tag links

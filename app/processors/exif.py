@@ -12,13 +12,15 @@ from app.database import safe_commit
 from sqlalchemy.orm import Session
 import ffmpeg
 from dateutil import parser
-from app.utils import logger
+from app.logger import logger
+import traceback
 
 
 def _decode_bytes(val: bytes) -> str:
     try:
         return val.rstrip(b"\x00").decode("utf-8", "ignore")
-    except:
+    except Exception as e:
+        logger.error("FAILED DECODING BYTES: %s", e)
         return val.decode("latin1", "ignore")
 
 
@@ -97,7 +99,8 @@ class ExifProcessor(MediaProcessor):
             session.add(rec)
             safe_commit(session)
 
-        except Exception:
+        except Exception as e:
+            logger.error("EXIF FAILED: %s", e)
             # on any decode error, skip silently
             pass
 
@@ -118,8 +121,8 @@ class ExifProcessor(MediaProcessor):
             if timestamp:
                 timestamp = parser.parse(timestamp)
             model = tags.get("com.android.manufacturer", "") + tags.get(
-                "com.android.model"
-            )
+                "com.android.model", ""
+            ).strip()
             # 6) persist
             rec = ExifData(
                 media_id=media.id,
@@ -132,6 +135,7 @@ class ExifProcessor(MediaProcessor):
             safe_commit(session)
         except Exception as e:
             logger.error(e)
+            logger.error(traceback.format_exc())
 
     def process(
         self,
@@ -147,7 +151,6 @@ class ExifProcessor(MediaProcessor):
 
         # 2) only on JPEG/TIFF
         fn = Path(media.filename)
-        logger.error("Getting exif!")
         if fn.suffix in ((".jpg", ".jpeg", ".tiff")):
             self._process_image(scenes[0], session, media)
         elif fn.suffix in VIDEO_SUFFIXES:

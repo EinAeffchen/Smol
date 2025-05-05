@@ -7,6 +7,9 @@ from sqlmodel import Session, select
 from fastapi.responses import PlainTextResponse
 from app.config import MEDIA_DIR, THUMB_DIR, MIN_CLIP_SEARCH_SIMILARITY
 from app.database import get_session, safe_commit
+from app.logger import logger
+from sqlalchemy import text
+import json
 from app.models import ExifData, Face, Media, MediaTagLink, Tag, Scene, Person
 from app.schemas.person import PersonRead
 from app.schemas.media import (
@@ -18,12 +21,8 @@ from app.schemas.media import (
     MediaDetail,
 )
 from app.utils import (
-    get_all_media_embeddings,
-    logger,
-    cosine_similarity,
     update_exif_gps,
 )
-import numpy as np
 from datetime import timedelta
 
 router = APIRouter()
@@ -263,32 +262,36 @@ def read_exif(media_id: int, session=Depends(get_session)):
 
 
 @router.get("/{media_id}/get_similar", response_model=list[MediaPreview])
-def get_similar_media(media_id: int, session=Depends(get_session)):
+def get_similar_media(
+    media_id: int, k: int = 30, session=Depends(get_session)
+):
     media = session.get(Media, media_id)
-    if not media:
+    if not media or not media.embedding:
         raise HTTPException(404, "Media not found")
-    embedding = np.array(media.embedding, dtype=np.float32)
-    other_embeddings = get_all_media_embeddings(session)
-    results = []
-    for other_media_id, emb in other_embeddings:
-        if other_media_id == media_id:
-            continue
-        other_vec = np.array(emb, dtype=np.float32)
-        score = cosine_similarity(embedding, other_vec)
-        if score > MIN_CLIP_SEARCH_SIMILARITY:
-            results.append((other_media_id, score))
-    ordered_ids = sorted(results, key=lambda x: x[1], reverse=True)[:20]
-    logger.error(ordered_ids)
-    ranked_ids = [m_id for m_id, _ in ordered_ids]
-    media_ids = [m_id for m_id, _ in ordered_ids]
-    orm_media = session.exec(
-        select(Media).where(Media.id.in_(media_ids))
-    ).all()
-    id_to_media = {m.id: m for m in orm_media}
-    ordered_media = [
-        id_to_media[mid] for mid in ranked_ids if mid in id_to_media
-    ]
-    return ordered_media
+    max_dist = 1.0 - MIN_CLIP_SEARCH_SIMILARITY
+    sql = text(
+        """
+      SELECT media_id
+        FROM media_embeddings
+       WHERE embedding MATCH :vec
+         AND distance < :maxd
+       ORDER BY distance
+       LIMIT :k
+    """
+    ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k)
+    rows = session.exec(sql).all()
+    media_ids = [r[0] for r in rows]
+
+    if not media_ids:
+        return []
+
+    # 5) fetch the actual Media rows
+    stmt = select(Media).where(Media.id.in_(media_ids))
+    media_objs = session.exec(stmt).all()
+
+    # 6) reorder them by the original KNN order
+    id_to_obj = {m.id: m for m in media_objs}
+    return [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
 
 
 @router.get("/{media_id}/scenes", response_model=list[SceneRead])

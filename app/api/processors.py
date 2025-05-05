@@ -6,7 +6,7 @@ from app.database import engine, get_session
 from app.processor_registry import load_processors
 from datetime import datetime, timezone
 from app.config import MEDIA_DIR
-from app.utils import logger
+from app.logger import logger
 import subprocess
 import ffmpeg
 

@@ -12,8 +12,9 @@ from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, THUMB_DIR
 from app.database import safe_commit
 from app.models import ExifData, Face, Media, Scene
 from app.processors.base import MediaProcessor
-from app.utils import logger
+from app.logger import logger
 import numpy as np
+from tqdm import tqdm
 
 
 class FaceProcessor(MediaProcessor):
@@ -93,7 +94,7 @@ class FaceProcessor(MediaProcessor):
         ).first():
             logger.debug("ALREADY FACES")
             return
-        for scene in scenes:
+        for scene in tqdm(scenes):
             if isinstance(scene, tuple):
                 scene = scene[1]
             else:

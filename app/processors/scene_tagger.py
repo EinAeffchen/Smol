@@ -8,9 +8,12 @@ from sqlmodel import select
 
 from app.models import Media, Scene, Tag
 from app.processors.base import MediaProcessor
-from app.utils import logger
+from app.logger import logger
 import numpy as np
 from app.config import preprocess, model
+from sqlalchemy import text
+import json
+from tqdm import tqdm
 
 
 class SceneTagger(MediaProcessor):
@@ -46,7 +49,7 @@ class SceneTagger(MediaProcessor):
             logger.debug("Already tagged!")
             return
         embeddings = list()
-        for scene in scenes:
+        for scene in tqdm(scenes):
             if isinstance(scene, ImageFile):
                 embeddings.append(self._get_embedding(scene))
             elif isinstance(scene, tuple):
@@ -59,11 +62,22 @@ class SceneTagger(MediaProcessor):
             media.embedding = embeddings[0]
         else:
             arr = np.stack([np.array(e, dtype=np.float32) for e in embeddings])
-            media.embedding = arr.mean(axis=0).tolist()
+            avg = arr.mean(axis=0)
+            norm = np.linalg.norm(avg)
+            if norm > 0:
+                avg /= norm
+            media.embedding = avg.tolist()
         # TODO add auto tags as config and perform one-shot tagging
         # TODO add search over embedding
         media.ran_auto_tagging = True
         session.add(media)
+        sql = text(
+            """
+                        INSERT OR REPLACE INTO media_embeddings(media_id, embedding)
+                        VALUES (:id, :emb)
+                        """
+        ).bindparams(id=media.id, emb=json.dumps(media.embedding))
+        session.exec(sql)
         session.commit()
 
     def get_results(self, media_id: int, session):

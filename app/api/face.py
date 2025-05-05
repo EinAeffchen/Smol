@@ -7,7 +7,7 @@ from app.database import get_session, safe_commit
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
 from app.schemas.face import FaceAssign, FaceRead
 from app.schemas.person import PersonRead
-from app.utils import logger
+from app.logger import logger
 
 router = APIRouter()
 

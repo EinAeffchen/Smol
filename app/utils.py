@@ -1,4 +1,3 @@
-import logging
 import os
 from collections.abc import Iterable
 from datetime import datetime, timezone
@@ -12,6 +11,7 @@ from PIL import Image
 from scenedetect import AdaptiveDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlmodel import Session, select
+from tqdm import tqdm
 
 from app.config import (
     MAX_FRAMES_PER_VIDEO,
@@ -20,20 +20,8 @@ from app.config import (
     VIDEO_SUFFIXES,
 )
 from app.database import engine, safe_commit
+from app.logger import logger
 from app.models import Face, Media, Person, PersonSimilarity, Scene
-
-logger = logging.getLogger(__name__)
-logging.getLogger("PIL.PngImagePlugin").setLevel(logging.CRITICAL + 1)
-logging.getLogger("PIL.TiffImagePlugin").setLevel(logging.CRITICAL + 1)
-
-
-def get_all_media_embeddings(
-    session: Session,
-) -> list[tuple[int, list[float]]]:
-    # Returns list of (media_id, filename, embedding)
-    return session.exec(
-        select(Media.id, Media.embedding).where(Media.embedding != None)
-    ).all()
 
 
 def process_file(filepath: Path):
@@ -44,8 +32,12 @@ def process_file(filepath: Path):
         ).first()
         if exists:
             return
-
-        probe = ffmpeg.probe(filepath)
+        try:
+            probe = ffmpeg.probe(filepath)
+        except Exception as e:
+            logger.error(filepath)
+            logger.error(e)
+            raise
         size = os.path.getsize(filepath)
         if filepath.suffix in VIDEO_SUFFIXES:
             duration = float(probe["format"].get("duration", 0))
@@ -113,7 +105,9 @@ def _split_by_scenes(
     media: Media, scenes: Iterable[TimecodePair]
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
-    for i, (start_time, end_time) in enumerate(scenes):
+    for i, (start_time, end_time) in tqdm(
+        enumerate(scenes), total=len(scenes)
+    ):
         thumbnail_path = THUMB_DIR / f"{i}_{Path(media.path).stem}.jpg"
         ffmpeg.input(
             str(MEDIA_DIR / media.path), ss=start_time.get_seconds()
@@ -153,8 +147,9 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     duration = total / fps
+    min_frame_step = int(fps * 30)  # Max one screenshot every 30 seconds
 
-    step = max(total // (MAX_FRAMES_PER_VIDEO), 1)
+    step = max(total // (MAX_FRAMES_PER_VIDEO), min_frame_step)
     frame_indices = list(range(0, total, step))
 
     for i, idx in enumerate(frame_indices):
@@ -236,7 +231,8 @@ def split_video(
     media: Media, path: Path
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
     """Returns select frames from a video and a list of scenes"""
-    scenes = detect(str(path), AdaptiveDetector())
+    scenes = detect(str(path), AdaptiveDetector(), show_progress=True)
+    logger.error("Detecting scenes...")
     if len(scenes) > 3:
         return _split_by_scenes(media, scenes)
     else:

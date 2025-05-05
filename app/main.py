@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import media, person, tasks, face, tags, search
 from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
-from app.database import init_db
+from app.database import init_db, init_vec_index
 from app.api.processors import router as proc_router
 from app.processor_registry import load_processors
 
@@ -23,6 +23,7 @@ logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 async def lifespan(app: FastAPI):
     # Load the ML model
     init_db()
+    init_vec_index()
     load_processors()
     yield
 

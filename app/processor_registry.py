@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List
 
 from app.processors.base import MediaProcessor
-from app.utils import logger
+from app.logger import logger
 
 # this will hold instances of every MediaProcessor
 processors: List[MediaProcessor] = []

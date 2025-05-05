@@ -100,6 +100,14 @@ export function Header() {
             >
               Map
             </NavLink>
+            <NavLink
+              to="/maptagger"
+              className={({ isActive }) =>
+                isActive ? 'text-accent' : 'hover:text-accent'
+              }
+            >
+              Geotagger
+            </NavLink>
           </nav>
 
           {/* Menu button (visible on small only) */}

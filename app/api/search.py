@@ -1,18 +1,18 @@
 # app/api/processors.py
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlmodel import Session
-from app.database import get_session
-from app.utils import logger
-import torch
-from app.config import tokenizer, model
-from app.models import Media, Tag, Person, Face
-from app.schemas.search import SearchResult
-from app.schemas.media import MediaPreview
-from sqlmodel import Session, select
-from sqlalchemy import or_
+import json
+
 import numpy as np
-from app.config import MIN_CLIP_SEARCH_SIMILARITY
-from app.utils import get_all_media_embeddings
+import torch
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import or_, text
+from sqlmodel import Session, select
+
+from app.config import MIN_CLIP_SEARCH_SIMILARITY, model, tokenizer
+from app.database import get_session
+from app.logger import logger
+from app.models import Face, Media, Person, Tag
+from app.schemas.search import SearchResult
+from sqlalchemy.dialects import sqlite
 
 router = APIRouter()
 
@@ -22,32 +22,7 @@ def encode_text_query(query: str) -> np.ndarray:
     with torch.no_grad():
         text_feat = model.encode_text(tokenized)
     text_feat /= text_feat.norm(dim=-1, keepdim=True)
-    return text_feat.squeeze(0).cpu().numpy()
-
-
-def rank_media_by_query(
-    query_embedding: np.ndarray,
-    media_embeddings: list[tuple[int, list[float]]],
-) -> list[tuple[int, str, float]]:
-    query_vec = query_embedding
-    results = []
-    for media_id, emb in media_embeddings:
-        emb_vec = np.array(emb, dtype=np.float32)
-        score = float(
-            np.dot(query_vec, emb_vec)
-            / (np.linalg.norm(query_vec) * np.linalg.norm(emb_vec))
-        )
-        if score > MIN_CLIP_SEARCH_SIMILARITY:
-            results.append((media_id, score))
-    return sorted(results, key=lambda x: x[1], reverse=True)
-
-
-def query_media_by_query_vector(query: str, session: Session):
-    query_embedding = encode_text_query(query)
-    media_embeddings = get_all_media_embeddings(session)
-    ranked = rank_media_by_query(query_embedding, media_embeddings)
-    logger.error("RANKED: %s", ranked)
-    return ranked
+    return text_feat.squeeze(0).cpu().numpy().tolist()
 
 
 @router.get("/", summary="Query the database", response_model=SearchResult)
@@ -60,19 +35,32 @@ def search(
     limit: int = 50,
     session: Session = Depends(get_session),
 ):
-    ranked = query_media_by_query_vector(query, session)[skip : skip + limit]
-    ranked_ids = [m_id for m_id, _ in ranked]
-    page_ids = ranked_ids[skip : skip + limit]
-    orm_media = []
-    if page_ids:
-        orm_media = session.exec(
-            select(Media).where(Media.id.in_(page_ids))
-        ).all()
+    query_emb = encode_text_query(query)
+    max_dist = 1.4
+    sql = text(
+        """
+      SELECT media_id
+        FROM media_embeddings
+       WHERE embedding MATCH :vec
+         AND distance < :maxd
+       ORDER BY distance
+       LIMIT :k
+       OFFSET :o
+    """
+    ).bindparams(vec=json.dumps(query_emb), maxd=max_dist, k=limit, o=skip)
+    rows = session.exec(sql).all()
+    media_ids = [r[0] for r in rows]
 
-    id_to_media = {m.id: m for m in orm_media}
-    ordered_media = [
-        id_to_media[mid] for mid in page_ids if mid in id_to_media
-    ]
+    # 5) fetch the actual Media rows
+    if media_ids:
+        stmt = select(Media).where(Media.id.in_(media_ids))
+        media_objs = session.exec(stmt).all()
+    else:
+        media_objs = []
+
+    # 6) reorder them by the original KNN order
+    id_to_obj = {m.id: m for m in media_objs}
+    media = [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
 
     q = f"%{query or ''}%"
     p_stmt = (
@@ -89,6 +77,6 @@ def search(
     ).all()
     return {
         "persons": people,
-        "media": [m.model_dump() for m in ordered_media],
+        "media": [m.model_dump() for m in media],
         "tags": tags,
     }

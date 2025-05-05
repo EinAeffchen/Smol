@@ -134,7 +134,7 @@ smol.db
 .venv
 **/viewer/images
 media
-
+media2
 frontend/node_modules
 app/models/*.tar
 app/models/*.txt

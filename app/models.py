@@ -1,7 +1,8 @@
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column
 from sqlalchemy.types import JSON
-from datetime import datetime, timezone
+from datetime import datetime
+from sqlalchemy_vectorstores import SqliteDatabase, SqliteVectorStore
 import uuid
 from typing import Optional
 

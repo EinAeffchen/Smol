@@ -17,12 +17,12 @@ from app.config import (
     PERSON_MIN_FACE_COUNT,
 )
 from app.database import engine, get_session, safe_commit
+from app.logger import logger
 from app.models import Face, Media, Person, PersonSimilarity, ProcessingTask
 from app.processor_registry import processors
 from app.utils import (
     cosine_similarity,
     get_person_embedding,
-    logger,
     process_file,
     split_video,
 )
@@ -53,7 +53,7 @@ def start_media_processing(
             )
         )
     ).one()
-
+    logger.error("Processing %s", total)
     task = ProcessingTask(
         task_type="process_media",
         total=int(total),
@@ -67,7 +67,6 @@ def start_media_processing(
 
 
 def _run_media_processing(task_id: str):
-    logger.info("Processing with %s", [p.name for p in processors])
     session = Session(engine)
     task = session.get(ProcessingTask, task_id)
     task.status = "running"
@@ -83,7 +82,7 @@ def _run_media_processing(task_id: str):
                 Media.ran_auto_tagging.is_(False),
                 Media.embeddings_created.is_(False),
             )
-        )
+        ).order_by(Media.duration.asc())
     ).all()
 
     for media in medias:
@@ -109,12 +108,14 @@ def _run_media_processing(task_id: str):
             proc.load_model()
 
         for proc in processors:
-            logger.info("Running Processor: %s", proc.name)
             try:
                 proc.process(media, session, scenes=scenes)
-            except Exception:
+            except Exception as e:
                 logger.exception(
-                    "processor %r failed on media %d", proc.name, media.id
+                    "processor %r failed on media %d with %s",
+                    proc.name,
+                    media.id,
+                    e,
                 )
         for proc in processors:
             proc.unload()
@@ -217,11 +218,11 @@ def _run_person_clustering(task_id: str):
 
 
 def cluster_unassigned_faces_into_new_persons(
-    unassigned_ids: List[int],
+    unassigned_ids: list[int],
     session: Session | None = None,
     eps: float = 0.5,
     min_samples: int = 1,
-) -> List[int]:
+) -> list[int]:
     """
     Run a DBSCAN over just the unassigned faces to create brand-new persons.
     Returns the list of newly‐created person IDs.
@@ -230,7 +231,7 @@ def cluster_unassigned_faces_into_new_persons(
     if not unassigned_ids:
         return []
 
-    faces: List[Face] = session.exec(
+    faces: list[Face] = session.exec(
         select(Face).where(Face.id.in_(unassigned_ids))
     ).all()
     embs = np.stack([np.array(f.embedding, dtype=np.float32) for f in faces])
@@ -245,7 +246,7 @@ def cluster_unassigned_faces_into_new_persons(
         if lbl < 0:
             continue
         cluster_face_ids = [fid for fid, l in zip(ids, labels) if l == lbl]
-        
+
         if len(cluster_face_ids) < PERSON_MIN_FACE_COUNT:
             continue
         # create a Person
@@ -287,14 +288,14 @@ def cancel_task(
     return task
 
 
-@router.get("/", response_model=List[ProcessingTask], summary="List all tasks")
+@router.get("/", response_model=list[ProcessingTask], summary="List all tasks")
 def list_tasks(session: Session = Depends(get_session)):
     return session.exec(select(ProcessingTask)).all()
 
 
 @router.get(
     "/active",
-    response_model=List[ProcessingTask],
+    response_model=list[ProcessingTask],
     summary="List all active tasks",
 )
 def list_active_tasks(session: Session = Depends(get_session)):
@@ -325,17 +326,7 @@ def start_scan(
 ):
     # 1) discover all NEW files
     new_files = []
-    for media_type in VIDEO_SUFFIXES + IMAGE_SUFFIXES:
-        for path in MEDIA_DIR.rglob(f"*{media_type}"):
-            relative_path = path.relative_to(MEDIA_DIR)
-            if (
-                ".smol" in path.parts
-                or session.exec(
-                    select(Media.id).where(Media.path == str(relative_path))
-                ).first()
-            ):
-                continue
-            new_files.append(path)
+    logger.info("Scanning %s...", MEDIA_DIR)
 
     # 2) make a ProcessingTask
     task = ProcessingTask(task_type="scan", total=len(new_files), processed=0)
@@ -344,7 +335,7 @@ def start_scan(
     session.refresh(task)
 
     # 3) enqueue the runner
-    background_tasks.add_task(_run_scan, task.id, new_files)
+    background_tasks.add_task(_run_scan, task.id)
     return task
 
 
@@ -373,10 +364,35 @@ def reset_clustering(session: Session = Depends(get_session)):
     return "OK"
 
 
-def _run_scan(task_id: str, files: list[Path]):
+def _run_scan(task_id: str):
     sess = Session(engine)
     task = sess.get(ProcessingTask, task_id)
     task.status = "running"
+    sess.add(task)
+    sess.commit()
+    files = []
+    for sub_path in MEDIA_DIR.iterdir():
+        if sub_path.name == ".smol":
+            continue
+        if sub_path.is_dir():
+            logger.info("Checking %s", sub_path)
+        media_paths = sub_path.rglob(f"*.*")
+        if sub_path.is_file():
+            media_paths = [sub_path]
+        for media_path in media_paths:
+            if media_path.suffix not in IMAGE_SUFFIXES + VIDEO_SUFFIXES:
+                continue
+            logger.debug("Parsing %s", media_path)
+            relative_path = media_path.relative_to(MEDIA_DIR)
+            if (
+                ".smol" in media_path.parts
+                or sess.exec(
+                    select(Media.id).where(Media.path == str(relative_path))
+                ).first()
+            ):
+                continue
+            files.append(media_path)
+    task.total = len(files)
     sess.add(task)
     sess.commit()
 

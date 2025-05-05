@@ -46,6 +46,10 @@ IMAGE_SUFFIXES = [
 # ------- AI Settings -------------
 # Image embedding and text search model
 MIN_CLIP_SEARCH_SIMILARITY = 0.1
+model, preprocess, _ = open_clip.create_model_and_transforms(
+    "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k"
+)
+tokenizer = open_clip.get_tokenizer("xlm-roberta-large-ViT-H-14")
 
 # face recognition settings
 MAX_FRAMES_PER_VIDEO = 30
@@ -56,7 +60,4 @@ PERSON_MIN_FACE_COUNT = (
     2  # how many matching faces must a person have for auto creation
 )
 
-model, preprocess, _ = open_clip.create_model_and_transforms(
-    "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k"
-)
-tokenizer = open_clip.get_tokenizer("xlm-roberta-large-ViT-H-14")
+
