@@ -1,15 +1,16 @@
 import React, { useCallback } from 'react'
 import PersonCard from '../components/PersonCard'
-import { useInfinite } from '../hooks/useInfinite'
+import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { Person } from '../types'
 
 const API = import.meta.env.VITE_API_BASE_URL
 
 export default function VideosPage() {
-    const fetchPeople = useCallback((skip: number, limit: number) =>
-        fetch(`${API}/persons/?skip=${skip}&limit=${limit}`)
-            .then(r => r.json() as Promise<Person[]>), [API])
-    const { items: persons, hasMore, loading, loaderRef } = useInfinite<Person>(fetchPeople, 12)
+    const fetchPeople = useCallback((cursor: string | null, limit: number) =>
+        fetch(`${API}/persons/${cursor ? `?cursor=${cursor}&` : "?"
+            }limit=${limit}`)
+            .then(r => r.json() as Promise<CursorResponse<Person>>), [API])
+    const { items: persons, setItems: setPersons, hasMore, loading, loaderRef } = useInfinite<Person>(fetchPeople, 12)
 
     if (loading) return <div className="p-4">Loading people...</div>
 

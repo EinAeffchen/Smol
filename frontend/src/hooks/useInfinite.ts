@@ -1,51 +1,58 @@
 // src/hooks/useInfinite.ts
 import { useState, useRef, useEffect, useCallback } from "react";
 
+export type CursorResponse<T> = {
+  items: T[];
+  next_cursor: string | null;
+};
+
 export function useInfinite<T>(
-  fetchPage: (skip: number, limit: number) => Promise<T[]>,
+  // fetchPage now takes (cursor, limit) and returns items + next_cursor
+  fetchPage: (
+    cursor: string | null,
+    limit: number
+  ) => Promise<CursorResponse<T>>,
   limit = 50,
   resetDeps: any[] = []
 ) {
   const [items, setItems] = useState<T[]>([]);
-  const [page, setPage] = useState(0);
+  const [cursor, setCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const loaderRef = useRef<HTMLDivElement>(null);
 
-  // when `page` changes, fetch exactly that page
-  useEffect(() => {
-    let cancelled = false;
+  const loadMore = useCallback(() => {
+    if (loading || !hasMore) return;
     setLoading(true);
-    const skip = page * limit;
 
-    fetchPage(skip, limit).then((newItems) => {
-      if (cancelled) return;
-      setItems((prev) => (page === 0 ? newItems : [...prev, ...newItems]));
-      setHasMore(newItems.length === limit);
+    fetchPage(cursor, limit).then(({ items: newItems, next_cursor }) => {
+      setItems((prev) => [...prev, ...newItems]);
+      setCursor(next_cursor);
+      setHasMore(next_cursor !== null);
       setLoading(false);
     });
+  }, [cursor, fetchPage, hasMore, limit, loading]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [page, limit, fetchPage]);
+  // on mount or when resetDeps change, clear state and load first page
   useEffect(() => {
     setItems([]);
-    setPage(0);
+    setCursor(null);
     setHasMore(true);
+    loadMore();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, resetDeps);
-  // observe the loader element once (or whenever hasMore flips)
+
+  // intersection observer for infinite scroll
   useEffect(() => {
-    if (!hasMore || loading) return;
+    if (loading || !hasMore) return;
     const el = loaderRef.current;
     if (!el) return;
 
     const obs = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting) {
-          // advance to next page exactly once per intersection
           obs.disconnect();
-          setPage((current) => current + 1);
+          loadMore();
         }
       },
       { rootMargin: "200px" }
@@ -55,7 +62,7 @@ export function useInfinite<T>(
     return () => {
       obs.disconnect();
     };
-  }, [hasMore, loading]);
+  }, [hasMore, loading, loadMore]);
 
-  return { items, hasMore, loading, loaderRef };
+  return { items, setItems, hasMore, loading, loaderRef };
 }

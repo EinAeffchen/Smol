@@ -35,3 +35,8 @@ class SimilarPerson(SQLModel):
     id: int
     name: str | None
     similarity: float
+
+class CursorPage(BaseModel):
+    items: list[PersonRead]
+    next_cursor: str | None
+

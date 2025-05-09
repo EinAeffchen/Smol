@@ -6,7 +6,8 @@ from cv2.typing import MatLike
 from insightface.app import FaceAnalysis
 from PIL import Image
 from PIL.ImageFile import ImageFile
-from sqlmodel import select
+from sqlmodel import select, text
+import json
 
 from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, THUMB_DIR
 from app.database import safe_commit
@@ -103,6 +104,16 @@ class FaceProcessor(MediaProcessor):
             face_objs = self._parse_faces(faces, scene, media)
             for face_obj in face_objs:
                 session.add(face_obj)
+                session.flush()
+                sql = text(
+                    """
+                        INSERT OR REPLACE INTO face_embeddings(face_id, person_id, embedding)
+                        VALUES (:id, -1, :emb)
+                        """
+                ).bindparams(
+                    id=face_obj.id, emb=json.dumps(face_obj.embedding)
+                )
+                session.exec(sql)
         media.faces_extracted = True
         media.embeddings_created = True
         safe_commit(session)

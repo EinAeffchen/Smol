@@ -1,15 +1,22 @@
 import React, { useCallback } from 'react'
 import TagCard from '../components/TagCard'
-import { useInfinite } from '../hooks/useInfinite'
+import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { Tag } from '../types'
 
 const API = import.meta.env.VITE_API_BASE_URL
 
 export default function TagsPage() {
-  const fetchTags = useCallback((skip: number, limit: number) =>
-    fetch(`${API}/tags/?skip=${skip}&limit=${limit}`)
-      .then(r => r.json() as Promise<Tag[]>), [API])
-  const { items: tags, hasMore, loading, loaderRef } = useInfinite<Tag>(fetchTags, 20)
+  const fetchTags = useCallback(
+    (cursor: string | null, limit: number) =>
+      fetch(
+        `${API}/tags/${cursor ? `?cursor=${cursor}&` : "?"
+        }limit=${limit}`
+      ).then((r) =>
+        r.json() as Promise<CursorResponse<Tag>>
+      ),
+    [API]
+  )
+  const { items: tags, setItems: setTags, hasMore, loading, loaderRef } = useInfinite<Tag>(fetchTags, 20)
 
   return (
     <div className="max-w-screen-lg mx-auto px-4 py-8">

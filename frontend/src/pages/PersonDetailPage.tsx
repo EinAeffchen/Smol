@@ -176,7 +176,7 @@ export default function PersonDetailPage() {
         }
         fetch(`${API}/persons/?name=${encodeURIComponent(searchTerm)}`)
             .then(r => r.json())
-            .then(setCandidates)
+            .then(r => setCandidates(r.items))
             .catch(console.error)
     }, [mergeOpen, searchTerm])
 

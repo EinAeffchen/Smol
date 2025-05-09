@@ -9,7 +9,6 @@ import {
 } from 'react-leaflet'
 import { useSearchParams, Link } from 'react-router-dom'
 import type { LatLngExpression } from 'leaflet'
-import { MediaPreview } from '../types'
 
 interface MediaLocation {
     id: number

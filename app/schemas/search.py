@@ -9,3 +9,8 @@ class SearchResult(BaseModel):
     persons: list[PersonRead] | None = None
     media: list[MediaPreview] | None = None
     tags: list[TagRead] | None = None
+
+
+class CursorPage(BaseModel):
+    items: list[SearchResult]
+    next_cursor: str | None

@@ -1,29 +1,31 @@
+import json
+from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import delete
+from fastapi.responses import PlainTextResponse
+from pydantic import BaseModel
+from sqlalchemy import and_, delete, or_, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
-from fastapi.responses import PlainTextResponse
-from app.config import MEDIA_DIR, THUMB_DIR, MIN_CLIP_SEARCH_SIMILARITY
+
+from app.config import MEDIA_DIR, MIN_CLIP_SEARCH_SIMILARITY, THUMB_DIR
 from app.database import get_session, safe_commit
 from app.logger import logger
-from sqlalchemy import text
-import json
-from app.models import ExifData, Face, Media, MediaTagLink, Tag, Scene, Person
-from app.schemas.person import PersonRead
+from app.models import ExifData, Face, Media, MediaTagLink, Person, Scene, Tag
 from app.schemas.media import (
-    SceneRead,
+    CursorPage,
     GeoUpdate,
+    MediaDetail,
     MediaLocation,
     MediaPreview,
     MediaRead,
-    MediaDetail,
+    SceneRead,
 )
+from app.schemas.person import PersonRead
 from app.utils import (
     update_exif_gps,
 )
-from datetime import timedelta
 
 router = APIRouter()
 
@@ -53,7 +55,7 @@ def get_missing_geo(session: Session = Depends(get_session)):
     return session.exec(stmt).all()
 
 
-@router.get("/", response_model=list[MediaRead])
+@router.get("/", response_model=CursorPage)
 def list_media(
     tags: list[str] | None = Query(
         None, description="Filter by tag name(s), comma-separated"
@@ -62,22 +64,64 @@ def list_media(
         None, description="Filter by detected person ID"
     ),
     sort: Annotated[str, Query(enum=["newest", "popular"])] = "newest",
-    skip: int = Query(0, ge=0),
+    cursor: str | None = Query(
+        None,
+        description="encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+    ),
     limit: int = Query(100, ge=1, le=200),
     session: Session = Depends(get_session),
 ):
     q = select(Media)
-    if sort == "newest":
-        order_by = "created_at"
-    elif sort == "popular":
-        order_by = "views"
-    if tags is not None and len(tags) > 0:
+    # select by tags
+    if tags and len(tags) > 0:
         q = q.join(Media.tags).where(Tag.name.in_(tags))
+
+    if sort == "newest":
+        sort_col = Media.created_at
+        # Type of the value in the cursor for 'newest'
+        parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
+    elif sort == "popular":
+        sort_col = Media.views
+        # Type of the value in the cursor for 'popular'
+        parse_val_from_cursor = lambda val_str: int(val_str)
+    else:
+        # Handle invalid sort parameter, perhaps default or raise error
+        raise ValueError(f"Unsupported sort option: {sort}")
+
+    # Apply consistent ordering
+    q = q.order_by(sort_col.desc(), Media.id.desc())
+
+    if cursor:
+        try:
+            val_str, id_str = cursor.split("_", 1)
+            prev_cursor_val = parse_val_from_cursor(val_str)
+            prev_cursor_id = int(id_str)
+        except ValueError:
+            logger.warning("Warning: Invalid cursor format: %s", cursor)
+        else:
+            # Apply the cursor-based WHERE clause
+            q = q.where(
+                or_(
+                    sort_col < prev_cursor_val,
+                    and_(
+                        sort_col == prev_cursor_val, Media.id < prev_cursor_id
+                    ),
+                )
+            )
 
     if person_id:
         q = q.join(Media.faces).where(Face.person_id == person_id)
-    q = q.offset(skip).limit(limit).order_by(getattr(Media, order_by).desc())
-    return session.exec(q).all()
+
+    results = session.exec(q.limit(limit)).all()
+    if len(results) == limit:
+        last = results[-1]
+        v = getattr(last, "created_at" if sort == "newest" else "views")
+        # isoformat for dates, simple int for views
+        val_token = v.isoformat() if sort == "newest" else str(v)
+        next_cursor = f"{val_token}_{last.id}"
+    else:
+        next_cursor = None
+    return CursorPage(items=results, next_cursor=next_cursor)
 
 
 @router.get("/locations", response_model=list[MediaLocation])
@@ -103,44 +147,51 @@ def list_locations(session: Session = Depends(get_session)):
     ]
 
 
-@router.get(
-    "/images", response_model=list[MediaPreview], summary="List all images"
-)
+@router.get("/images", response_model=CursorPage, summary="List all images")
 def list_images(
-    skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     session: Session = Depends(get_session),
+    cursor: str | None = Query(
+        None,
+        description="encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+    ),
 ):
-    stmt = (
-        select(Media)
-        .where(Media.duration == None)  # images have no duration
-        .order_by(Media.inserted_at.desc())
-        .offset(skip)
-        .limit(limit)
-    )
-    medias = session.exec(stmt).all()
-    return [
-        MediaPreview(**m.model_dump(), thumb_url=f"/thumbnails/{m.id}.jpg")
-        for m in medias
-    ]
+    stmt = select(Media).where(
+        Media.duration.is_(None)
+    )  # images have no duration
+
+    if cursor:
+        before_id = int(cursor)
+        # keyset predicate
+        stmt = stmt.where(Media.id < before_id)
+    logger.debug("LIMIT: %s", limit)
+    stmt = stmt.order_by(Media.id.desc())
+    medias = session.exec(stmt.limit(limit)).all()
+    next_cursor = str(medias[-1].id) if len(medias) == limit else None
+    return CursorPage(items=medias, next_cursor=next_cursor)
 
 
-@router.get(
-    "/videos", response_model=list[MediaRead], summary="List all videos"
-)
+@router.get("/videos", response_model=CursorPage, summary="List all videos")
 def list_videos(
-    skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     session: Session = Depends(get_session),
+    cursor: str | None = Query(
+        None,
+        description="encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+    ),
 ):
-    stmt = (
-        select(Media)
-        .where(Media.duration != None)  # videos have a duration
-        .order_by(Media.inserted_at.desc())
-        .offset(skip)
-        .limit(limit)
-    )
-    return session.exec(stmt).all()
+    stmt = select(Media).where(
+        Media.duration != None
+    )  # videos have a duration
+    stmt = stmt.order_by(Media.inserted_at.desc())
+    if cursor:
+        before_id = int(cursor)
+        # keyset predicate
+        stmt = stmt.where(Media.id < before_id)
+    results = session.exec(stmt.limit(limit)).all()
+    logger.error(results)
+    next_cursor = str(results[-1].id) if len(results) == limit else None
+    return CursorPage(items=results, next_cursor=next_cursor)
 
 
 @router.get("/{media_id}", response_model=MediaDetail)
@@ -263,7 +314,7 @@ def read_exif(media_id: int, session=Depends(get_session)):
 
 @router.get("/{media_id}/get_similar", response_model=list[MediaPreview])
 def get_similar_media(
-    media_id: int, k: int = 30, session=Depends(get_session)
+    media_id: int, k: int = 10, session=Depends(get_session)
 ):
     media = session.get(Media, media_id)
     if not media or not media.embedding:
@@ -280,7 +331,7 @@ def get_similar_media(
     """
     ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k)
     rows = session.exec(sql).all()
-    media_ids = [r[0] for r in rows]
+    media_ids = [r[0] for r in rows if r[0] != media_id]
 
     if not media_ids:
         return []

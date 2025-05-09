@@ -1,15 +1,25 @@
 import React, { useCallback } from 'react'
 import MediaCard from '../components/MediaCard'
-import { useInfinite } from '../hooks/useInfinite'
+import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { MediaPreview } from '../types'
 
 const API = import.meta.env.VITE_API_BASE_URL
 
+
 export default function ImagesPage() {
-    const fetchImages = useCallback((skip: number, limit: number) =>
-        fetch(`${API}/media/images?skip=${skip}&limit=${limit}`)
-            .then(r => r.json() as Promise<MediaPreview[]>), [API])
-    const { items: images, hasMore, loading, loaderRef } = useInfinite<MediaPreview>(fetchImages, 20)
+    const pageSize = 20;
+    const fetchImages = useCallback(
+        (cursor: string | null, limit: number) =>
+            fetch(
+                `${API}/media/images${cursor ? `?cursor=${cursor}&` : "?"
+                }limit=${limit}`
+            ).then((r) =>
+                r.json() as Promise<CursorResponse<MediaPreview>>
+            ),
+        [API]
+    )
+    const { items: images, setItems: setImages, hasMore, loading, loaderRef } =
+        useInfinite<MediaPreview>(fetchImages, pageSize, [])
 
     return (
         <div className="max-w-screen-lg mx-auto px-4 py-8">

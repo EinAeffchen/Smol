@@ -91,7 +91,11 @@ def get_person_embedding(
     if not embeddings:
         return None
     arr = np.stack([np.array(e, dtype=np.float32) for e in embeddings])
-    return arr.mean(axis=0)
+    avg = arr.mean(axis=0)
+    norm = np.linalg.norm(avg)
+    if norm > 0:
+        avg /= norm
+    return avg
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -231,9 +235,15 @@ def split_video(
     media: Media, path: Path
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
     """Returns select frames from a video and a list of scenes"""
-    scenes = detect(str(path), AdaptiveDetector(), show_progress=True)
+    scenes = detect(
+        str(path),
+        AdaptiveDetector(
+            adaptive_threshold=3, window_width=5, min_scene_len=500
+        ),
+        show_progress=True,
+    )
     logger.error("Detecting scenes...")
-    if len(scenes) > 3:
+    if len(scenes) > 10:
         return _split_by_scenes(media, scenes)
     else:
         return _split_by_frames(media)

@@ -120,9 +120,17 @@ class ExifProcessor(MediaProcessor):
             timestamp = tags.get("creation_time")
             if timestamp:
                 timestamp = parser.parse(timestamp)
-            model = tags.get("com.android.manufacturer", "") + tags.get(
-                "com.android.model", ""
-            ).strip()
+            model = (
+                tags.get("com.android.manufacturer", "")
+                + tags.get("com.android.model", "").strip()
+            )
+            if lat and lon:
+                try:
+                    lat = float(lat)
+                    lon = float(lon)
+                except ValueError:
+                    lat = None
+                    lon = None
             # 6) persist
             rec = ExifData(
                 media_id=media.id,

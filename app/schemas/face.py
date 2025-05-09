@@ -8,5 +8,11 @@ class FaceRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class FaceAssign(BaseModel):
     person_id: int
+
+
+class CursorPage(BaseModel):
+    items: list[FaceRead]
+    next_cursor: str | None

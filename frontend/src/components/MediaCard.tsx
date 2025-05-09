@@ -17,7 +17,7 @@ export default function MediaCard({ media }: { media: Media }) {
   const [hovered, setHovered] = useState(false)
 
   // decide aspect class
-  const aspectClass = isVideo ? 'aspect-video' : 'aspect-[4/3]'
+  const aspectClass = 'aspect-[4/3]'
 
   return (
     <Link

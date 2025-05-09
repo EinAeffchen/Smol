@@ -1,13 +1,10 @@
 import React, { useState, useEffect, useCallback, Fragment } from 'react'
 import MediaCard from '../components/MediaCard'
-import PersonCard from '../components/PersonCard'
 import { MediaIndex, PersonIndex } from '../types'
-import { useInfinite } from '../hooks/useInfinite'
+import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
-const ITEMS_PER_ROW = 6
-const ROWS_BEFORE_PEOPLE = 3
-const ITEMS_PER_PAGE = ITEMS_PER_ROW * ROWS_BEFORE_PEOPLE // 18
+const ITEMS_PER_PAGE = 20
 
 export default function IndexPage() {
   const [tags, setTags] = useState<string[]>([])
@@ -15,23 +12,31 @@ export default function IndexPage() {
   const [sortOrder, setSortOrder] = useState<'newest' | 'popular'>('newest')
 
   const fetchPage = useCallback(
-    async (skip: number, limit: number) => {
+    (cursor: string | null, limit: number) => {
       const params = new URLSearchParams()
-      params.set('skip', skip.toString())
-      params.set('limit', limit.toString())
-      params.set('sort', sortOrder)
-      tags.forEach(tag => params.append('tags', tag))
-      const res = await fetch(`${API}/media/?${params.toString()}`)
-      if (!res.ok) throw new Error('Fetch failed')
-      const data = await res.json()
-      return Array.isArray(data) ? data as MediaIndex[] : []
+      params.set("limit", limit.toString())
+      params.set("sort", sortOrder)
+      tags.forEach(tag => params.append("tags", tag))
+      if (cursor) {
+        params.set("cursor", cursor)
+      }
+
+      return fetch(`${API}/media/?${params.toString()}`)
+        .then(res => {
+          if (!res.ok) throw new Error(res.statusText)
+          return res.json() as Promise<CursorResponse<MediaIndex>>
+        })
     },
-    [tags, sortOrder]
+    [API, sortOrder, tags]
   )
 
-
-  const { items: mediaItems, hasMore, loading, loaderRef } =
-    useInfinite<MediaIndex>(fetchPage, ITEMS_PER_PAGE, [tags, sortOrder])
+  const {
+    items: mediaItems,
+    setItems: setItems,
+    hasMore,
+    loading,
+    loaderRef,
+  } = useInfinite<MediaIndex>(fetchPage, ITEMS_PER_PAGE, [tags, sortOrder])
 
   useEffect(() => {
     fetch(`${API}/persons/`)

@@ -1,18 +1,24 @@
 # app/api/processors.py
 import json
+from datetime import datetime
+from typing import Literal, Optional, Union
 
 import numpy as np
 import torch
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import or_, text
-from sqlmodel import Session, select
+from sqlalchemy.dialects import sqlite
+from sqlmodel import Session, and_, or_, select
 
 from app.config import MIN_CLIP_SEARCH_SIMILARITY, model, tokenizer
 from app.database import get_session
 from app.logger import logger
 from app.models import Face, Media, Person, Tag
-from app.schemas.search import SearchResult
-from sqlalchemy.dialects import sqlite
+from app.schemas.search import CursorPage, SearchResult
+from app.schemas.tag import TagRead
+from app.schemas.media import MediaPreview
+from app.schemas.person import PersonRead
 
 router = APIRouter()
 
@@ -25,58 +31,73 @@ def encode_text_query(query: str) -> np.ndarray:
     return text_feat.squeeze(0).cpu().numpy().tolist()
 
 
-@router.get("/", summary="Query the database", response_model=SearchResult)
+@router.get(
+    "/",
+    summary="Search media, persons, or tags with cursor pagination",
+    response_model=CursorPage,
+)
 def search(
-    query: str | None = Query(
-        None,
-        description="Query keywords: tag, person, duration_gte, duration_lte",
+    *,
+    category: Literal["media", "person", "tag"] = Query(
+        ..., description="Which type to search"
     ),
-    skip: int = 0,
-    limit: int = 50,
+    limit: int = 20,
+    cursor: str | None = Query(
+        None,
+        description="previous max distance as int, e.g. 1.1",
+    ),
+    query: str = Query("", description="Free-text or embedding query"),
     session: Session = Depends(get_session),
 ):
-    query_emb = encode_text_query(query)
-    max_dist = 1.4
-    sql = text(
-        """
-      SELECT media_id
-        FROM media_embeddings
-       WHERE embedding MATCH :vec
-         AND distance < :maxd
-       ORDER BY distance
-       LIMIT :k
-       OFFSET :o
-    """
-    ).bindparams(vec=json.dumps(query_emb), maxd=max_dist, k=limit, o=skip)
-    rows = session.exec(sql).all()
-    media_ids = [r[0] for r in rows]
+    if category == "media":
+        vec = encode_text_query(query)
+        prev_max = -10
+        if cursor:
+            prev_max = float(cursor)
+        logger.warning("DISTANCE: %s", prev_max)
+        sql = text(
+            """
+            SELECT media_id, distance
+              FROM media_embeddings
+             WHERE embedding MATCH :vec
+               AND distance > :prev_max
+             ORDER BY distance
+            LIMIT :k
+            """
+        ).bindparams(vec=json.dumps(vec), prev_max=prev_max, k=limit)
+        rows = session.exec(sql).all()  # [(media_id, distance), ...]
+        logger.warning(rows)
+        media_ids = [r[0] for r in rows]
 
-    # 5) fetch the actual Media rows
-    if media_ids:
-        stmt = select(Media).where(Media.id.in_(media_ids))
-        media_objs = session.exec(stmt).all()
-    else:
-        media_objs = []
+        # 2) load & order Media
+        medias = session.exec(
+            select(Media).where(Media.id.in_(media_ids))
+        ).all()
+        id_map = {m.id: m for m in medias}
+        ordered = [id_map[mid] for mid in media_ids if mid in id_map]
+        if len(medias) == limit:
+            next_cursor = str(rows[-1][1])
+        else:
+            next_cursor = None
+        return CursorPage(
+            items=[SearchResult(media=ordered, persons=[], tags=[])],
+            next_cursor=next_cursor,
+        )
 
-    # 6) reorder them by the original KNN order
-    id_to_obj = {m.id: m for m in media_objs}
-    media = [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
+    elif category == "person":
+        people = session.exec(
+            select(Person).where(Person.name.ilike(f"%{query}%"))
+        ).all()
+        return CursorPage(
+            items=[SearchResult(media=[], persons=people, tags=[])],
+            next_cursor=None,
+        )
 
-    q = f"%{query or ''}%"
-    p_stmt = (
-        select(Person)
-        .where(or_(Person.name.ilike(q)))
-        .distinct()
-        .offset(skip)
-        .limit(limit)
-    )
-    people = session.exec(p_stmt).all()
-    # tags by name alone
-    tags = session.exec(
-        select(Tag).where(Tag.name.ilike(q)).offset(skip).limit(limit)
-    ).all()
-    return {
-        "persons": people,
-        "media": [m.model_dump() for m in media],
-        "tags": tags,
-    }
+    else:  # category == "tag"
+        tags = session.exec(
+            select(Tag).where(Tag.name.ilike(f"%{query}%"))
+        ).all()
+        return CursorPage(
+            items=[SearchResult(media=[], persons=[], tags=tags)],
+            next_cursor=None,
+        )

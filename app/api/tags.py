@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Body
+from fastapi import APIRouter, Query, Depends, HTTPException, status, Body
 from sqlmodel import Session, select
 from sqlalchemy import delete
 from sqlalchemy.orm import selectinload
@@ -7,17 +7,38 @@ from app.database import get_session
 from app.models import Tag, Media, Person, MediaTagLink, PersonTagLink
 from app.schemas.tag import TagRead
 from app.database import safe_commit
+from app.schemas.tag import CursorPage
+
 
 router = APIRouter()
 
 
-@router.get("/", response_model=list[TagRead])
+@router.get("/", response_model=CursorPage)
 def list_tags(
-    skip: int = 0, limit: int = 50, session: Session = Depends(get_session)
+    limit: int = 50,
+    cursor: str | None = Query(
+        None,
+        description="encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+    ),
+    session: Session = Depends(get_session),
 ):
-    return session.exec(
-        select(Tag).options(selectinload(Tag.media)).offset(skip).limit(limit)
-    ).all()
+    before_id = None
+    if cursor:
+        before_id = int(cursor)
+    query = (
+        select(Tag)
+        .options(selectinload(Tag.media))
+        .order_by(Tag.id.desc())
+        .limit(limit)
+    )
+    if before_id:
+        query = query.where(Tag.id < before_id)
+    results = session.exec(query).all()
+    if len(results) == limit:
+        next_cursor = str(results[-1].id)
+    else:
+        next_cursor = None
+    return CursorPage(next_cursor=next_cursor, items=results)
 
 
 def get_or_create_tag(name: str, session: Session) -> Tag:

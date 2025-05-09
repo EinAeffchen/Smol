@@ -1,56 +1,68 @@
-import React, { useCallback } from 'react'
+// frontend/src/pages/SearchResultsPage.tsx
+import React, { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import MediaCard from '../components/MediaCard'
 import PersonCard from '../components/PersonCard'
 import TagCard from '../components/TagCard'
-import { useInfinite } from '../hooks/useInfinite'
-import { Media, Person, SearchResult, Tag } from '../types'
+import { SearchResult } from '../types'
+import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 
 const API = import.meta.env.VITE_API_BASE_URL
+const ITEMS_PER_PAGE = 20
 
-export default function SearchPage() {
+
+export default function SearchResultsPage() {
     const [searchParams] = useSearchParams()
-    const q = searchParams.get('query') || ''
-    const fetchSearch = useCallback(
-        (skip: number, limit: number): Promise<SearchResult[]> => {
-            return fetch(
-                `${API}/search/?query=${encodeURIComponent(q)}&skip=${skip}&limit=${limit}`
-            ).then(res => {
-                if (!res.ok) throw new Error(res.statusText)
-                return res.json() as Promise<SearchResult>
-            }).then(page => [page])
+    const category = (searchParams.get('category') as 'media' | 'person' | 'tag') || 'media'
+    const query = searchParams.get('query') || ''
+    const fetchPage = useCallback(
+        (cursor: string | null, limit: number) => {
+            const params = new URLSearchParams({ category, query })
+            params.set('limit', String(limit))
+            if (cursor) params.set('cursor', cursor)
+            return fetch(`${API}/search/?${params}`)
+                .then(r => r.json() as Promise<CursorResponse<SearchResult>>)
         },
-        [API, q]   // re-create whenever the query changes
+        [API, category, query],
     )
-    const { items: pages, hasMore, loading, loaderRef } =
-        useInfinite<SearchResult>(fetchSearch, 20, [q])
-    const mediaList = pages.reduce<Media[]>((acc, page) => acc.concat(page.media), [])
-    const peopleList = pages.reduce<Person[]>((acc, page) => acc.concat(page.persons), [])
-    const tagList = pages.reduce<Tag[]>((acc, page) => acc.concat(page.tags), [])
+    const {
+        items: pages,
+        hasMore,
+        loading,
+        loaderRef,
+    } = useInfinite<SearchResult>(fetchPage, ITEMS_PER_PAGE, [category, query])
+
+    const mediaList = useMemo(() => pages.flatMap(p => p.media), [pages])
+    const peopleList = useMemo(() => pages.flatMap(p => p.persons), [pages])
+    const tagList = useMemo(() => pages.flatMap(p => p.tags), [pages])
+
     return (
         <div className="max-w-screen-lg mx-auto px-4 py-8">
-            <h2 className="text-2xl font-semibold mb-6">Images/Videos</h2>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-                {mediaList.map(m => <MediaCard key={m.id} media={m} />)}
+            {/* Title */}
+            <h1 className="text-2xl font-semibold mb-6 capitalize">
+                {category === 'media'
+                    ? 'Media Results'
+                    : category === 'person'
+                        ? 'People Results'
+                        : 'Tag Results'}
+            </h1>
+
+            {/* Grid */}
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4 mb-6">
+                {category === 'media' &&
+                    mediaList.map(m => <MediaCard key={m.id} media={m} />)}
+                {category === 'person' &&
+                    peopleList.map(p => <PersonCard key={p.id} person={p} />)}
+                {category === 'tag' &&
+                    tagList.map(t => <TagCard key={t.id} tag={t} />)}
             </div>
-            <h2 className="text-2xl font-semibold mb-6">People</h2>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-                {peopleList.map(p => <PersonCard key={p.id} person={p} />)}
-            </div>
-            <h2 className="text-2xl font-semibold mb-6">Tags</h2>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-                {tagList.map(t => <TagCard key={t.id} tag={t} />)}
-            </div>
+
+            {/* Loading & sentinel */}
             {loading && (
-                <div className="py-4 text-center text-gray-500">
-                    Loading…
-                </div>
+                <div className="py-4 text-center text-gray-500">Loading more…</div>
             )}
             {!loading && hasMore && (
-                <div
-                    ref={loaderRef}
-                    className="py-4 text-center text-gray-500"
-                >
+                <div ref={loaderRef} className="py-4 text-center text-gray-500">
                     Scroll to load more…
                 </div>
             )}

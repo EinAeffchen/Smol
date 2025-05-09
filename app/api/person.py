@@ -9,10 +9,10 @@ from fastapi import (
     Query,
     status,
 )
+import json
 from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, delete, select, update
-
+from sqlmodel import Session, delete, select, update, text, sql
 from app.config import THUMB_DIR
 from app.database import get_session, safe_commit
 from app.logger import logger
@@ -24,6 +24,7 @@ from app.schemas.person import (
     PersonRead,
     PersonUpdate,
     SimilarPerson,
+    CursorPage,
 )
 from app.utils import (
     cosine_similarity,
@@ -34,24 +35,34 @@ from app.utils import (
 router = APIRouter()
 
 
-@router.get("/", response_model=list[PersonRead])
+@router.get("/", response_model=CursorPage)
 def list_persons(
     name: str | None = Query(
         None, description="Filter by substring match on name"
     ),
-    skip: int = 0,
+    cursor: str | None = Query(
+        None,
+        description="encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+    ),
     limit: int = 50,
     session: Session = Depends(get_session),
 ):
+    before_id = None
+    if cursor:
+        before_id = int(cursor)
+
     q = select(Person).options(
         selectinload(Person.profile_face)
     )  # load the FK’d face
     if name:
         q = q.where(Person.name.ilike(f"%{name}%"))
-    q = q.offset(skip).limit(limit)
-    q = q.order_by(Person.views.desc())
+    q = q.limit(limit)
+    q = q.order_by(Person.id.desc())
+    if before_id:
+        q = q.where(Person.id < before_id)
+
     people = session.exec(q).all()
-    return [
+    items = [
         PersonRead(
             **p.model_dump(),
             profile_face=(
@@ -62,10 +73,17 @@ def list_persons(
         )
         for p in people
     ]
+    if len(items) == limit:
+        next_cursor = str(people[-1].id)
+    else:
+        next_cursor = None
+    return CursorPage(next_cursor=next_cursor, items=items)
 
 
 @router.get("/{person_id}/suggest-faces", response_model=list[FaceRead])
-def suggest_faces(person_id: int, session: Session = Depends(get_session)):
+def suggest_faces(
+    person_id: int, limit: int = 10, session: Session = Depends(get_session)
+):
     # 1) must exist
     if not session.get(Person, person_id):
         raise HTTPException(404, "Person not found")
@@ -74,29 +92,30 @@ def suggest_faces(person_id: int, session: Session = Depends(get_session)):
     target = get_person_embedding(session, person_id)
     if target is None:
         return []
+    sql = text(
+        """
+            SELECT face_id, distance
+              FROM face_embeddings
+             WHERE embedding MATCH :vec
+                    and person_id = -1
+             ORDER BY distance
+            LIMIT :k
+            """
+    ).bindparams(vec=json.dumps(target.tolist()), k=limit)
+    rows = session.exec(sql).all()  # [(media_id, distance), ...]
+    face_ids = [r[0] for r in rows]
 
-    # 3) fetch all unassigned faces with embeddings
-    all_orphans = session.exec(
-        select(Face).where(Face.person_id.is_(None), Face.embedding != None)
-    ).all()
+    faces = session.exec(select(Face).where(Face.id.in_(face_ids))).all()
+    id_map = {f.id: f for f in faces}
+    ordered = [id_map[f.id] for f in faces if f.id in id_map]
 
-    # 4) compute similarity scores
-    scored = []
-    for f in all_orphans:
-        emb = np.array(f.embedding, dtype=np.float32)
-        sim = cosine_similarity(target, emb)
-        scored.append((f, sim))
-
-    # 5) pick top 10
-    top10 = sorted(scored, key=lambda x: x[1], reverse=True)[:10]
     return [
         FaceRead(
             id=f.id,
             media_id=f.media_id,
             thumbnail_path=f.thumbnail_path,
-            bbox=f.bbox,
         )
-        for f, _ in top10
+        for f in ordered
     ]
 
 
@@ -255,14 +274,15 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
     # 1) delete all Face rows for this person (and remove thumbnails)
     faces = session.exec(select(Face).where(Face.person_id == person_id)).all()
     for face in faces:
-        # delete thumbnail file if it exists
-        try:
-            thumb_path = THUMB_DIR / face.thumbnail_path
-            if thumb_path.exists():
-                thumb_path.unlink()
-        except Exception as e:
-            logger.exception("FAILED person deletion: %s", e)
-        session.delete(face)
+        face.person_id = None
+        sql = text(
+            """
+                Update face_embeddings
+                SET person_id=-1
+                WHERE face_id=:f_id
+                """
+        ).bindparams(f_id=face.id)
+        session.exec(sql)
 
     # 2) remove any person–tag links
     session.exec(

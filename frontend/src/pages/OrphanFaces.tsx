@@ -1,24 +1,30 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useState } from 'react'
 import FaceCard from '../components/FaceCard'
-import { Person, FaceRead } from '../types'
+import { FaceRead } from '../types'
+import { useInfinite, CursorResponse } from '../hooks/useInfinite'
+
 
 const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export default function OrphanFacesPage() {
-    const [orphans, setOrphans] = useState<FaceRead[]>([])
-    const [loading, setLoading] = useState(true)
+    const fetchOrphans = useCallback(
+        (cursor: string | null, limit: number) =>
+            fetch(
+                `${API}/faces/orphans${cursor ? `?cursor=${cursor}&` : "?"
+                }limit=${limit}`
+            ).then((r) =>
+                r.json() as Promise<CursorResponse<FaceRead>>
+            ),
+        [API]
+    )
+    const {
+        items: orphans,
+        setItems: setOrphans,
+        hasMore,
+        loading,
+        loaderRef,
+    } = useInfinite<FaceRead>(fetchOrphans, 48, []);
 
-    // 1) Load all orphan faces
-    useEffect(() => {
-        fetch(`${API}/faces/orphans`)
-            .then(r => {
-                if (!r.ok) throw new Error('Failed to load orphans')
-                return r.json() as Promise<FaceRead[]>
-            })
-            .then(setOrphans)
-            .catch(console.error)
-            .finally(() => setLoading(false))
-    }, [])
 
     // assign a face to an existing person
     async function assignFace(faceId: number, personId: number) {
@@ -72,6 +78,19 @@ export default function OrphanFacesPage() {
                         />
                     ))}
                 </div>
+                {loading && (
+                    <div className="py-4 text-center text-gray-500">
+                        Loading…
+                    </div>
+                )}
+                {!loading && hasMore && (
+                    <div
+                        ref={loaderRef}
+                        className="py-4 text-center text-gray-500"
+                    >
+                        Scroll to load more…
+                    </div>
+                )}
             </section>
         </main>
     )

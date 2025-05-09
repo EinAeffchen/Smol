@@ -1,11 +1,11 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Query, Body, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlmodel import Session, delete, select
+from sqlmodel import Session, delete, select, text
 
 from app.config import THUMB_DIR
 from app.database import get_session, safe_commit
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
-from app.schemas.face import FaceAssign, FaceRead
+from app.schemas.face import FaceAssign, FaceRead, CursorPage
 from app.schemas.person import PersonRead
 from app.logger import logger
 
@@ -32,6 +32,14 @@ def assign_face(
 
     old_person = face.person
     face.person_id = person.id
+    sql = text(
+        """
+                UPDATE face_embeddings
+                set person_id=:p_id
+                WHERE face_id=:f_id
+                """
+    ).bindparams(p_id=person.id, f_id=face.id)
+    session.exec(sql)
     session.add(face)
     safe_commit(session)
 
@@ -66,10 +74,30 @@ class FaceCreatePerson(BaseModel):
     gender: str | None = None
 
 
-@router.get("/orphans", response_model=list[FaceRead])
-def get_orphans(session: Session = Depends(get_session)):
-    orphans = session.exec(select(Face).where(Face.person_id.is_(None))).all()
-    return orphans
+@router.get("/orphans", response_model=CursorPage)
+def get_orphans(
+    session: Session = Depends(get_session),
+    cursor: str | None = Query(
+        None,
+        description="encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+    ),
+    limit: int = 48,
+):
+    before_id = None
+    if cursor:
+        before_id = int(cursor)
+    query = (
+        select(Face).where(Face.person_id.is_(None)).order_by(Face.id.desc())
+    )
+    if before_id:
+        query = query.where(Face.id < before_id)
+    orphans = session.exec(query.limit(limit)).all()
+
+    if len(orphans) == limit:
+        next_cursor = str(orphans[-1].id)
+    else:
+        next_cursor = None
+    return CursorPage(next_cursor=next_cursor, items=orphans)
 
 
 @router.post(

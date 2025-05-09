@@ -1,7 +1,7 @@
 from datetime import datetime
 
 from sqlmodel import SQLModel, Field
-from pydantic import field_validator, ConfigDict
+from pydantic import field_validator, ConfigDict, BaseModel
 
 from app.schemas.face import FaceRead
 from app.schemas.person import PersonRead
@@ -36,6 +36,7 @@ class MediaPreview(SQLModel):
     width: int | None
     height: int | None
     views: int
+    path: str
     inserted_at: datetime
 
 
@@ -55,6 +56,7 @@ class FaceWithPerson(SQLModel):
 class MediaDetail(SQLModel):
     media: MediaRead
     persons: list[PersonRead] = Field(default_factory=list)
+    faces: list[Face] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,3 +64,8 @@ class MediaDetail(SQLModel):
 class GeoUpdate(SQLModel):
     latitude: float
     longitude: float
+
+
+class CursorPage(BaseModel):
+    items: list[MediaPreview]
+    next_cursor: str | None

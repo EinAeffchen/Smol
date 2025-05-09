@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { Tag } from '../types'
+import { CursorResponse } from '../hooks/useInfinite'
+
 
 type OwnerType = 'media' | 'persons'
 
@@ -23,10 +25,15 @@ export default function TagAdder({
     // load all tags for suggestion / lookup
     useEffect(() => {
         fetch(`${API}/tags/`)
-            .then(r => r.json())
-            .then(setAllTags)
+            .then(r => {
+                if (!r.ok) throw new Error(`Status ${r.status}`)
+                return r.json() as Promise<CursorResponse<Tag>>
+            })
+            .then(page => {
+                setAllTags(page.items)    // ← pull the array out
+            })
             .catch(console.error)
-    }, [])
+    }, [API])
 
     async function handleAdd() {
         const name = inputValue.trim()

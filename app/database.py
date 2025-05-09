@@ -7,11 +7,10 @@ from app.logger import logger
 from sqlalchemy import event, text
 import sqlite_vec
 
-logger.debug("Database loaded from %s", DATABASE_URL)
 engine = create_engine(
     DATABASE_URL,
     echo=False,
-    connect_args={"check_same_thread": False},
+    connect_args={"check_same_thread": False, "timeout": 30},
     pool_size=5,
     max_overflow=10,
 )
@@ -25,6 +24,16 @@ def _load_sqlite_extensions(dbapi_conn, connection_record):
     sqlite_vec.load(dbapi_conn)
     # 3) lock it back down
     dbapi_conn.enable_load_extension(False)
+
+
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragma(dbapi_conn, connection_record):
+    # enable WAL journal
+    dbapi_conn.execute("PRAGMA journal_mode=WAL;")
+    # reduce how often SQLite flushes to disk (optional)
+    dbapi_conn.execute("PRAGMA synchronous=NORMAL;")
+    # ensure we wait up to `timeout` seconds if the DB is locked
+    dbapi_conn.execute("PRAGMA busy_timeout = 30000;")  # milliseconds
 
 
 def safe_commit(session, retries=3, delay=0.5):
@@ -60,13 +69,35 @@ def init_vec_index():
         """
             )
         )
-        conn.execute(text("DELETE FROM media_embeddings;"))
-        # 2) populate it from your media table
         conn.execute(
             text(
                 """
-          INSERT OR REPLACE INTO media_embeddings(media_id, embedding)
-          SELECT id, embedding FROM media WHERE embedding IS NOT NULL;
+          INSERT OR IGNORE INTO media_embeddings(media_id, embedding)
+          SELECT m.id, m.embedding FROM media m LEFT JOIN media_embeddings me ON m.id = me.media_id
+            WHERE me.media_id IS NULL
+            AND m.embedding IS NOT NULL;
+        """
+            )
+        )
+        conn.execute(
+            text(
+                """
+          CREATE VIRTUAL TABLE IF NOT EXISTS face_embeddings
+          USING vec0(
+            face_id    integer primary key,
+            person_id   integer,
+            embedding   float[512]
+          );
+        """
+            )
+        )
+        conn.execute(
+            text(
+                """
+          INSERT OR IGNORE INTO face_embeddings(face_id, person_id, embedding)
+          SELECT f.id, COALESCE(f.person_id, -1), f.embedding FROM face f LEFT JOIN face_embeddings fe ON f.id = fe.face_id
+            WHERE f.embedding IS NOT NULL
+            AND fe.face_id IS NULL;
         """
             )
         )

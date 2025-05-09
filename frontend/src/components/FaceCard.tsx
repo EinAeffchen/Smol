@@ -40,8 +40,8 @@ export default function FaceCard({
             return
         }
         fetch(`${API}/persons/?name=${encodeURIComponent(query)}`)
-            .then((r) => r.json())
-            .then(setCands)
+            .then(r => r.json())
+            .then(r => setCands(r.items))
             .catch(console.error)
     }, [mode, query])
 

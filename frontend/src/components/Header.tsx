@@ -6,15 +6,24 @@ import ControlPanelModal from './ControlPanelModal'
 export function Header() {
   const [openPanel, setOpenPanel] = useState(false)
   const [q, setQ] = useState('')
+  const [category, setCategory] = useState<'media' | 'person' | 'tag'>('media')
   const navigate = useNavigate()
 
   function onSearchSubmit(e: React.FormEvent) {
     e.preventDefault()
-    // if empty, do nothing
-    if (!q.trim()) return
-    // navigate to your SearchPage with ?query=...
-    navigate(`/searchresults?query=${encodeURIComponent(q.trim())}`)
+    const trimmed = q.trim()
+    if (!trimmed) return
+
+    // include both category and query in the URL
+    navigate(
+      `/searchresults?` +
+      new URLSearchParams({
+        category,
+        query: trimmed,
+      }).toString()
+    )
   }
+
 
   return (
     <>
@@ -30,20 +39,34 @@ export function Header() {
           </Link>
 
           {/* Search bar */}
-          <form
-            onSubmit={onSearchSubmit}
-            className="flex flex-1"
-            role="search"
-          >
+          <form onSubmit={onSearchSubmit} className="flex flex-1" role="search">
+            {/* Dropdown */}
+            <select
+              value={category}
+              onChange={e => setCategory(e.target.value as any)}
+              className="
+                bg-gray-800 text-text
+                rounded-l-full border border-r-0 border-gray-700
+                px-3 py-2
+                focus:outline-none focus:ring-2 focus:ring-accent
+                transition
+              "
+            >
+              <option value="media">Media</option>
+              <option value="person">People</option>
+              <option value="tag">Tags</option>
+            </select>
+
+            {/* Text input */}
             <input
               type="text"
               value={q}
               onChange={e => setQ(e.target.value)}
-              placeholder="Search tags, people, duration…"
+              placeholder="Search…"
               className="
                 flex-1
                 bg-gray-800 placeholder-gray-500 text-text
-                rounded-full px-4 py-2
+                rounded-r-full px-4 py-2
                 focus:outline-none focus:ring-2 focus:ring-accent
                 transition
               "
