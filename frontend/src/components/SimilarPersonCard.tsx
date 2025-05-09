@@ -12,6 +12,8 @@ export default function SimilarPersonCard({
   similarity,
   thumbnail,
 }: SimilarPerson) {
+  const API = import.meta.env.VITE_API_BASE_URL;
+
   return (
     <Link
       to={`/person/${id}`}
@@ -24,7 +26,7 @@ export default function SimilarPersonCard({
       {thumbnail ? (
         <div className="w-20 h-20 mx-auto rounded-full overflow-hidden mb-2">
           <img
-            src={`/thumbnails/${thumbnail}`}
+            src={`${API}/thumbnails/${thumbnail}`}
             alt={name || 'Profile'}
             className="object-cover w-full h-full"
           />

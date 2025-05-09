@@ -10,7 +10,7 @@ from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
 from app.database import init_db, init_vec_index
 from app.api.processors import router as proc_router
 from app.processor_registry import load_processors
-
+from fastapi.middleware.cors import CORSMiddleware
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -30,6 +30,13 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(proc_router, prefix="/api", tags=["processors"])
 app.include_router(media, prefix="/media", tags=["media"])
 app.include_router(person, prefix="/persons", tags=["persons"])

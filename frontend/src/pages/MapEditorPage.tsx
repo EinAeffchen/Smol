@@ -76,7 +76,7 @@ export default function MapEditorPage() {
                                 : 'hover:bg-gray-700'}`}
                     >
                         <img
-                            src={`/thumbnails/${m.id}.jpg`}
+                            src={`${API}/thumbnails/${m.id}.jpg`}
                             alt={m.filename}
                             className="w-full mb-1 rounded"
                         />

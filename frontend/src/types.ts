@@ -24,6 +24,7 @@ export interface Person {
   name?: string;
   age?: number;
   gender?: string;
+  tags: Tag[];
   profile_face_id?: number;
   profile_face?: Face;
 }
@@ -52,9 +53,11 @@ export interface FaceRead {
 export interface MediaDetail {
   media: Media;
   persons: Person[];
+  orphans: Face[];
 }
 export interface PersonDetail {
   person: Person;
+  tags: Tag[];
   faces: Face[];
   medias: Media[];
 }

@@ -1,13 +1,14 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useCallback } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { MediaExif } from '../components/MediaExif'
 import { SimilarContent } from '../components/MediaRelatedContent'
 import PersonCard from '../components/PersonCard'
 import TagAdder from '../components/TagAdder'
-import { Media, MediaDetail, Person, Task, SceneRead } from '../types'
+import { Media, MediaDetail, Person, Face, Task, SceneRead } from '../types'
 import { Tags } from '../components/Tags'
 import { VideoWithPreview } from '../components/VideoPlayer'
-import { VideoWithScenes } from '../components/VideoWithScenes'
+import { useFaceActions } from '../hooks/useFaceActions'
+import DetectedFaces from '../components/DetectedFaces'
+
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
 export default function VideoDetailPage() {
@@ -15,11 +16,50 @@ export default function VideoDetailPage() {
     const navigate = useNavigate()
     const [media, setMedia] = useState<Media | null>(null)
     const [matchedPersons, setMatchedPersons] = useState<Person[]>([])
+    const [orphanFaces, setOrphanFaces] = useState<Face[]>([])
     const [scenes, setScenes] = useState<SceneRead[]>([])
 
-    const [showExif, setShowExif] = useState(false)
     const [task, setTask] = useState<Task | null>(null)
 
+    const {
+        assignFace,
+        createPersonFromFace,
+        deleteFace,
+        setProfileFace,
+    } = useFaceActions()
+
+    const handleAssign = useCallback(
+        async (faceId: number, personId: number) => {
+            await assignFace(faceId, personId)
+            // now remove from our local list
+            setOrphanFaces((faces) => faces.filter(f => f.id !== faceId))
+        },
+        [assignFace]
+    )
+    const handleDelete = useCallback(
+        async (faceId: number) => {
+            await deleteFace(faceId)
+            setOrphanFaces((faces) => faces.filter(f => f.id !== faceId))
+        },
+        [deleteFace]
+    )
+    // wrap create + navigate
+    const handleCreate = useCallback(
+        async (
+            faceId: number,
+            data: { name?: string; age?: number; gender?: string }
+        ): Promise<Person> => {
+            console.log(faceId);
+            console.log(data);
+            const newPerson = await createPersonFromFace(faceId, data);
+            // remove that face from your local orphans array
+            setOrphanFaces(fs => fs.filter(f => f.id !== faceId));
+            // navigate to the newly created person’s detail page
+            navigate(`/person/${newPerson.id}`);
+            return newPerson;
+        },
+        [createPersonFromFace, navigate]
+    );
 
     useEffect(() => {
         if (!id) return
@@ -29,6 +69,7 @@ export default function VideoDetailPage() {
                 const json = (await res.json()) as MediaDetail
                 setMedia(json.media)
                 setMatchedPersons(json.persons)    // <–– get them here!
+                setOrphanFaces(json.orphans)    // <–– get them here!
             })().catch(console.error)
     }, [id])
 
@@ -147,15 +188,15 @@ export default function VideoDetailPage() {
                 {/* Video Player */}
                 <figure
                     className="relative mx-auto max-w-xl"
-                    onMouseEnter={() => setShowExif(true)}
-                    onMouseLeave={() => setShowExif(false)}
                 >
                     <div key={media.id}>
-                        <VideoWithPreview
-                            media={media}
-                        />
+                        {media.duration != null ? (
+                            <VideoWithPreview media={media} />
+                        ) : (
+                            <img class="w-full rounded shadow-lg" src={`${API}/originals/${media.path}`} alt={media.filename} />
+                        )}
                     </div>
-                    {/* <MediaExif showExif={showExif} id={media.id} /> */}
+
                 </figure>
                 <section>
                     <h3 className="text-lg font-semibold mb-2">Detected Persons</h3>
@@ -183,6 +224,15 @@ export default function VideoDetailPage() {
                 </div>
 
                 <Tags media={media} onUpdate={setMedia} />
+                <h1>Unassigned faces in this Video</h1>
+                <DetectedFaces
+                    faces={orphanFaces}
+                    // if you have a currentPersonId you can highlight a profile face
+                    onAssign={handleAssign}
+                    onCreate={(faceId, data) => handleCreate(faceId, data)}
+                    onDelete={handleDelete}
+                    onSetProfile={() => alert("Can't set as profile for video!")}
+                />
                 <SimilarContent media={media} />
 
             </main>

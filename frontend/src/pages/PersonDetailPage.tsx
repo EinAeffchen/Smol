@@ -1,11 +1,13 @@
 // src/pages/PersonDetailPage.tsx
-import React, { useState, useEffect, FormEvent, useCallback } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import MediaCard from '../components/MediaCard'
+import React, { FormEvent, useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import FaceCard from '../components/FaceCard'
-import { Person, PersonDetail, Tag, SimilarPerson, FaceRead } from '../types'
-import TagAdder from '../components/TagAdder'
+import MediaCard from '../components/MediaCard'
 import SimilarPersonCard from '../components/SimilarPersonCard'
+import TagAdder from '../components/TagAdder'
+import { FaceRead, Person, PersonDetail, SimilarPerson, Tag } from '../types'
+import { useFaceActions } from '../hooks/useFaceActions'
+import DetectedFaces from '../components/DetectedFaces'
 
 const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -32,6 +34,49 @@ export default function PersonDetailPage() {
 
     // Assign orphan faces
     const [suggestedFaces, setSuggestedFaces] = useState<FaceRead[]>([])
+
+    const {
+        assignFace,
+        createPersonFromFace,
+        deleteFace,
+        setProfileFace,
+    } = useFaceActions()
+
+    const handleAssign = useCallback(
+        async (faceId: number, personId: number) => {
+            await assignFace(faceId, personId)
+            // now remove from our local list
+            setSuggestedFaces((faces) => faces.filter(f => f.id !== faceId))
+            loadDetail()
+        },
+        [assignFace]
+    )
+    const handleDelete = useCallback(
+        async (faceId: number) => {
+            await deleteFace(faceId)
+            setSuggestedFaces((faces) => faces.filter(f => f.id !== faceId))
+            loadDetail()
+        },
+        [deleteFace]
+    )
+    // wrap create + navigate
+    const handleCreate = useCallback(
+        async (
+            faceId: number,
+            data: { name?: string; age?: number; gender?: string }
+        ): Promise<Person> => {
+            console.log(faceId);
+            console.log(data);
+            const newPerson = await createPersonFromFace(faceId, data);
+            // remove that face from your local orphans array
+            setSuggestedFaces(fs => fs.filter(f => f.id !== faceId));
+            loadDetail()
+            // navigate to the newly created person’s detail page
+            navigate(`/person/${newPerson.id}`);
+            return newPerson;
+        },
+        [createPersonFromFace, navigate]
+    );
 
     const loadSuggestedFaces = useCallback(async () => {
         if (!id) return
@@ -192,64 +237,6 @@ export default function PersonDetailPage() {
         navigate(`/person/${targetId}`, { replace: true })
     }
 
-    // assign a face to an existing person
-    async function assignFace(faceId: number, personId: number) {
-        const res = await fetch(`${API}/faces/${faceId}/assign`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ person_id: personId })
-        })
-        if (res.ok) {
-            await loadDetail()
-            await loadSuggestedFaces()
-        }
-    }
-
-    // create a new person from a face
-    async function createPersonFromFace(faceId: number, data: any): Promise<Person> {
-        const res = await fetch(`${API}/faces/${faceId}/create_person`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data),
-        });
-        const json = await res.json();
-
-        // unwrap it safely
-        const p: Person = (json as any).person ?? (json as Person);
-        if (!p?.id) {
-            console.error("🚨 no p.id!");
-            throw new Error("createPersonFromFace: could not extract person.id");
-        }
-
-        navigate(`/person/${p.id}`, { replace: true });
-        return p;
-    }
-
-    // delete a face entirely
-    async function deleteFace(faceId: number) {
-        const res = await fetch(`${API}/faces/${faceId}`, { method: 'DELETE' })
-        if (!res.ok) {
-            alert('Failed to delete face')
-            return
-        }
-        setSuggestedFaces(prev => prev.filter(f => f.id !== faceId))
-        await loadSuggestedFaces()
-        await loadDetail()
-    }
-
-    // set a face as the profile picture
-    async function setProfileFace(faceId: number) {
-        if (!id) return
-        await fetch(`${API}/persons/${id}`, {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ profile_face_id: faceId })
-        })
-        // refresh PersonDetail
-        const d: PersonDetail = await fetch(`${API}/persons/${id}`).then(r => r.json())
-        setDetail(d)
-    }
-
     if (loading ?? !detail) return <div className="p-4">Loading…</div>
     const { person, faces, medias } = detail
 
@@ -302,7 +289,7 @@ export default function PersonDetailPage() {
                     <div className="flex flex-col items-center">
                         <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-accent mb-2">
                             <img
-                                src={`/thumbnails/${person.profile_face?.thumbnail_path}`}
+                                src={`${API}/thumbnails/${person.profile_face?.thumbnail_path}`}
                                 alt="Profile"
                                 className="object-cover w-full h-full"
                             />
@@ -424,41 +411,26 @@ export default function PersonDetailPage() {
                 </section>
 
 
-                {/* === DETECTED FACES === */}
-                <section>
-                    <h2 className="text-lg font-semibold mb-2">Detected Faces</h2>
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3 max-h-[24rem] overflow-y-auto pr-2">
-                        {faces.map(face => (
-                            <FaceCard
-                                key={face.id}
-                                face={face}
-                                isProfile={face.id === person.profile_face_id}
-                                onSetProfile={() => setProfileFace(face.id)}
-                                onAssign={pid => assignFace(face.id, pid)}
-                                onCreate={data => createPersonFromFace(face.id, data)}
-                                onDelete={() => deleteFace(face.id)}
-                            />
-                        ))}
-                    </div>
-                </section>
-
+                <DetectedFaces
+                    faces={faces}
+                    // if you have a currentPersonId you can highlight a profile face
+                    profileFaceId={person.id}
+                    onAssign={assignFace}
+                    onCreate={(faceId, data) => handleCreate(faceId, data)}
+                    onDelete={deleteFace}
+                    onSetProfile={faceId => setProfileFace(faceId, /* personId */ 42)}
+                />
+                {/* Suggestions (“Is this the same person?”) */}
                 {suggestedFaces.length > 0 && (
-                    <section className="space-y-2">
-                        <h3 className="text-lg font-semibold mb-2">Is this the same person?</h3>
-                        <div className="flex gap-4 overflow-x-auto py-2">
-                            {suggestedFaces.map(face => (
-                                <FaceCard
-                                    key={face.id}
-                                    face={face}
-                                    isProfile={false}
-                                    onSetProfile={() => {/* you could also let them “promote” a suggestion */ }}
-                                    onAssign={pid => assignFace(face.id, pid)}
-                                    onCreate={data => createPersonFromFace(face.id, data)}
-                                    onDelete={() => deleteFace(face.id)}
-                                />
-                            ))}
-                        </div>
-                    </section>
+                    <DetectedFaces
+                        faces={suggestedFaces}
+                        // no profile highlighting in suggestions:
+                        onSetProfile={() => { }}
+                        onAssign={handleAssign}
+                        onCreate={(faceId, data) => handleCreate(faceId, data)}
+                        onDelete={handleDelete}
+                        horizontal
+                    />
                 )}
 
                 {/* === SIMILAR PEOPLE === */}

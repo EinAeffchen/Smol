@@ -69,11 +69,15 @@ class FaceProcessor(MediaProcessor):
                 optimize=True,
                 progressive=True,
             )
+            vec = np.array(f.embedding, dtype=np.float32)
+            norm = np.linalg.norm(vec)
+            if norm > 0:
+                vec /= norm
             face = Face(
                 media=media,
                 thumbnail_path=name,
                 bbox=[x1, y1, x2 - x1, y2 - y1],
-                embedding=f.embedding.tolist(),
+                embedding=vec.tolist(),
             )
             face_objs.append(face)
         return face_objs
@@ -98,8 +102,12 @@ class FaceProcessor(MediaProcessor):
         for scene in tqdm(scenes):
             if isinstance(scene, tuple):
                 scene = scene[1]
+            elif isinstance(scene, Scene):
+                scene = Image.open(THUMB_DIR / scene.thumbnail_path)
+                scene = np.array(scene.convert("RGB"))
             else:
                 scene = np.array(scene.convert("RGB"))
+
             faces = self.model.get(scene)
             face_objs = self._parse_faces(faces, scene, media)
             for face_obj in face_objs:

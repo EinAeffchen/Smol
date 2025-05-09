@@ -92,10 +92,7 @@ def get_person_embedding(
         return None
     arr = np.stack([np.array(e, dtype=np.float32) for e in embeddings])
     avg = arr.mean(axis=0)
-    norm = np.linalg.norm(avg)
-    if norm > 0:
-        avg /= norm
-    return avg
+    return avg / np.linalg.norm(avg)
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:

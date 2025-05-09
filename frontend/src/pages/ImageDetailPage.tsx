@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import PersonCard from '../components/PersonCard'
 import { Media, Person, Tag, MediaDetail, MediaPreview } from '../types'
 import TagAdder from '../components/TagAdder'
 import { SimilarContent } from '../components/MediaRelatedContent'
 import { MediaExif } from '../components/MediaExif'
+import { useFaceActions } from '../hooks/useFaceActions'
+import DetectedFaces from '../components/DetectedFaces'
 
 const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -13,7 +15,40 @@ export default function ImageDetailPage() {
     const navigate = useNavigate()
     const [media, setMedia] = useState<Media | null>(null)
     const [matchedPersons, setMatchedPersons] = useState<Person[]>([])
-
+    const {
+        assignFace,
+        createPersonFromFace,
+        deleteFace,
+    } = useFaceActions()
+    const handleAssign = useCallback(
+        async (faceId: number, personId: number) => {
+            await assignFace(faceId, personId)
+            // now remove from our local list
+        },
+        [assignFace]
+    )
+    const handleDelete = useCallback(
+        async (faceId: number) => {
+            await deleteFace(faceId)
+        },
+        [deleteFace]
+    )
+    // wrap create + navigate
+    const handleCreate = useCallback(
+        async (
+            faceId: number,
+            data: { name?: string; age?: number; gender?: string }
+        ): Promise<Person> => {
+            console.log(faceId);
+            console.log(data);
+            const newPerson = await createPersonFromFace(faceId, data);
+            // remove that face from your local orphans array
+            // navigate to the newly created person’s detail page
+            navigate(`/person/${newPerson.id}`);
+            return newPerson;
+        },
+        [createPersonFromFace, navigate]
+    );
     const [showExif, setShowExif] = useState(false)
 
     useEffect(() => {
@@ -90,7 +125,7 @@ export default function ImageDetailPage() {
                     onMouseLeave={() => setShowExif(false)}
                 >
                     <img
-                        src={`/originals/${media.path}`}
+                        src={`${API}/originals/${media.path}`}
                         alt={media.filename}
                         className="w-full rounded shadow-lg"
                     />
@@ -142,6 +177,15 @@ export default function ImageDetailPage() {
                         ))}
                     </div>
                 </section>
+                <h1>Detected Faces in this Image</h1>
+                <DetectedFaces
+                    faces={media.faces}
+                    // if you have a currentPersonId you can highlight a profile face
+                    onAssign={handleAssign}
+                    onCreate={(faceId, data) => handleCreate(faceId, data)}
+                    onDelete={handleDelete}
+                    onSetProfile={() => alert("Can't set as profile for video!")}
+                />
                 <SimilarContent media={media} />
             </main>
         </div >

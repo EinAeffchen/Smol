@@ -77,12 +77,14 @@ export default function FaceCard({
                 🗑️
             </button>
             {/* face thumbnail */}
-            <img
-                src={`/thumbnails/${face.thumbnail_path}`}
-                alt="face"
-                className={`rounded-lg object-cover w-full h-32 ${isProfile ? "ring-4 ring-accent" : ""
-                    }`}
-            />
+            <a href={`/video/${face.media_id}`}>
+                <img
+                    src={`${API}/thumbnails/${face.thumbnail_path}`}
+                    alt="face"
+                    className={`rounded-lg object-cover w-full h-32 ${isProfile ? "ring-4 ring-accent" : ""
+                        }`}
+                />
+            </a>
 
             {/* star to pick as profile (if not already) */}
             {!isProfile && (

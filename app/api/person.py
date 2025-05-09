@@ -161,7 +161,6 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         "name": person.name,
         "age": person.age,
         "gender": person.gender,
-        "tags": person.tags,
     }
     if person.profile_face_id and person.profile_face:
         dict_person["profile_face_id"] = person.profile_face_id
@@ -172,7 +171,7 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         logger.debug("PERSON: %s", dict_person)
     return {
         "person": dict_person,
-        "tags": person.tags,
+        # "tags": person.tags,
         "faces": [
             {
                 "id": face.id,

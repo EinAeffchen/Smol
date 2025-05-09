@@ -6,12 +6,14 @@ import { Tag } from '../types'
 export default function TagCard({ tag }: { tag: Tag }) {
     const countMedia = tag.media.length
     const countPeople = tag.persons.length
+    const API = import.meta.env.VITE_API_BASE_URL;
+
 
     // take up to 4 thumbnails from tag.media
     const thumbs = tag.media.slice(0, 4).map(m => (
         <img
             key={m.id}
-            src={`/thumbnails/${m.id}.jpg`}
+            src={`${API}/thumbnails/${m.id}.jpg`}
             alt=""
             className="w-12 h-12 object-cover rounded"
         />
@@ -19,7 +21,7 @@ export default function TagCard({ tag }: { tag: Tag }) {
     const profiles = tag.persons.slice(0, 4).map(p => (
         <img
             key={p.id}
-            src={`/thumbnails/${p.profile_face?.thumbnail_path}`}
+            src={`${API}/thumbnails/${p.profile_face?.thumbnail_path}`}
             alt=""
             className="w-12 h-12 object-cover rounded"
         />

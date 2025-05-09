@@ -8,6 +8,7 @@ from sklearn.cluster import DBSCAN
 from sqlalchemy import or_
 from sqlmodel import Session, delete, func, select, update, text
 from tqdm import tqdm
+from app.config import PERSON_MIN_FACE_COUNT
 
 
 from app.config import (
@@ -87,6 +88,7 @@ def _run_media_processing(task_id: str):
                 Media.faces_extracted.is_(False),
                 Media.ran_auto_tagging.is_(False),
                 Media.embeddings_created.is_(False),
+                Media.extracted_scenes.is_(False),
             )
         )
         .order_by(Media.duration.asc())
@@ -100,13 +102,17 @@ def _run_media_processing(task_id: str):
             break
 
         full_path = MEDIA_DIR / media.path
-        if full_path.suffix in IMAGE_SUFFIXES:
-            scenes = [Image.open(full_path)]
+        if media.scenes:
+            media.extracted_scenes = True
+        if not media.extracted_scenes:
+            if full_path.suffix in IMAGE_SUFFIXES:
+                scenes = [Image.open(full_path)]
+            else:
+                scenes = split_video(media, full_path)
         else:
-            scenes = split_video(media, full_path)
+            scenes = media.scenes
 
         for scene in scenes:
-            logger.debug(scenes)
             if isinstance(scene, tuple):
                 session.add(scene[0])
         safe_commit(session)
@@ -124,6 +130,7 @@ def _run_media_processing(task_id: str):
                     media.id,
                     e,
                 )
+        session.add(media)
         for proc in processors:
             proc.unload()
         # 4) update task progress
@@ -186,9 +193,10 @@ def _run_person_clustering(task_id: str):
             return
         # load existing persons
         people = session.exec(select(Person.id)).all()
-        if not people:
+        if len(people) == 0:
+            logger.warning("Found no people, clustering faces!")
             unassigned = [face.id for face in orphans]
-            cluster_unassigned_faces_into_new_persons(
+            return cluster_unassigned_faces_into_new_persons(
                 unassigned_ids=unassigned, session=session, task=task
             )
 
@@ -250,13 +258,13 @@ def cluster_unassigned_faces_into_new_persons(
     task: ProcessingTask,
     session: Session | None = None,
     eps: float = 0.5,
-    min_samples: int = 1,
+    min_samples: int = PERSON_MIN_FACE_COUNT,
 ) -> None:
     """
     Run a DBSCAN over just the unassigned faces to create brand-new persons.
     Returns the list of newly‐created person IDs.
     """
-    session: Session = session or get_session()
+    session = session or get_session()
     if not unassigned_ids:
         return
 
@@ -266,12 +274,16 @@ def cluster_unassigned_faces_into_new_persons(
     embs = np.stack([np.array(f.embedding, dtype=np.float32) for f in faces])
     ids = [f.id for f in faces]
 
+    logger.warning("Starting clustering...")
+    task.total = 0
+    task.status = "running"
     clustering = DBSCAN(metric="cosine", eps=eps, min_samples=min_samples).fit(
         embs
     )
     labels = clustering.labels_
     task.total = len(labels)
-    logger.error("Labels:%s", len(labels))
+    session.add(task)
+    safe_commit(session)
     f_ids = [f.id for f in faces]
     for lbl in tqdm(set(labels)):
         if lbl < 0:
@@ -280,29 +292,42 @@ def cluster_unassigned_faces_into_new_persons(
 
         if len(cluster_face_ids) < PERSON_MIN_FACE_COUNT:
             continue
-        # create a Person
+
+        # 1. Create the person
         p = Person(name=None)
         session.add(p)
-        safe_commit(session)
-        session.refresh(p)
+        session.flush()
 
-        # assign cluster faces
+        # 2. Assign cluster faces to person
         for face_id in cluster_face_ids:
             f = faces[f_ids.index(face_id)]
             f.person_id = p.id
             session.add(f)
             sql = text(
                 """
-                    UPDATE face_embeddings SET person_id=:p_id
-                    WHERE face_id=:f_id
-                    """
+                UPDATE face_embeddings SET person_id=:p_id
+                WHERE face_id=:f_id
+                """
             ).bindparams(p_id=p.id, f_id=f.id)
             session.exec(sql)
-            p.profile_face_id = f.id
-        task.processed += 1
-        session.add(task)
+
+        # 3) Pick the profile face
+        embs_subset = embs[[ids.index(fid) for fid in cluster_face_ids]]
+        centroid = embs_subset.mean(axis=0)
+        centroid /= np.linalg.norm(centroid)
+        best_idx = np.argmax(embs_subset @ centroid)
+        p.profile_face_id = cluster_face_ids[best_idx]
         session.add(p)
+
+        # 5. Final person + task commit
+        task.processed += 1
+        session.add(p)
+        session.add(task)
         safe_commit(session)
+    task.status = "completed"
+    task.finished_at = datetime.now(timezone.utc)
+    session.add(task)
+    safe_commit(session)
 
 
 # ─── 3) CANCEL / LIST / GET TASKS ─────────────────────────────────────────────
@@ -385,7 +410,9 @@ def start_scan(
 @router.post("/reset/processing", summary="Resets media processing status")
 def reset_processing(session: Session = Depends(get_session)):
     session.exec(update(Media).values(faces_extracted=False))
-    for face in session.exec(select(Face)).all():
+    session.exec(update(Media).values(embeddings_created=False))
+    session.exec(text("DELETE FROM face_embeddings"))
+    for face in tqdm(session.exec(select(Face)).all()):
         path = Path(face.thumbnail_path)
         if path.exists():
             path.unlink()

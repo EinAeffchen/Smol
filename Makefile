@@ -23,3 +23,6 @@ build: install
 
 test:
 	${PYTHON}
+
+dev:
+	cd frontend && npm run dev

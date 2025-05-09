@@ -6,8 +6,14 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig({
-  base: "/static/", // ← here
+  // base: "/static/", // ← here
   plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      "/api": "http://localhost:8000",
+    },
+  },
   optimizeDeps: {
     include: ["prop‐types"], // <-- add this
   },

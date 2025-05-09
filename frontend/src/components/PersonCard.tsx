@@ -4,9 +4,11 @@ import { Link } from 'react-router-dom'
 import { Person } from '../types'
 
 export default function PersonCard({ person }: { person: Person }) {
+  const API = import.meta.env.VITE_API_BASE_URL;
+
   const src = person.profile_face
-    ? `/thumbnails/${person.profile_face.thumbnail_path}`
-    : '/logo.png'
+    ? `${API}/thumbnails/${person.profile_face.thumbnail_path}`
+    : `${API}/logo.png`
   return (
     <Link to={`/person/${person.id}`} className="group block h-full">
       <div className="flex flex-col items-center p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-md hover:shadow-lg transition-shadow h-full">

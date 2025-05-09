@@ -79,6 +79,7 @@ class Media(SQLModel, table=True):
     faces_extracted: bool = Field(default=False, index=True)
     embeddings_created: bool = Field(default=False, index=True)
     ran_auto_tagging: bool = Field(default=False)
+    extracted_scenes: bool = Field(default=False)
 
     is_favorite: bool = Field(default=False)
     embedding: list[float] | None = Field(

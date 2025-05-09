@@ -8,9 +8,11 @@ export function VideoWithPreview({
 }: Readonly<{
     media: Media
 }>) {
+    const API = import.meta.env.VITE_API_BASE_URL;
     const ref = useRef<HTMLVideoElement>(null)
-    const vttUrl = `/media/${media.id}/scenes.vtt`
-    const mediaUrl = `/originals/${media.path}`
+    const vttUrl = `${API}/media/${media.id}/scenes.vtt`
+
+    const mediaUrl = `${API}/originals/${media.path}`
     useEffect(() => {
         if (!ref.current) return
 

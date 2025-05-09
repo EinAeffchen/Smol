@@ -218,14 +218,17 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
 
     seen = set()
     persons: list[PersonRead] = []
+    orphans: list[Face] = []
     for face in media.faces:
+        if not face.person:
+            orphans.append(face)
         p = face.person
         if p and p.id not in seen:
             seen.add(p.id)
             persons.append(p)
 
     # 2) take tags straight off media.tags
-    return MediaDetail(media=media, persons=persons)
+    return MediaDetail(media=media, persons=persons, orphans=orphans)
 
 
 @router.get(

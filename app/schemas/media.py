@@ -57,6 +57,7 @@ class MediaDetail(SQLModel):
     media: MediaRead
     persons: list[PersonRead] = Field(default_factory=list)
     faces: list[Face] = Field(default_factory=list)
+    orphans: list[Face] = Field(default_factory=list)
 
     model_config = ConfigDict(from_attributes=True)
 

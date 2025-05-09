@@ -124,6 +124,14 @@ def create_person_from_face(
         profile_face_id=face.id,
     )
     session.add(person)
+    sql = text(
+        """
+                UPDATE face_embeddings
+                set person_id=:p_id
+                WHERE face_id=:f_id
+                """
+    ).bindparams(p_id=person.id, f_id=face.id)
+    session.exec(sql)
     safe_commit(session)
     session.refresh(person)
 
