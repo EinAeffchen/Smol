@@ -56,7 +56,7 @@ export function useFaceActions() {
   /** set which detected face is the “profile” for a person */
   const setProfileFace = useCallback(
     async (faceId: number, personId: number) => {
-      const res = await fetch(`${API}/people/${personId}`, {
+      const res = await fetch(`${API}/persons/${personId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile_face_id: faceId }),

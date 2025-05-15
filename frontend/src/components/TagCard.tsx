@@ -1,53 +1,100 @@
 // src/components/TagCard.tsx
 import React from 'react'
-import { Link } from 'react-router-dom'
+import { Link as RouterLink } from 'react-router-dom'
+import { Card, CardActionArea, CardContent, Typography, Box, AvatarGroup, Avatar } from '@mui/material'
+import MovieIcon from '@mui/icons-material/Movie'
+import PersonIcon from '@mui/icons-material/Person'
 import { Tag } from '../types'
 
+const BG_CARD = '#2C2C2E'
+const ACCENT = '#FF2E88'
+const TEXT_SECONDARY = '#BFA2DB'
+const AVATAR_SIZE = 36
+const CARD_HEIGHT = 180
+
 export default function TagCard({ tag }: { tag: Tag }) {
+    const API = import.meta.env.VITE_API_BASE_URL ?? ''
     const countMedia = tag.media.length
     const countPeople = tag.persons.length
-    const API = import.meta.env.VITE_API_BASE_URL;
-
-
-    // take up to 4 thumbnails from tag.media
-    const thumbs = tag.media.slice(0, 4).map(m => (
-        <img
-            key={m.id}
-            src={`${API}/thumbnails/${m.id}.jpg`}
-            alt=""
-            className="w-12 h-12 object-cover rounded"
-        />
-    ))
-    const profiles = tag.persons.slice(0, 4).map(p => (
-        <img
-            key={p.id}
-            src={`${API}/thumbnails/${p.profile_face?.thumbnail_path}`}
-            alt=""
-            className="w-12 h-12 object-cover rounded"
-        />
-    ))
 
     return (
-        <Link
-            to={`/tag/${tag.id}`}
-            className="
-        block bg-gray-800 p-4 rounded-lg shadow hover:shadow-lg transition
-      "
+        <Card
+            elevation={3}
+            sx={{
+                bgcolor: BG_CARD,
+                borderRadius: 2,
+                overflow: 'hidden',
+                height: CARD_HEIGHT,
+            }}
         >
-            <h2 className="font-semibold mb-1">{tag.name}</h2>
-            <div className="flex items-center text-sm text-gray-400 mb-2">
-                <span className="mr-2">🎬 {countMedia}</span>
-                <span>👤 {countPeople}</span>
-            </div>
-            <div className="flex -space-x-1">
-                {thumbs}
-                {profiles}
-                {countMedia > 4 && (
-                    <div className="w-12 h-12 flex items-center justify-center bg-gray-700 rounded text-xs">
-                        +{countMedia - 4}
-                    </div>
-                )}
-            </div>
-        </Link>
+            <CardActionArea
+                component={RouterLink}
+                to={`/tag/${tag.id}`}
+                sx={{ height: '100%' }}
+            >
+                <CardContent
+                    sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        height: '100%',
+                        p: 2,
+                    }}
+                >
+                    {/* Tag Name and Counts */}
+                    <Box>
+                        <Typography
+                            variant="h6"
+                            sx={{
+                                color: '#FFF',
+                                mb: 1,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                            }}
+                        >
+                            {tag.name}
+                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <MovieIcon fontSize="small" sx={{ color: ACCENT, mr: 0.5 }} />
+                            <Typography variant="body2" sx={{ color: TEXT_SECONDARY, mr: 2 }}>
+                                {countMedia}
+                            </Typography>
+                            <PersonIcon fontSize="small" sx={{ color: ACCENT, mr: 0.5 }} />
+                            <Typography variant="body2" sx={{ color: TEXT_SECONDARY }}>
+                                {countPeople}
+                            </Typography>
+                        </Box>
+                    </Box>
+
+                    {/* Thumbnails */}
+                    <AvatarGroup
+                        max={4}
+                        sx={{
+                            '& .MuiAvatar-root': {
+                                width: AVATAR_SIZE,
+                                height: AVATAR_SIZE,
+                                borderRadius: 1,
+                            },
+                        }}
+                    >
+                        {tag.media.slice(0, 4).map(m => (
+                            <Avatar
+                                key={`m-${m.id}`}
+                                src={`${API}/thumbnails/${m.id}.jpg`}
+                                variant="rounded"
+                            />
+                        ))}
+                        {tag.persons.slice(0, 4).map(p => p.profile_face?.thumbnail_path && (
+                            <Avatar
+                                key={`p-${p.id}`}
+                                src={`${API}/thumbnails/${p.profile_face.thumbnail_path}`}
+                                variant="rounded"
+                            />
+                        ))}
+                    </AvatarGroup>
+                </CardContent>
+            </CardActionArea>
+        </Card>
     )
 }

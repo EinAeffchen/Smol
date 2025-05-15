@@ -5,6 +5,7 @@ from sqlmodel import Session, SQLModel, create_engine
 from app.config import DATABASE_URL
 from app.logger import logger
 from sqlalchemy import event, text
+from sqlalchemy.engine.result import ScalarResult
 import sqlite_vec
 
 engine = create_engine(
@@ -36,16 +37,39 @@ def _set_sqlite_pragma(dbapi_conn, connection_record):
     dbapi_conn.execute("PRAGMA busy_timeout = 30000;")  # milliseconds
 
 
-def safe_commit(session, retries=3, delay=0.5):
+def safe_commit(session, retries=5, delay=0.5):
+
     for i in range(retries):
         try:
             session.commit()
             return
         except OperationalError as e:
-            if "database is locked" in str(e):
-                time.sleep(delay)
-            else:
-                raise
+            logger.debug("OPERATION ERROR: %s", str(e))
+            if "locked" in str(e):
+                session.rollback()
+                if i < retries - 1:
+                    time.sleep(delay * (2**i))
+                    continue
+            session.rollback()
+            raise
+    raise RuntimeError("Failed to commit due to database lock.")
+
+
+def safe_execute(
+    session: Session, query, retries=5, delay=0.5
+) -> ScalarResult:
+
+    for i in range(retries):
+        try:
+            return session.exec(query)
+        except OperationalError as e:
+            if "locked" in str(e):
+                session.rollback()
+                if i < retries - 1:
+                    time.sleep(delay * (2**i))
+                    continue
+            session.rollback()
+            raise
     raise RuntimeError("Failed to commit due to database lock.")
 
 
@@ -72,16 +96,6 @@ def init_vec_index():
         conn.execute(
             text(
                 """
-          INSERT OR IGNORE INTO media_embeddings(media_id, embedding)
-          SELECT m.id, m.embedding FROM media m LEFT JOIN media_embeddings me ON m.id = me.media_id
-            WHERE me.media_id IS NULL
-            AND m.embedding IS NOT NULL;
-        """
-            )
-        )
-        conn.execute(
-            text(
-                """
           CREATE VIRTUAL TABLE IF NOT EXISTS face_embeddings
           USING vec0(
             face_id    integer primary key,
@@ -94,10 +108,11 @@ def init_vec_index():
         conn.execute(
             text(
                 """
-          INSERT OR IGNORE INTO face_embeddings(face_id, person_id, embedding)
-          SELECT f.id, COALESCE(f.person_id, -1), f.embedding FROM face f LEFT JOIN face_embeddings fe ON f.id = fe.face_id
-            WHERE f.embedding IS NOT NULL
-            AND fe.face_id IS NULL;
+          CREATE VIRTUAL TABLE IF NOT EXISTS person_embeddings
+          USING vec0(
+            person_id   integer,
+            embedding   float[512]
+          );
         """
             )
         )

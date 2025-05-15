@@ -149,7 +149,7 @@ class ExifProcessor(MediaProcessor):
         self,
         media: Media,
         session,
-        scenes: list[tuple[Scene, MatLike] | MpoImageFile],
+        scenes: list[tuple[Scene, MatLike] | MpoImageFile | Scene],
     ):
         # 1) skip if already extracted
         if session.exec(
@@ -159,6 +159,7 @@ class ExifProcessor(MediaProcessor):
 
         # 2) only on JPEG/TIFF
         fn = Path(media.filename)
+        print(scenes)
         if fn.suffix in ((".jpg", ".jpeg", ".tiff")):
             self._process_image(scenes[0], session, media)
         elif fn.suffix in VIDEO_SUFFIXES:

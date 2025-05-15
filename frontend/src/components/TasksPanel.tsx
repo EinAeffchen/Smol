@@ -1,12 +1,14 @@
-// frontend/src/components/TasksPanel.tsx
+// src/components/TasksPanel.tsx
 import React, { useState, useEffect } from 'react'
+import { Box, Typography, Button, LinearProgress, Paper, Stack } from '@mui/material'
 import { Task, TaskType } from '../types'
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
-// map API task_type to a human-readable label
-const TASK_LABELS: Record<TaskType, string> = {
-    scan_folder: 'Scan Folder',
+// human-readable labels for task types
+type TaskLabels = Record<TaskType, string>
+const TASK_LABELS: TaskLabels = {
+    scan: 'Scan Folder',
     process_media: 'Process Media',
     cluster_persons: 'Cluster Persons',
 }
@@ -14,6 +16,7 @@ const TASK_LABELS: Record<TaskType, string> = {
 export default function TasksPanel() {
     const [tasks, setTasks] = useState<Task[]>([])
 
+    // fetch active tasks\  
     const fetchTasks = async () => {
         try {
             const res = await fetch(`${API}/tasks/active`)
@@ -24,29 +27,35 @@ export default function TasksPanel() {
         }
     }
 
+    // start a new task
     const startTask = async (type: TaskType) => {
         try {
             const res = await fetch(`${API}/tasks/${type}`, { method: 'POST' })
             if (res.ok) {
                 await fetchTasks()
             } else {
-                console.error('Failed to start task', type, await res.text())
+                console.error('Failed to start task', type)
             }
         } catch (err) {
             console.error('Error starting task', type, err)
         }
     }
 
+    // cancel a running task
     const cancelTask = async (id: string) => {
         try {
             const res = await fetch(`${API}/tasks/${id}/cancel`, { method: 'POST' })
-            if (res.ok) fetchTasks()
-            else console.error('Failed to cancel task', id, await res.text())
+            if (res.ok) {
+                fetchTasks()
+            } else {
+                console.error('Failed to cancel task', id)
+            }
         } catch (err) {
             console.error('Error cancelling task', id, err)
         }
     }
 
+    // polling
     useEffect(() => {
         fetchTasks()
         const iv = setInterval(fetchTasks, 3000)
@@ -54,52 +63,98 @@ export default function TasksPanel() {
     }, [])
 
     return (
-        <div className="p-4 bg-background/80 backdrop-blur-md rounded-xl border border-accent shadow-lg space-y-4">
-            <h3 className="text-xl font-semibold text-accent">Control Panel</h3>
+        <Paper
+            elevation={4}
+            sx={{
+                p: 3,
+                bgcolor: '#1C1C1E',
+                color: '#FFF',
+                borderRadius: 2,
+                boxShadow: 3,
+            }}
+        >
+            <Typography variant="h6" gutterBottom sx={{ color: '#FF2E88' }}>
+                Control Panel
+            </Typography>
 
-            {tasks.map(t => {
-                const pct = t.total > 0 ? Math.round((t.processed / t.total) * 100) : 0
-                return (
-                    <div key={t.id} className="p-2 bg-background/70 rounded-lg border-l-4 border-accent space-y-1">
-                        <div className="flex justify-between items-center text-sm text-text">
-                            <span className="font-medium text-accent">{TASK_LABELS[t.task_type]}</span>
-                            <span className="text-xs">{t.status}{t.status === 'running' && ` (${pct}%)`}</span>
-                        </div>
-                        <div className="w-full bg-dark-gray h-1.5 rounded overflow-hidden">
-                            <div
-                                className="h-full bg-accent transition-[width]"
-                                style={{ width: `${pct}%` }}
+            <Stack spacing={2}>
+                {tasks.map(t => {
+                    const pct = t.total > 0 ? Math.round((t.processed / t.total) * 100) : 0
+                    return (
+                        <Box
+                            key={t.id}
+                            sx={{
+                                p: 2,
+                                bgcolor: '#2C2C2E',
+                                borderLeft: '4px solid #5F4B8B',
+                                borderRadius: 1,
+                            }}
+                        >
+                            <Box display="flex" justifyContent="space-between" alignItems="center">
+                                <Typography variant="subtitle2" sx={{ color: '#FF2E88' }}>
+                                    {TASK_LABELS[t.task_type]}
+                                </Typography>
+                                <Typography variant="caption">
+                                    {t.status}{t.status === 'running' && ` (${pct}%)`}
+                                </Typography>
+                            </Box>
+                            <LinearProgress
+                                variant="determinate"
+                                value={pct}
+                                sx={{
+                                    height: 8,
+                                    borderRadius: 1,
+                                    mt: 1,
+                                    backgroundColor: '#3A3A3C',
+                                    '& .MuiLinearProgress-bar': { bgcolor: '#FF2E88' },
+                                }}
                             />
-                        </div>
-                        {t.status === 'running' && (
-                            <button
-                                onClick={() => cancelTask(t.id)}
-                                className="text-xs text-red-400 hover:underline"
-                            >
-                                Cancel
-                            </button>
-                        )}
-                    </div>
-                )
-            })}
+                            {t.status === 'running' && (
+                                <Button
+                                    size="small"
+                                    onClick={() => cancelTask(t.id)}
+                                    sx={{ mt: 1, color: '#FF2E88' }}
+                                >
+                                    Cancel
+                                </Button>
+                            )}
+                        </Box>
+                    )
+                })}
+            </Stack>
 
-            <div className="pt-2 flex flex-col space-y-2">
-                <button
+            <Stack spacing={1} mt={3}>
+                <Button
+                    variant="contained"
                     onClick={() => startTask('scan')}
-                    className="w-full px-3 py-2 bg-accent rounded-md hover:bg-accent2 text-text transition">
+                    sx={{
+                        bgcolor: '#5F4B8B',
+                        '&:hover': { bgcolor: '#4A3A6A' },
+                    }}
+                >
                     Scan Folder
-                </button>
-                <button
+                </Button>
+                <Button
+                    variant="contained"
                     onClick={() => startTask('process_media')}
-                    className="w-full px-3 py-2 bg-accent rounded-md hover:bg-accent2 text-text transition">
+                    sx={{
+                        bgcolor: '#5F4B8B',
+                        '&:hover': { bgcolor: '#4A3A6A' },
+                    }}
+                >
                     Process Media
-                </button>
-                <button
+                </Button>
+                <Button
+                    variant="contained"
                     onClick={() => startTask('cluster_persons')}
-                    className="w-full px-3 py-2 bg-accent rounded-md hover:bg-accent2 text-text transition">
+                    sx={{
+                        bgcolor: '#5F4B8B',
+                        '&:hover': { bgcolor: '#4A3A6A' },
+                    }}
+                >
                     Cluster Persons
-                </button>
-            </div>
-        </div>
+                </Button>
+            </Stack>
+        </Paper>
     )
 }

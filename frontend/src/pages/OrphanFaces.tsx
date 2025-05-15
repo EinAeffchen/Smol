@@ -1,74 +1,89 @@
-import React, { useCallback, useState } from 'react'
+// src/pages/OrphanFacesPage.tsx
+import React, { useCallback } from 'react'
+import { Container, Box, Typography, Grid, CircularProgress } from '@mui/material'
+import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import FaceCard from '../components/FaceCard'
 import { FaceRead } from '../types'
-import { useInfinite, CursorResponse } from '../hooks/useInfinite'
-
 
 const API = import.meta.env.VITE_API_BASE_URL ?? ''
+const ITEMS_PER_PAGE = 48
 
 export default function OrphanFacesPage() {
-    const fetchOrphans = useCallback(
-        (cursor: string | null, limit: number) =>
-            fetch(
-                `${API}/faces/orphans${cursor ? `?cursor=${cursor}&` : "?"
-                }limit=${limit}`
-            ).then((r) =>
-                r.json() as Promise<CursorResponse<FaceRead>>
-            ),
-        [API]
-    )
+    // fetch unassigned faces (orphans)
+    const fetchOrphans = useCallback((cursor: string | null, limit: number) =>
+        fetch(
+            `${API}/faces/orphans${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
+        )
+            .then(res => {
+                if (!res.ok) throw new Error(res.statusText)
+                return res.json() as Promise<CursorResponse<FaceRead>>
+            })
+        , [API])
+
     const {
         items: orphans,
         setItems: setOrphans,
         hasMore,
         loading,
         loaderRef,
-    } = useInfinite<FaceRead>(fetchOrphans, 48, []);
-
+    } = useInfinite<FaceRead>(fetchOrphans, ITEMS_PER_PAGE, [])
 
     // assign a face to an existing person
     async function assignFace(faceId: number, personId: number) {
         await fetch(`${API}/faces/${faceId}/assign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ person_id: personId })
-        }).then(() => {
-            setOrphans(o => o.filter(f => f.id !== faceId))
+            body: JSON.stringify({ person_id: personId }),
         })
+        setOrphans(prev => prev.filter(f => f.id !== faceId))
     }
 
     // create a new person from a face
     async function createPersonFromFace(faceId: number, data: any) {
-        await fetch(`${API}/faces/${faceId}/create_person`, {
+        const res = await fetch(`${API}/faces/${faceId}/create_person`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
         })
-            .then(r => r.json())
-            .then((json: any) => {
-                const p = json.person ?? json
-                window.location.href = `/person/${p.id}`
-            });
+        const json = await res.json()
+        const p = (json as any).person ?? (json as any)
+        if (p?.id) window.location.href = `/person/${p.id}`
     }
 
     // delete a face entirely
     async function deleteFace(faceId: number) {
         await fetch(`${API}/faces/${faceId}`, { method: 'DELETE' })
-            .then(() => setOrphans(o => o.filter(f => f.id !== faceId)))
+        setOrphans(prev => prev.filter(f => f.id !== faceId))
     }
 
-    if (loading) return <div className="p-4">Loading…</div>
-    if (orphans.length === 0) return <div className="p-4">No unassigned faces.</div>
+    // initial loading state
+    if (loading && orphans.length === 0) {
+        return (
+            <Box textAlign="center" py={4}>
+                <CircularProgress color="secondary" />
+            </Box>
+        )
+    }
+
+    // no orphans
+    if (!loading && orphans.length === 0) {
+        return (
+            <Typography variant="body1" align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                No unassigned faces.
+            </Typography>
+        )
+    }
 
     return (
-        <main className="max-w-screen-lg mx-auto px-4 space-y-8">
-            {/* === DETECTED FACES === */}
-            <section>
-                <h2 className="text-lg font-semibold mb-2">Unassigned Faces</h2>
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3">
-                    {orphans.map(face => (
+        <Container maxWidth={false} sx={{ pt: 4, pb: 7, bgcolor: '#1C1C1E' }}>
+            <Typography variant="h4" color="text.primary" gutterBottom>
+                Unassigned Faces
+            </Typography>
+
+            <Grid container spacing={2}>
+                {orphans.map(face => (
+                    <Grid key={face.id} size={{ xs: 4, sm: 3, md: 2, lg: 1 }}>
                         <FaceCard
-                            key={face.id}
                             face={face}
                             isProfile={false}
                             onSetProfile={() => { }}
@@ -76,22 +91,21 @@ export default function OrphanFacesPage() {
                             onCreate={data => createPersonFromFace(face.id, data)}
                             onDelete={() => deleteFace(face.id)}
                         />
-                    ))}
-                </div>
-                {loading && (
-                    <div className="py-4 text-center text-gray-500">
-                        Loading…
-                    </div>
-                )}
-                {!loading && hasMore && (
-                    <div
-                        ref={loaderRef}
-                        className="py-4 text-center text-gray-500"
-                    >
-                        Scroll to load more…
-                    </div>
-                )}
-            </section>
-        </main>
+                    </Grid>
+                ))}
+            </Grid>
+
+            {loading && (
+                <Box textAlign="center" py={2}>
+                    <CircularProgress color="secondary" />
+                </Box>
+            )}
+
+            {!loading && hasMore && (
+                <Box ref={loaderRef} textAlign="center" py={2} sx={{ color: 'text.secondary' }}>
+                    Scroll to load more…
+                </Box>
+            )}
+        </Container>
     )
 }

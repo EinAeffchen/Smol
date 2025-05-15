@@ -3,13 +3,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from sklearn.cluster import DBSCAN
 from sqlalchemy import or_
 from sqlmodel import Session, delete, func, select, update, text
 from tqdm import tqdm
 from app.config import PERSON_MIN_FACE_COUNT
-
+from app.api.media import delete_media_record
 
 from app.config import (
     FACE_MATCH_COSINE_THRESHOLD,
@@ -28,6 +28,7 @@ from app.utils import (
     process_file,
     split_video,
 )
+import json
 
 router = APIRouter()
 
@@ -77,8 +78,6 @@ def _run_media_processing(task_id: str):
     task = session.get(ProcessingTask, task_id)
     task.status = "running"
     task.started_at = datetime.now(timezone.utc)
-    session.add(task)
-    safe_commit(session)
 
     # iterate unprocessed media
     medias = session.exec(
@@ -93,6 +92,9 @@ def _run_media_processing(task_id: str):
         )
         .order_by(Media.duration.asc())
     ).all()
+    task.total = len(medias)
+    session.add(task)
+    safe_commit(session)
 
     for media in medias:
         logger.info("Processing: %s", media.filename)
@@ -102,16 +104,28 @@ def _run_media_processing(task_id: str):
             break
 
         full_path = MEDIA_DIR / media.path
-        if media.scenes:
+        if media.scenes or full_path.suffix in IMAGE_SUFFIXES:
             media.extracted_scenes = True
-        if not media.extracted_scenes:
+        if not media.extracted_scenes or full_path.suffix in IMAGE_SUFFIXES:
             if full_path.suffix in IMAGE_SUFFIXES:
-                scenes = [Image.open(full_path)]
+                try:
+                    scenes = [Image.open(full_path)]
+                except UnidentifiedImageError:
+                    logger.warning(
+                        "Skipping %s, broken image file.", full_path
+                    )
+                    continue
+                except FileNotFoundError:
+                    delete_media_record(media.id, session)
+                    logger.warning("Couldn't find file %s, deleting record")
+                    continue
             else:
                 scenes = split_video(media, full_path)
         else:
             scenes = media.scenes
-
+        media.extracted_scenes = True
+        session.add(media)
+        safe_commit(session)
         for scene in scenes:
             if isinstance(scene, tuple):
                 session.add(scene[0])
@@ -281,7 +295,7 @@ def cluster_unassigned_faces_into_new_persons(
         embs
     )
     labels = clustering.labels_
-    task.total = len(labels)
+    task.total = len(set(labels))
     session.add(task)
     safe_commit(session)
     f_ids = [f.id for f in faces]
@@ -318,6 +332,15 @@ def cluster_unassigned_faces_into_new_persons(
         best_idx = np.argmax(embs_subset @ centroid)
         p.profile_face_id = cluster_face_ids[best_idx]
         session.add(p)
+
+        person_embedding = get_person_embedding(session, p.id)
+        sql = text(
+            """
+                INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
+                VALUES (:p_id, :emb)
+                """
+        ).bindparams(p_id=p.id, emb=json.dumps(person_embedding.tolist()))
+        session.exec(sql)
 
         # 5. Final person + task commit
         task.processed += 1

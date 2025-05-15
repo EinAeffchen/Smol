@@ -1,9 +1,14 @@
 SHELL := /usr/bin/bash
 .SHELLFLAGS := -ec
-VENV := "$(MEDIA_DIR)/.smol/venv"
-PIP := "$(VENV)/bin/pip"
-PYTHON := "$(VENV)/bin/python"
-UVICORN := "$(VENV)/bin/uvicorn"
+
+ifndef MEDIA_DIR
+  $(error MEDIA_DIR is not set)
+endif
+
+VENV         ?= $(MEDIA_DIR)/.smol/venv
+PIP          := $(VENV)/bin/pip
+PYTHON       := $(VENV)/bin/python
+UVICORN      := $(VENV)/bin/uvicorn
 
 $(VENV)/bin/activate:
 	@test -n "$(MEDIA_DIR)" || (echo "MEDIA_DIR not set"; exit 1)

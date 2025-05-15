@@ -30,7 +30,7 @@ class MediaProcessor(ABC):
         self,
         media: Media,
         session: Session,
-        scenes: list[tuple[Scene, MatLike] | ImageFile],
+        scenes: list[tuple[Scene, MatLike] | ImageFile | Scene],
     ) -> None:
         """
         Called once for each new or updated Media.

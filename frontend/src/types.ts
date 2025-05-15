@@ -10,6 +10,7 @@ export interface Media {
   inserted_at: string;
   tags: Tag[];
   faces: Face[];
+  extracted_scenes: boolean;
 }
 
 export interface Tag {
@@ -40,7 +41,6 @@ export interface Face {
   media_id: number;
   person_id?: number;
   thumbnail_path: string;
-  bbox: number[];
   embedding?: number[];
   person?: Person;
 }
@@ -57,7 +57,6 @@ export interface MediaDetail {
 }
 export interface PersonDetail {
   person: Person;
-  tags: Tag[];
   faces: Face[];
   medias: Media[];
 }

@@ -1,5 +1,6 @@
 import './index.css';
-import React from 'react';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import { theme } from './theme';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import 'leaflet/dist/leaflet.css'
@@ -18,5 +19,8 @@ L.Icon.Default.mergeOptions({
 })
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
-  <App />
+  <ThemeProvider theme={theme}>
+    <CssBaseline />
+    <App />
+  </ThemeProvider>
 );

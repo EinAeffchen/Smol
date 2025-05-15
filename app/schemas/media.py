@@ -25,6 +25,7 @@ class MediaRead(SQLModel):
     persons: list[PersonRead] = []  # we'll fill this in manually
     scenes: list[SceneRead]
     tags: list[TagSimple]
+    extracted_scenes: bool
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,42 +1,57 @@
+// src/pages/TagsPage.tsx
 import React, { useCallback } from 'react'
+import { Container, Typography, Grid, Box, CircularProgress } from '@mui/material'
 import TagCard from '../components/TagCard'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { Tag } from '../types'
 
-const API = import.meta.env.VITE_API_BASE_URL
+const API = import.meta.env.VITE_API_BASE_URL ?? ''
+const ITEMS_PER_PAGE = 20
 
 export default function TagsPage() {
   const fetchTags = useCallback(
     (cursor: string | null, limit: number) =>
       fetch(
-        `${API}/tags/${cursor ? `?cursor=${cursor}&` : "?"
-        }limit=${limit}`
-      ).then((r) =>
-        r.json() as Promise<CursorResponse<Tag>>
-      ),
+        `${API}/tags/${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
+      ).then(res => {
+        if (!res.ok) throw new Error(res.statusText)
+        return res.json() as Promise<CursorResponse<Tag>>
+      }),
     [API]
   )
-  const { items: tags, setItems: setTags, hasMore, loading, loaderRef } = useInfinite<Tag>(fetchTags, 20)
+
+  const {
+    items: tags,
+    hasMore,
+    loading,
+    loaderRef,
+  } = useInfinite<Tag>(fetchTags, ITEMS_PER_PAGE, [])
 
   return (
-    <div className="max-w-screen-lg mx-auto px-4 py-8">
-      <h1 className="text-2xl font-semibold mb-6">Tags</h1>
-      <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-6">
-        {tags.map(tag => <TagCard key={tag.id} tag={tag} />)}
-      </div>
+    <Container maxWidth="lg" sx={{ pt: 4, pb: 6 }}>
+      <Typography variant="h4" gutterBottom>
+        Tags
+      </Typography>
+
+      <Grid container spacing={4}>
+        {tags.map(tag => (
+          <Grid key={tag.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>  {/* 1,2,3,4 per row */}
+            <TagCard tag={tag} />
+          </Grid>
+        ))}
+      </Grid>
+
       {loading && (
-        <div className="py-4 text-center text-gray-500">
-          Loading…
-        </div>
+        <Box textAlign="center" py={4}>
+          <CircularProgress color="secondary" />
+        </Box>
       )}
+
       {!loading && hasMore && (
-        <div
-          ref={loaderRef}
-          className="py-4 text-center text-gray-500"
-        >
+        <Box ref={loaderRef} textAlign="center" py={2} sx={{ color: 'text.secondary' }}>
           Scroll to load more…
-        </div>
+        </Box>
       )}
-    </div>
+    </Container>
   )
 }

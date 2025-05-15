@@ -44,30 +44,33 @@ def search(
     limit: int = 20,
     cursor: str | None = Query(
         None,
-        description="previous max distance as int, e.g. 1.1",
+        description="page_number",
     ),
     query: str = Query("", description="Free-text or embedding query"),
     session: Session = Depends(get_session),
 ):
+    max_dist = 2
+    max_pages = 3
     if category == "media":
         vec = encode_text_query(query)
-        prev_max = -10
         if cursor:
-            prev_max = float(cursor)
-        logger.warning("DISTANCE: %s", prev_max)
+            page = int(cursor)
+        else:
+            page = 1
         sql = text(
             """
             SELECT media_id, distance
               FROM media_embeddings
              WHERE embedding MATCH :vec
-               AND distance > :prev_max
+               AND distance < :max_dist
              ORDER BY distance
             LIMIT :k
             """
-        ).bindparams(vec=json.dumps(vec), prev_max=prev_max, k=limit)
+        ).bindparams(
+            vec=json.dumps(vec), max_dist=max_dist, k=limit * max_pages
+        )
         rows = session.exec(sql).all()  # [(media_id, distance), ...]
-        logger.warning(rows)
-        media_ids = [r[0] for r in rows]
+        media_ids = [r[0] for r in rows[(page - 1) * limit : page * limit]]
 
         # 2) load & order Media
         medias = session.exec(
@@ -75,8 +78,9 @@ def search(
         ).all()
         id_map = {m.id: m for m in medias}
         ordered = [id_map[mid] for mid in media_ids if mid in id_map]
+        logger.warning("Page: %s - results: %s", page, len(medias))
         if len(medias) == limit:
-            next_cursor = str(rows[-1][1])
+            next_cursor = str(page + 1)
         else:
             next_cursor = None
         return CursorPage(

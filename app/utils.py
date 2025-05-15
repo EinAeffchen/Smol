@@ -7,11 +7,12 @@ import cv2
 import ffmpeg
 import numpy as np
 import piexif
-from PIL import Image
+from PIL import Image, UnidentifiedImageError, ImageOps
 from scenedetect import AdaptiveDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlmodel import Session, select
 from tqdm import tqdm
+
 
 from app.config import (
     MAX_FRAMES_PER_VIDEO,
@@ -75,9 +76,19 @@ def process_file(filepath: Path):
             .run(quiet=True, overwrite_output=True)
         )
     else:
-        img = Image.open(filepath)
+        try:
+            img = Image.open(filepath)
+            img = ImageOps.exif_transpose(img)
+        except UnidentifiedImageError:
+            logger.warning("Couldn't open %s", filepath)
+            return False
         img.thumbnail((480, -1))
-        img.save(thumb_path, format="JPEG")
+        try:
+            img.save(thumb_path, format="JPEG")
+        except OSError:
+            img = img.convert("RGB")
+            img.save(thumb_path, format="JPEG")
+            
 
 
 def get_person_embedding(

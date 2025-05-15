@@ -1,36 +1,65 @@
-// src/components/PersonCard.tsx
 import React from 'react'
-import { Link } from 'react-router-dom'
+import { Link as RouterLink } from 'react-router-dom'
+import {
+  Card,
+  CardActionArea,
+  Avatar,
+  Typography,
+} from '@mui/material'
 import { Person } from '../types'
 
+const ACCENT = '#FF2E88'
+const BG_CARD = '#2C2C2E'
+const TEXT_SECONDARY = '#BFA2DB'
+
 export default function PersonCard({ person }: { person: Person }) {
-  const API = import.meta.env.VITE_API_BASE_URL;
+  const API = import.meta.env.VITE_API_BASE_URL ?? ''
+  const thumb =
+    person.profile_face?.thumbnail_path
+      ? `${API}/thumbnails/${person.profile_face.thumbnail_path}`
+      : undefined
 
-  const src = person.profile_face
-    ? `${API}/thumbnails/${person.profile_face.thumbnail_path}`
-    : `${API}/logo.png`
   return (
-    <Link to={`/person/${person.id}`} className="group block h-full">
-      <div className="flex flex-col items-center p-4 bg-gray-800 rounded-lg border border-gray-700 shadow-md hover:shadow-lg transition-shadow h-full">
-        {/* Avatar */}
-        <div className="w-28 h-28 mb-3">
-          <img
-            src={src}
-            alt={person.name ?? 'Unknown'}
-            className="w-full h-full rounded-full object-cover"
-          />
-        </div>
-
-        {/* Name */}
-        <h4 className="text-lg font-semibold text-center text-text">
+    <Card
+      elevation={3}
+      sx={{
+        bgcolor: BG_CARD,
+        borderRadius: 2,
+        overflow: 'hidden',
+        height: '100%',
+      }}
+    >
+      <CardActionArea
+        component={RouterLink}
+        to={`/person/${person.id}`}
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          p: 2,
+          height: '100%',
+          textAlign: 'center',
+        }}
+      >
+        <Avatar
+          src={thumb}
+          sx={{ width: 100, height: 100, mb: 1, border: `2px solid ${ACCENT}` }}
+        />
+        <Typography
+          variant="subtitle1"
+          noWrap
+          sx={{ color: '#FFF', mb: 0.5, width: '100%' }}
+        >
           {person.name || 'Unknown'}
-        </h4>
-
-        {/* Age */}
-        <div className="mt-2 text-sm text-gray-400 text-center space-y-1">
-          {person.age != null && <div>{person.age} yr{person.age !== 1 ? 's' : ''}</div>}
-        </div>
-      </div>
-    </Link>
+        </Typography>
+        <Typography
+          variant="caption"
+          sx={{ color: TEXT_SECONDARY, mt: 0.5, minHeight: '1em' }}
+        >
+          {person.age != null ? `${person.age} yr${person.age !== 1 ? 's' : ''}` : ''}
+        </Typography>
+      </CardActionArea>
+    </Card>
   )
 }

@@ -11,6 +11,8 @@ from app.database import init_db, init_vec_index
 from app.api.processors import router as proc_router
 from app.processor_registry import load_processors
 from fastapi.middleware.cors import CORSMiddleware
+from app.write_queue import write_queue
+
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -25,6 +27,7 @@ async def lifespan(app: FastAPI):
     init_db()
     init_vec_index()
     load_processors()
+    write_queue.start()
     yield
 
 
@@ -32,7 +35,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

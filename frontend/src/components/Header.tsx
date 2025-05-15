@@ -1,7 +1,24 @@
-// frontend/src/components/Header.tsx
+// src/components/Header.tsx
 import React, { useState } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
+import {
+  AppBar,
+  Box,
+  Toolbar,
+  Typography,
+  TextField,
+  Select,
+  MenuItem,
+  IconButton,
+  InputAdornment,
+  Drawer,
+} from '@mui/material'
+import MenuIcon from '@mui/icons-material/Menu'
+import SettingsIcon from '@mui/icons-material/Settings'
 import ControlPanelModal from './ControlPanelModal'
+
+const API = import.meta.env.VITE_API_BASE_URL ?? ""
+
 
 export function Header() {
   const [openPanel, setOpenPanel] = useState(false)
@@ -13,150 +30,127 @@ export function Header() {
     e.preventDefault()
     const trimmed = q.trim()
     if (!trimmed) return
-
-    // include both category and query in the URL
-    navigate(
-      `/searchresults?` +
-      new URLSearchParams({
-        category,
-        query: trimmed,
-      }).toString()
-    )
+    navigate(`/searchresults?` + new URLSearchParams({ category, query: trimmed }).toString())
   }
-
 
   return (
     <>
-      <header className="sticky top-0 z-20 bg-background/90 backdrop-blur-md border-b border-gray-800">
-        <div className="max-w-screen-xl mx-auto flex items-center space-x-4 px-4 py-3">
+      <AppBar
+        position="sticky"
+        sx={{
+          backgroundColor: '#1C1C1E',
+          borderBottom: '1px solid #333',
+        }}
+      >
+        <Toolbar sx={{ gap: 2 }}>
           {/* Logo */}
-          <Link to="/" className="flex-none">
-            <img
-              src="/static/logo.png"
-              alt="SMOL logo"
-              className="h-12 w-auto"
-            />
+          <Link to="/">
+            <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ height: 48 }} />
           </Link>
 
           {/* Search bar */}
-          <form onSubmit={onSearchSubmit} className="flex flex-1" role="search">
-            {/* Dropdown */}
-            <select
+          <Box component="form" onSubmit={onSearchSubmit} sx={{ display: 'flex', flexGrow: 1 }}>
+            <Select
               value={category}
-              onChange={e => setCategory(e.target.value as any)}
-              className="
-                bg-gray-800 text-text
-                rounded-l-full border border-r-0 border-gray-700
-                px-3 py-2
-                focus:outline-none focus:ring-2 focus:ring-accent
-                transition
-              "
+              onChange={(e) => setCategory(e.target.value as any)}
+              sx={{
+                backgroundColor: '#2C2C2E',
+                color: '#FFFFFF',
+                borderTopLeftRadius: 20,
+                borderBottomLeftRadius: 20,
+                '& .MuiSelect-icon': { color: '#FF2E88' },
+              }}
             >
-              <option value="media">Media</option>
-              <option value="person">People</option>
-              <option value="tag">Tags</option>
-            </select>
-
-            {/* Text input */}
-            <input
-              type="text"
+              <MenuItem value="media">Media</MenuItem>
+              <MenuItem value="person">People</MenuItem>
+              <MenuItem value="tag">Tags</MenuItem>
+            </Select>
+            <TextField
               value={q}
-              onChange={e => setQ(e.target.value)}
+              onChange={(e) => setQ(e.target.value)}
               placeholder="Search…"
-              className="
-                flex-1
-                bg-gray-800 placeholder-gray-500 text-text
-                rounded-r-full px-4 py-2
-                focus:outline-none focus:ring-2 focus:ring-accent
-                transition
-              "
+              variant="outlined"
+              fullWidth
+              sx={{ minWidth: 200 }}
+              slotProps={{
+                root: {
+                  sx: {
+                    '& .MuiOutlinedInput-root': {
+                      borderTopRightRadius: 20,
+                      borderBottomRightRadius: 20,
+                      backgroundColor: '#2C2C2E',
+                      color: '#FFF',
+                    },
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#444',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#FF2E88',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#FF2E88',
+                    },
+                  },
+                },
+              }}
             />
-          </form>
+            <button type="submit" style={{ display: 'none' }} />
+          </Box>
 
-          {/* Desktop nav (hidden on small) */}
-          <nav className="hidden md:flex flex-none items-center space-x-6">
-            <NavLink
-              to="/images"
-              className={({ isActive }) =>
-                isActive ? 'text-accent' : 'hover:text-accent'
-              }
-            >
-              Images
-            </NavLink>
-            <NavLink
-              to="/videos"
-              className={({ isActive }) =>
-                isActive ? 'text-accent' : 'hover:text-accent'
-              }
-            >
-              Videos
-            </NavLink>
-            <NavLink
-              to="/tags"
-              className={({ isActive }) =>
-                isActive ? 'text-accent' : 'hover:text-accent'
-              }
-            >
-              Tags
-            </NavLink>
-            <NavLink
-              to="/people"
-              className={({ isActive }) =>
-                isActive ? 'text-accent' : 'hover:text-accent'
-              }
-            >
-              People
-            </NavLink>
-            <NavLink
-              to="/orphanfaces"
-              className={({ isActive }) =>
-                isActive ? 'text-accent' : 'hover:text-accent'
-              }
-            >
-              Unassigned Faces
-            </NavLink>
-            <NavLink
-              to="/map"
-              className={({ isActive }) =>
-                isActive ? 'text-accent' : 'hover:text-accent'
-              }
-            >
-              Map
-            </NavLink>
-            <NavLink
-              to="/maptagger"
-              className={({ isActive }) =>
-                isActive ? 'text-accent' : 'hover:text-accent'
-              }
-            >
-              Geotagger
-            </NavLink>
-          </nav>
+          {/* Desktop nav */}
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 2 }}>
+            {[
+              ['Images', '/images'],
+              ['Videos', '/videos'],
+              ['Tags', '/tags'],
+              ['People', '/people'],
+              ['Unassigned Faces', '/orphanfaces'],
+              ['Map', '/map'],
+              ['Geotagger', '/maptagger'],
+            ].map(([label, to]) => (
+              <NavLink
+                key={to}
+                to={to}
+                style={({ isActive }) => ({
+                  color: isActive ? '#FF2E88' : '#BFA2DB',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                })}
+              >
+                {label}
+              </NavLink>
+            ))}
+          </Box>
 
-          {/* Menu button (visible on small only) */}
-          <button
+          <IconButton
             onClick={() => setOpenPanel(true)}
-            className="
-              flex-none flex items-center space-x-1
-              text-text hover:text-accent
-              focus:outline-none focus:ring-2 focus:ring-accent
-              px-3 py-1
-            "
+            sx={{
+              ml: 2,
+              color: '#BFA2DB',
+              display: { xs: 'none', md: 'inline-flex' }, // visible only on desktop/tablet
+            }}
+            title="Open Control Panel"
           >
-            <svg
-              className="h-6 w-6"
-              fill="none" stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2"
-                d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-        </div>
-      </header>
+            <SettingsIcon />
+          </IconButton>
+          {/* Mobile Menu Button */}
+          <IconButton
+            sx={{ color: '#BFA2DB', display: { xs: 'flex', md: 'none' } }}
+            onClick={() => setOpenPanel(true)}
+          >
+            <MenuIcon />
+          </IconButton>
+        </Toolbar>
+      </AppBar>
 
-      {openPanel && <ControlPanelModal onClose={() => setOpenPanel(false)} />}
+      <Drawer
+        anchor="right"
+        open={openPanel}
+        onClose={() => setOpenPanel(false)}
+        PaperProps={{ sx: { backgroundColor: '#1C1C1E', color: '#FFF', width: 280 } }}
+      >
+        <ControlPanelModal onClose={() => setOpenPanel(false)} />
+      </Drawer>
     </>
   )
 }

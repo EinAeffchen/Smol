@@ -1,47 +1,33 @@
-// frontend/src/components/SimilarPersonCard.tsx
-import React from 'react'
 import { Link } from 'react-router-dom'
-import { Person } from '../types'
-import PersonCard from './PersonCard'
+import { Card, CardActionArea, CardContent, Avatar, Typography, Box } from '@mui/material'
 import { SimilarPerson } from '../types'
 
+const API = import.meta.env.VITE_API_BASE_URL
 
-export default function SimilarPersonCard({
-  id,
-  name,
-  similarity,
-  thumbnail,
-}: SimilarPerson) {
-  const API = import.meta.env.VITE_API_BASE_URL;
-
+export default function SimilarPersonCard({ id, name, similarity, thumbnail }: SimilarPerson) {
   return (
-    <Link
-      to={`/person/${id}`}
-      className="
-        group block text-center p-2
-        bg-gray-800 rounded-lg shadow hover:shadow-md
-      "
-    >
-      {/* Thumbnail or fallback */}
-      {thumbnail ? (
-        <div className="w-20 h-20 mx-auto rounded-full overflow-hidden mb-2">
-          <img
+    <Card sx={{ bgcolor: '#2C2C2E', color: '#FFF' }}>
+      <CardActionArea
+        component={Link}
+        to={`/person/${id}`}
+        sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', p: 2 }}
+      >
+        {thumbnail ? (
+          <Avatar
             src={`${API}/thumbnails/${thumbnail}`}
-            alt={name || 'Profile'}
-            className="object-cover w-full h-full"
+            sx={{ width: 64, height: 64, mb: 1, border: '2px solid #FF2E88' }}
           />
-        </div>
-      ) : (
-        <div className="w-20 h-20 mx-auto rounded-full bg-gray-700 mb-2" />
-      )}
+        ) : (
+          <Avatar sx={{ width: 64, height: 64, mb: 1, bgcolor: '#555' }} />
+        )}
 
-      {/* Name */}
-      <div className="text-sm font-medium truncate">{name}</div>
-
-      {/* Score */}
-      <div className="text-xs text-gray-400 mt-1">
-        {(similarity * 100).toFixed(1)}%
-      </div>
-    </Link>
+        <CardContent sx={{ textAlign: 'center', p: 0 }}>
+          <Typography variant="body1" noWrap>{name || 'Unknown'}</Typography>
+          <Typography variant="caption" color="#BFA2DB">
+            {(similarity).toFixed(1)}% match
+          </Typography>
+        </CardContent>
+      </CardActionArea>
+    </Card>
   )
 }

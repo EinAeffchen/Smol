@@ -1,13 +1,8 @@
 // src/pages/MapPage.tsx
-import React, { useState, useEffect, useRef } from 'react'
-import {
-    MapContainer,
-    TileLayer,
-    Marker,
-    Popup,
-    useMap,
-} from 'react-leaflet'
-import { useSearchParams, Link } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
+import { useSearchParams, Link as RouterLink } from 'react-router-dom'
+import { Box } from '@mui/material'
 import type { LatLngExpression } from 'leaflet'
 
 interface MediaLocation {
@@ -17,13 +12,9 @@ interface MediaLocation {
     thumbnail: string
 }
 
-const API = import.meta.env.VITE_API_BASE_URL
+const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
-function FocusHandler({
-    locations,
-}: {
-    locations: MediaLocation[]
-}) {
+function FocusHandler({ locations }: { locations: MediaLocation[] }) {
     const map = useMap()
     const [params] = useSearchParams()
     const focusId = params.get('focus')
@@ -36,7 +27,7 @@ function FocusHandler({
             const center: LatLngExpression = [loc.latitude, loc.longitude]
             map.setView(center, 15, { animate: true })
         }
-    }, [focusId, locations])
+    }, [focusId, locations, map])
 
     return null
 }
@@ -46,21 +37,21 @@ export default function MapPage() {
 
     useEffect(() => {
         fetch(`${API}/media/locations`)
-            .then(r => r.json())
+            .then(res => res.json())
             .then(setLocations)
             .catch(console.error)
     }, [])
 
-    // world center
+    // Default world center
     const center: LatLngExpression = [20, 0]
 
     return (
-        <div className="h-screen w-full">
+        <Box sx={{ height: '100vh', width: '100%' }}>
             <MapContainer
                 center={center}
                 zoom={2}
-                scrollWheelZoom={true}
-                className="h-full"
+                scrollWheelZoom
+                style={{ height: '100%', width: '100%' }}
             >
                 <TileLayer
                     attribution="© OpenStreetMap contributors"
@@ -71,22 +62,29 @@ export default function MapPage() {
                 <FocusHandler locations={locations} />
 
                 {locations.map(loc => (
-                    <Marker
-                        key={loc.id}
-                        position={[loc.latitude, loc.longitude]}
-                    >
+                    <Marker key={loc.id} position={[loc.latitude, loc.longitude] as LatLngExpression}>
                         <Popup>
-                            <Link to={`/image/${loc.id}`}>
-                                <img
-                                    src={loc.thumbnail}
+                            <Box
+                                component={RouterLink}
+                                to={`/media/${loc.id}`}
+                                sx={{ display: 'block', width: 96, height: 96, textDecoration: 'none' }}
+                            >
+                                <Box
+                                    component="img"
+                                    src={`${API}${loc.thumbnail}`}
                                     alt=""
-                                    className="w-24 h-24 object-cover rounded"
+                                    sx={{
+                                        width: '100%',
+                                        height: '100%',
+                                        objectFit: 'cover',
+                                        borderRadius: 1,
+                                    }}
                                 />
-                            </Link>
+                            </Box>
                         </Popup>
                     </Marker>
                 ))}
             </MapContainer>
-        </div>
+        </Box>
     )
 }

@@ -1,8 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import IndexPage from './pages/IndexPage';
-import VideoDetailPage from './pages/VideoDetailPage';
-import ImageDetailPage from './pages/ImageDetailPage';
+import MediaDetailPage from './pages/MediaDetailPage';
 import PersonDetailPage from './pages/PersonDetailPage';
 import { Layout } from './components/Layout'
 import TagDetailPage from './pages/TagDetailPage';
@@ -22,7 +21,7 @@ export default function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<IndexPage />} />
           <Route path="/searchresults" element={<SearchPage />} />
-          <Route path="/video/:id" element={<VideoDetailPage />} />
+          <Route path="/media/:id" element={<MediaDetailPage />} />
           <Route path="/images" element={<ImagesPage />} />
           <Route path="/map" element={<MapPage />} />
           <Route path="/maptagger" element={<MapEditorPage />} />
@@ -30,7 +29,6 @@ export default function App() {
           <Route path="/orphanfaces" element={<OrphanFacesPage />} />
           <Route path="/videos" element={<VideosPage />} />
           <Route path="/people" element={<PeoplePage />} />
-          <Route path="/image/:id" element={<ImageDetailPage />} />
           <Route path="/person/:id" element={<PersonDetailPage />} />
           <Route path="/tag/:id" element={<TagDetailPage />} />
         </Route>

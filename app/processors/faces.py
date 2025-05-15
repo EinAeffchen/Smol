@@ -8,6 +8,7 @@ from PIL import Image
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text
 import json
+from PIL import ImageOps
 
 from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, THUMB_DIR
 from app.database import safe_commit
@@ -86,7 +87,7 @@ class FaceProcessor(MediaProcessor):
         self,
         media: Media,
         session,
-        scenes: list[tuple[Scene, MatLike] | ImageFile],
+        scenes: list[tuple[Scene, MatLike] | ImageFile | Scene],
     ):
         logger.debug("SCENES: %s", scenes)
         # 1) skip if already extracted
@@ -107,6 +108,9 @@ class FaceProcessor(MediaProcessor):
                 scene = np.array(scene.convert("RGB"))
             else:
                 scene = np.array(scene.convert("RGB"))
+
+            if isinstance(scene, ImageFile):
+                scene = ImageOps.exif_transpose(scene)
 
             faces = self.model.get(scene)
             face_objs = self._parse_faces(faces, scene, media)

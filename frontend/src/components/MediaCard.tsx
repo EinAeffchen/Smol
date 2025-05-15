@@ -1,6 +1,7 @@
 // src/components/MediaCard.tsx
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Card, CardActionArea, CardMedia, Box, Typography } from '@mui/material'
 import { Media } from '../types'
 
 function formatDuration(d?: number): string {
@@ -11,51 +12,100 @@ function formatDuration(d?: number): string {
 }
 
 export default function MediaCard({ media }: { media: Media }) {
-  const API = import.meta.env.VITE_API_BASE_URL;
+  const API = import.meta.env.VITE_API_BASE_URL
   const isVideo = typeof media.duration === 'number'
   const mediaUrl = `${API}/originals/${media.path}`
   const thumbUrl = `${API}/thumbnails/${media.id}.jpg`
   const [hovered, setHovered] = useState(false)
 
-  // decide aspect class
-  const aspectClass = 'aspect-[4/3]'
-
   return (
-    <Link
-      to={isVideo ? `/video/${media.id}` : `/image/${media.id}`}
-      className="group block rounded-lg overflow-hidden shadow-md hover:shadow-lg transition-shadow"
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+    <Card
+      elevation={4}
+      sx={{
+        bgcolor: '#2C2C2E',
+        borderRadius: 2,
+        overflow: 'hidden',
+        position: 'relative',
+      }}
     >
-      <div className={`${aspectClass} w-full bg-gray-800 relative`}>
+      <CardActionArea
+        component={Link}
+        to={`/media/${media.id}`}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        sx={{
+          display: 'block',
+        }}
+      >
         {isVideo ? (
           hovered ? (
-            <video
+            <CardMedia
+              component="video"
               src={mediaUrl}
-              autoPlay muted loop playsInline
-              className="object-cover w-full h-full"
+              autoPlay
+              muted
+              loop
+              playsInline
+              sx={{
+                aspectRatio: '4/3',
+                objectFit: 'cover',
+                width: '100%',
+                maxHeight: "100%"
+              }}
             />
           ) : (
-            <img
-              src={thumbUrl}
+            <CardMedia
+              component="img"
+              image={thumbUrl}
               alt={media.filename}
-              className="object-cover w-full h-full"
+              sx={{
+                aspectRatio: '4/3',
+                objectFit: 'cover',
+              }}
             />
           )
         ) : (
-          <img
-            src={thumbUrl}
+          <CardMedia
+            component="img"
+            image={thumbUrl}
             alt={media.filename}
-            className="object-cover w-full h-full"
+            sx={{
+              aspectRatio: '4/3',
+              objectFit: 'cover',
+            }}
           />
         )}
-      </div>
 
-      {isVideo && (
-        <div className="absolute top-2 right-2 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-          {formatDuration(media.duration)}
-        </div>
-      )}
-    </Link>
+        {/* Overlay metadata */}
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 0,
+            width: '100%',
+            bgcolor: 'rgba(0,0,0,0.5)',
+            color: '#FFF',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            px: 1.5,
+            py: 0.5,
+            fontSize: '0.75rem',
+          }}
+        >
+          {isVideo ? (
+            <>
+              <span>{formatDuration(media.duration)}</span>
+              {media.width && media.height && (
+                <span>
+                  {media.width}×{media.height}
+                </span>
+              )}
+            </>
+          ) : (
+            <span>{media.width && media.height ? `${media.width}×${media.height}` : ''}</span>
+          )}
+        </Box>
+      </CardActionArea>
+    </Card>
   )
 }

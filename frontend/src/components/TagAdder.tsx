@@ -1,7 +1,8 @@
+// src/components/TagAdder.tsx
 import React, { useState, useEffect } from 'react'
+import { Box, TextField, Button } from '@mui/material'
 import { Tag } from '../types'
 import { CursorResponse } from '../hooks/useInfinite'
-
 
 type OwnerType = 'media' | 'persons'
 
@@ -22,16 +23,10 @@ export default function TagAdder({
     const [allTags, setAllTags] = useState<Tag[]>([])
     const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
-    // load all tags for suggestion / lookup
     useEffect(() => {
         fetch(`${API}/tags/`)
-            .then(r => {
-                if (!r.ok) throw new Error(`Status ${r.status}`)
-                return r.json() as Promise<CursorResponse<Tag>>
-            })
-            .then(page => {
-                setAllTags(page.items)    // ← pull the array out
-            })
+            .then(r => r.json())
+            .then((page: CursorResponse<Tag>) => setAllTags(page.items))
             .catch(console.error)
     }, [API])
 
@@ -39,13 +34,11 @@ export default function TagAdder({
         const name = inputValue.trim()
         if (!name) return
 
-        // don't add if already there
         if (existingTags.some(t => t.name.toLowerCase() === name.toLowerCase())) {
             setInputValue('')
             return
         }
 
-        // find or create the tag
         let tag = allTags.find(t => t.name.toLowerCase() === name.toLowerCase())
         if (!tag) {
             const res = await fetch(`${API}/tags/`, {
@@ -61,11 +54,7 @@ export default function TagAdder({
             setAllTags(prev => [...prev, tag])
         }
 
-        // assign to owner
-        const res2 = await fetch(
-            `${API}/tags/${ownerType}/${ownerId}/${tag.id}`,
-            { method: 'POST' }
-        )
+        const res2 = await fetch(`${API}/tags/${ownerType}/${ownerId}/${tag.id}`, { method: 'POST' })
         if (!res2.ok) {
             console.error('Failed to assign tag', await res2.text())
             return
@@ -76,16 +65,11 @@ export default function TagAdder({
     }
 
     return (
-        <div className="flex items-center space-x-2 mb-4">
-            <input
-                type="text"
+        <Box display="flex" gap={2} alignItems="center">
+            <TextField
+                variant="outlined"
+                size="small"
                 placeholder="Add tag…"
-                className="
-          flex-grow
-          px-3 py-1
-          bg-gray-800 placeholder-gray-400 text-text
-          rounded focus:outline-none focus:ring-2 focus:ring-accent
-        "
                 value={inputValue}
                 onChange={e => setInputValue(e.target.value)}
                 onKeyDown={e => {
@@ -94,13 +78,11 @@ export default function TagAdder({
                         handleAdd()
                     }
                 }}
+                sx={{ flexGrow: 1 }}
             />
-            <button
-                onClick={handleAdd}
-                className="px-3 py-1 bg-accent hover:bg-accent2 text-background rounded"
-            >
+            <Button variant="contained" color="secondary" onClick={handleAdd}>
                 Add
-            </button>
-        </div>
+            </Button>
+        </Box>
     )
 }

@@ -1,71 +1,91 @@
-// frontend/src/components/Header.tsx
+// src/components/MediaExif.tsx
 import React, { useState, useEffect } from 'react'
+import { Box, Typography, Link as RouterLink, CircularProgress } from '@mui/material'
 import { Link } from 'react-router-dom'
 
+const API = import.meta.env.VITE_API_BASE_URL ?? ''
+const BG_OVERLAY = 'rgba(0, 0, 0, 0.6)'
+const TEXT = '#FFF'
+const ACCENT = '#FF2E88'
 
-const API = import.meta.env.VITE_API_BASE_URL || ''
+interface MediaExifProps {
+    show: boolean
+    mediaId: number
+}
 
-
-export function MediaExif({ showExif, id }) {
+export function MediaExif({ show, mediaId }: MediaExifProps) {
     const [exif, setExif] = useState<Record<string, any> | null | undefined>(undefined)
 
-    // reset exif for new media
+    // Reset on mediaId change
     useEffect(() => {
         setExif(undefined)
-    }, [id])
+    }, [mediaId])
 
+    // Fetch EXIF when shown
     useEffect(() => {
-        if (showExif && exif === undefined) {
-            fetch(`${API}/api/media/${id}/processors/exif`)
-                .then(r => (r.ok ? r.json() : null))
-                .then(body => setExif(body))       // body is object or null
+        if (show && exif === undefined) {
+            fetch(`${API}/api/media/${mediaId}/processors/exif`)
+                .then(res => (res.ok ? res.json() : null))
+                .then(body => setExif(body))
                 .catch(() => setExif(null))
         }
-    }, [showExif, id])
+    }, [show, mediaId])
+
+    if (!show) return null
+
+    // Determine if we have any EXIF properties
+    const hasData =
+        exif &&
+        typeof exif === 'object' &&
+        (
+            exif.timestamp != null ||
+            Object.keys(exif).some(
+                key => ['make', 'model', 'iso', 'exposure_time', 'aperture', 'focal_length', 'lat', 'lon'].includes(key) && exif[key] != null
+            )
+        )
+
 
     return (
-        <>
-            {/* only render overlay when showExif===true */}
-            {showExif && (
-                <div className="absolute inset-0 pointer-events-none transition-opacity opacity-100">
-                    <div className="absolute top-0 left-0 right-0 bg-black bg-opacity-60 text-white p-4 h-[66%] w--full overflow-auto pointer-events-auto z-10">
-                        {
-                            // 2.1 still loading?
-                            exif === undefined ? (
-                                <p>Loading EXIF…</p>
-                            ) : (
-                                <>
-                                    {
-                                        // 2.2 we got an object → render fields
-                                        exif && typeof exif === 'object' ? (
-                                            <>
-                                                {exif.make && <p><strong>Camera:</strong> {exif.make} {exif.model}</p>}
-                                                {exif.timestamp && <p><strong>Shot:</strong> {new Date(exif.timestamp).toLocaleString()}</p>}
-                                                {exif.iso && <p><strong>ISO:</strong> {exif.iso}</p>}
-                                                {exif.exposure_time && <p><strong>Shutter:</strong> {exif.exposure_time}s</p>}
-                                                {exif.aperture && <p><strong>Aperture:</strong> {exif.aperture}</p>}
-                                                {exif.focal_length && <p><strong>Focal:</strong> {exif.focal_length} mm</p>}
+        <Box
+            sx={{
+                position: 'relative', inset: 0,
+                bgcolor: BG_OVERLAY,
+                color: TEXT,
+                p: 2,
+                overflowY: 'auto',
+                zIndex: 10,
+            }}
+        >
+            {exif === undefined ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                    <CircularProgress color="secondary" />
+                </Box>
+            ) : hasData ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {exif.make && (
+                        <Typography><strong>Camera:</strong> {exif.make} {exif.model}</Typography>
+                    )}
+                    {exif.timestamp && (
+                        <Typography><strong>Shot:</strong> {new Date(exif.timestamp).toLocaleString()}</Typography>
+                    )}
+                    {exif.iso && <Typography><strong>ISO:</strong> {exif.iso}</Typography>}
+                    {exif.exposure_time && <Typography><strong>Shutter:</strong> {exif.exposure_time}s</Typography>}
+                    {exif.aperture && <Typography><strong>Aperture:</strong> {exif.aperture}</Typography>}
+                    {exif.focal_length && <Typography><strong>Focal:</strong> {exif.focal_length} mm</Typography>}
 
-                                                {exif.lat != null && exif.lon != null && (
-                                                    <Link
-                                                        to={`/map?focus=${id}`}
-                                                        className="mt-2 inline-block text-blue-300 hover:underline pointer-events-auto"
-                                                    >
-                                                        View on map 📍
-                                                    </Link>
-                                                )}
-                                            </>
-                                        ) : (
-                                            // 2.3 exif===null or non-object → no data
-                                            <p>No EXIF data available.</p>
-                                        )
-                                    }
-                                </>
-                            )
-                        }
-                    </div>
-                </div>
+                    {exif.lat != null && exif.lon != null && (
+                        <RouterLink
+                            component={Link}
+                            to={`/map?focus=${mediaId}`}
+                            sx={{ mt: 2, color: ACCENT, '&:hover': { textDecoration: 'underline' } }}
+                        >
+                            View on map 📍
+                        </RouterLink>
+                    )}
+                </Box>
+            ) : (
+                <Typography>No EXIF data available.</Typography>
             )}
-        </>
+        </Box>
     )
 }

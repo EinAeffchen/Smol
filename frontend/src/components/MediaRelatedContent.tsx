@@ -1,38 +1,37 @@
-// frontend/src/components/Header.tsx
-import React, { useState, useEffect } from 'react'
-import { MediaPreview, Media } from '../types'
-import MediaCard from '../components/MediaCard'
+import React, { useEffect, useState } from 'react'
+import { Box, Typography, Grid } from '@mui/material'
+import { MediaPreview } from '../types'
+import MediaCard from './MediaCard'
 
-const API = import.meta.env.VITE_API_BASE_URL || ''
+const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
-
-export function SimilarContent({ media }: { media: Media }) {
+export default function SimilarContent({ mediaId }: { mediaId: number }) {
     const [similar, setSimilar] = useState<MediaPreview[]>([])
 
     useEffect(() => {
-        if (!media?.id) return
-        fetch(`${API}/media/${media.id}/get_similar`)
-            .then(r => {
-                if (!r.ok) throw new Error("Failed to load similar media")
-                return r.json()
+        fetch(`${API}/media/${mediaId}/get_similar`)
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to load similar media')
+                return res.json() as Promise<MediaPreview[]>
             })
             .then(setSimilar)
             .catch(console.error)
-    }, [media?.id])
+    }, [mediaId])
+
+    if (similar.length === 0) return null
 
     return (
-        <>
-            {/* Related (stub; implement via your /media?person_id=… or /media?tags=…) */}
-            {similar.length > 0 && (
-                <section className="mt-8">
-                    <h3 className="text-xl font-semibold mb-4">Similar Content</h3>
-                    <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-                        {similar.map(m => (
-                            <MediaCard key={m.id} media={m} />
-                        ))}
-                    </div>
-                </section>
-            )}
-        </>
+        <Box mt={4}>
+            <Typography variant="h6" gutterBottom>
+                Similar Content
+            </Typography>
+            <Grid container spacing={2}>
+                {similar.map(item => (
+                    <Grid key={item.id} size={{ xs: 4, sm: 3, md: 3 }}>
+                        <MediaCard key={item} media={item} />
+                    </Grid>
+                ))}
+            </Grid>
+        </Box>
     )
 }

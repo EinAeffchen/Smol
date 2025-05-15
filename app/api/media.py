@@ -1,7 +1,7 @@
 import json
 from datetime import datetime, timedelta
 from typing import Annotated, Any
-
+from fastapi import Request
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel
@@ -189,7 +189,6 @@ def list_videos(
         # keyset predicate
         stmt = stmt.where(Media.id < before_id)
     results = session.exec(stmt.limit(limit)).all()
-    logger.error(results)
     next_cursor = str(results[-1].id) if len(results) == limit else None
     return CursorPage(items=results, next_cursor=next_cursor)
 
@@ -236,14 +235,19 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
     response_class=PlainTextResponse,
     summary="Serve a WebVTT file mapping scene start/end → thumbnail",
 )
-def scenes_vtt(media_id: int, session: Session = Depends(get_session)):
+def scenes_vtt(
+    media_id: int, request: Request, session: Session = Depends(get_session)
+):
     scenes = session.exec(
         select(Scene)
         .where(Scene.media_id == media_id)
         .order_by(Scene.start_time)
     ).all()
     if not scenes:
-        raise HTTPException(404, "No scenes found for that media")
+        if request.method == "HEAD":
+            raise HTTPException(404, "No scenes found for that media")
+        empty_vtt = "WEBVTT\n\n"
+        return PlainTextResponse(empty_vtt, media_type="text/vtt")
 
     # Build WebVTT text
     lines = ["WEBVTT", ""]
@@ -257,12 +261,7 @@ def scenes_vtt(media_id: int, session: Session = Depends(get_session)):
     return PlainTextResponse("\n".join(lines), media_type="text/vtt")
 
 
-@router.delete(
-    "/{media_id}/file",
-    summary="Permanently delete the media file & its thumbnail from disk",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_media_file(media_id: int, session: Session = Depends(get_session)):
+def delete_file(session: Session, media_id: int):
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
@@ -278,6 +277,15 @@ def delete_media_file(media_id: int, session: Session = Depends(get_session)):
     thumb = THUMB_DIR / f"{media.id}.jpg"
     if thumb.exists():
         thumb.unlink()
+
+
+@router.delete(
+    "/{media_id}/file",
+    summary="Permanently delete the media file & its thumbnail from disk",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_media_file(media_id: int, session: Session = Depends(get_session)):
+    delete_file(session, media_id)
 
 
 @router.delete(

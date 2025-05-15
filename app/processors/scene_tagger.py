@@ -38,7 +38,7 @@ class SceneTagger(MediaProcessor):
         self,
         media: Media,
         session,
-        scenes: list[tuple[Scene, MatLike] | ImageFile],
+        scenes: list[tuple[Scene, MatLike] | ImageFile | Scene],
     ):
         # 1) skip if already extracted
         if session.exec(
@@ -57,6 +57,8 @@ class SceneTagger(MediaProcessor):
                 embeddings.append(embedding)
                 scene[0].embedding = embedding
                 session.add(scene[0])
+            else:
+                logger.warning("Got instance: %s", type(scene))
 
         if not media.duration:  # is photo/picture
             media.embedding = embeddings[0]

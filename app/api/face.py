@@ -3,11 +3,16 @@ from pydantic import BaseModel
 from sqlmodel import Session, delete, select, text
 
 from app.config import THUMB_DIR
-from app.database import get_session, safe_commit
+from app.database import get_session, safe_commit, safe_execute
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
 from app.schemas.face import FaceAssign, FaceRead, CursorPage
 from app.schemas.person import PersonRead
 from app.logger import logger
+from app.database import engine
+from app.utils import get_person_embedding
+from app.write_queue import write_queue
+import json
+import time
 
 router = APIRouter()
 
@@ -17,7 +22,7 @@ router = APIRouter()
     summary="Assign an existing face to a person",
     response_model=Face,
 )
-def assign_face(
+async def assign_face(
     face_id: int,
     body: FaceAssign = Body(...),
     session: Session = Depends(get_session),
@@ -25,28 +30,63 @@ def assign_face(
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
-
+    if face.person_id == body.person_id:
+        return face
     person = session.get(Person, body.person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
     old_person = face.person
-    face.person_id = person.id
-    sql = text(
-        """
-                UPDATE face_embeddings
-                set person_id=:p_id
-                WHERE face_id=:f_id
-                """
-    ).bindparams(p_id=person.id, f_id=face.id)
-    session.exec(sql)
+    if old_person:
+        old_person_id = old_person.id
+    else:
+        old_person_id = None
+    face.person = person
+
     session.add(face)
+    face_id = face.id
+    person_id = person.id
+
+    session.refresh(face)
     safe_commit(session)
 
-    if old_person and old_person.id != body.person_id:
-        old_person_can_be_deleted(session, old_person)
-    session.refresh(face)
+    if old_person_id and old_person_id != body.person_id:
+        old_person_can_be_deleted(session, old_person_id)
+    update_face_embedding(session, face_id, person_id)
+    safe_commit(session)
+    session.expunge(face)
+    session.close()
     return face
+
+
+def update_face_embedding(
+    session: Session,
+    face_id: int,
+    person_id: int | None,
+    delete_face: bool = False,
+):
+    if not delete_face and person_id:
+        sql = text(
+            """
+            UPDATE face_embeddings
+            set person_id=:p_id
+            WHERE face_id=:f_id
+            """
+        ).bindparams(p_id=person_id, f_id=face_id)
+    else:
+        sql = text(
+            """DELETE FROM face_embeddings
+                   WHERE face_id=:f_id"""
+        ).bindparams(f_id=face_id)
+    if person_id:
+        safe_execute(session, sql)
+        person_embedding = get_person_embedding(session, person_id)
+        sql = text(
+            """
+            INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
+            VALUES(:p_id, :emb)"""
+        ).bindparams(p_id=person_id, emb=json.dumps(person_embedding.tolist()))
+        safe_execute(session, sql)
 
 
 @router.delete(
@@ -63,9 +103,16 @@ def delete_face(face_id: int, session: Session = Depends(get_session)):
     thumb = THUMB_DIR / face.thumbnail_path
     if thumb.exists():
         thumb.unlink()
+    face_id = face.id
+    if face.person:
+        person_id = face.person.id
+    else:
+        person_id = None
     session.delete(face)
-    old_person_can_be_deleted(session, face.person)
+    if not old_person_can_be_deleted(session, person_id):
+        update_face_embedding(session, face_id, person_id, delete_face=True)
     safe_commit(session)
+    session.close()
 
 
 class FaceCreatePerson(BaseModel):
@@ -91,7 +138,7 @@ def get_orphans(
     )
     if before_id:
         query = query.where(Face.id < before_id)
-    orphans = session.exec(query.limit(limit)).all()
+    orphans = safe_execute(session, query.limit(limit)).all()
 
     if len(orphans) == limit:
         next_cursor = str(orphans[-1].id)
@@ -106,7 +153,7 @@ def get_orphans(
     response_model=PersonRead,
     status_code=status.HTTP_201_CREATED,
 )
-def create_person_from_face(
+async def create_person_from_face(
     face_id: int,
     body: FaceCreatePerson = Body(...),
     session: Session = Depends(get_session),
@@ -124,43 +171,50 @@ def create_person_from_face(
         profile_face_id=face.id,
     )
     session.add(person)
-    sql = text(
-        """
-                UPDATE face_embeddings
-                set person_id=:p_id
-                WHERE face_id=:f_id
-                """
-    ).bindparams(p_id=person.id, f_id=face.id)
-    session.exec(sql)
-    safe_commit(session)
-    session.refresh(person)
+    session.flush()
 
-    # 2) Assign the face
-    face.person_id = person.id
+    person_id = person.id
+    face.person_id = person_id
     session.add(face)
+    if previous_person:
+        previous_person_id = previous_person.id
+    else:
+        previous_person_id = None
     safe_commit(session)
-    if previous_person and previous_person.id != person.id:
-        old_person_can_be_deleted(session, previous_person)
+
+    if previous_person_id and previous_person_id != person_id:
+        old_person_can_be_deleted(session, previous_person_id)
+    update_face_embedding(session, face_id, person_id)
+    session.close()
     return person
 
 
-def old_person_can_be_deleted(session, person: Person):
-    if person is None:
-        return
-    remaining = session.exec(
-        select(Face).where(Face.person_id == person.id)
-    ).all()
+def old_person_can_be_deleted(session: Session, person_id: int | None):
+    if person_id is None:
+        return True
+    remaining = safe_execute(
+        session, select(Face).where(Face.person_id == person_id)
+    ).first()
     if remaining:
-        return
+        session.close()
+        return False
+
     # delete any tag links
-    session.exec(
-        delete(PersonTagLink).where(PersonTagLink.person_id == person.id)
+    safe_execute(
+        session,
+        delete(PersonTagLink).where(PersonTagLink.person_id == person_id),
     )
-    session.exec(
-        delete(PersonSimilarity).where(PersonSimilarity.person_id == person.id)
+    safe_execute(
+        session,
+        delete(PersonSimilarity).where(
+            PersonSimilarity.person_id == person_id
+        ),
     )
-    session.exec(
-        delete(PersonSimilarity).where(PersonSimilarity.other_id == person.id)
+    safe_execute(
+        session,
+        delete(PersonSimilarity).where(PersonSimilarity.other_id == person_id),
     )
+    person = session.get(Person, person_id)
     session.delete(person)
     safe_commit(session)
+    return True

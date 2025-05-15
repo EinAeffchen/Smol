@@ -17,7 +17,9 @@
         "@mui/material":"7.1.0",
         "@mui/icons-material":"7.1.0",
         "@emotion/react":"11.14.0",
-        "@emotion/styled":"11.14.0"
+        "@emotion/styled":"11.14.0",
+        "react-window":"1.8.11",
+        "@react-hook/resize-observer":"2.0.2"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.0.0",

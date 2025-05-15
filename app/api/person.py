@@ -1,6 +1,6 @@
+import json
 from typing import Any
 
-import numpy as np
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -9,25 +9,22 @@ from fastapi import (
     Query,
     status,
 )
-import json
-from pydantic import BaseModel
 from sqlalchemy.orm import selectinload
-from sqlmodel import Session, delete, select, update, text, sql
-from app.config import THUMB_DIR
+from sqlmodel import Session, delete, select, text, update
+
 from app.database import get_session, safe_commit
 from app.logger import logger
-from app.models import Face, Person, PersonSimilarity, PersonTagLink
+from app.models import Face, Person, PersonTagLink
 from app.schemas.person import (
+    CursorPage,
     FaceRead,
     MergePersonsRequest,
     PersonDetail,
     PersonRead,
     PersonUpdate,
     SimilarPerson,
-    CursorPage,
 )
 from app.utils import (
-    cosine_similarity,
     get_person_embedding,
     refresh_similarities_for_person,
 )
@@ -82,7 +79,7 @@ def list_persons(
 
 @router.get("/{person_id}/suggest-faces", response_model=list[FaceRead])
 def suggest_faces(
-    person_id: int, limit: int = 10, session: Session = Depends(get_session)
+    person_id: int, limit: int = 20, session: Session = Depends(get_session)
 ):
     # 1) must exist
     if not session.get(Person, person_id):
@@ -102,12 +99,12 @@ def suggest_faces(
             LIMIT :k
             """
     ).bindparams(vec=json.dumps(target.tolist()), k=limit)
-    rows = session.exec(sql).all()  # [(media_id, distance), ...]
+    rows = session.exec(sql).all()
     face_ids = [r[0] for r in rows]
 
     faces = session.exec(select(Face).where(Face.id.in_(face_ids))).all()
     id_map = {f.id: f for f in faces}
-    ordered = [id_map[f.id] for f in faces if f.id in id_map]
+    ordered = [id_map[f] for f in face_ids if f in id_map]
 
     return [
         FaceRead(
@@ -156,6 +153,7 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
                 "inserted_at": m.inserted_at.isoformat(),
             }
         )
+        medias = sorted(medias, key=lambda a: a["inserted_at"])
     dict_person = {
         "id": person.id,
         "name": person.name,
@@ -168,15 +166,16 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
             "id": person.profile_face.id,
             "thumbnail_path": person.profile_face.thumbnail_path,
         }
+        dict_person["tags"] = person.tags
         logger.debug("PERSON: %s", dict_person)
     return {
         "person": dict_person,
-        # "tags": person.tags,
         "faces": [
             {
                 "id": face.id,
                 "person_id": face.person_id,
                 "thumbnail_path": face.thumbnail_path,
+                "media_id": face.media_id,
             }
             for face in faces
         ],
@@ -197,9 +196,7 @@ def update_person(
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(404, "Person not found")
-    logger.warning(data)
-    updates = data.dict(exclude_unset=True)
-    logger.warning(updates)
+    updates = data.model_dump(exclude_unset=True)
     for key, val in updates.items():
         setattr(person, key, val)
     session.add(person)
@@ -254,9 +251,25 @@ def merge_persons(
     # Delete the now-empty source person
     session.delete(source)
     safe_commit(session)
-
+    target_emb = get_person_embedding(session, tid)
+    sql = text(
+        """
+        UPDATE person_embeddings
+        set embedding=:emb
+        WHERE person_id=:p_id
+        """
+    ).bindparams(p_id=tid, emb=json.dumps(target_emb.tolist()))
+    session.exec(sql)
+    sql = text(
+        """
+        DELETE FROM person_embeddings
+        WHERE person_id=:p_id
+        """
+    ).bindparams(p_id=sid)
+    session.exec(sql)
     # Return the updated target person
     session.refresh(target)
+    safe_commit(session)
     return target
 
 
@@ -282,7 +295,13 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
                 """
         ).bindparams(f_id=face.id)
         session.exec(sql)
-
+    sql = text(
+        """
+        DELETE FROM person_embeddings
+        WHERE person_id=:p_id
+        """
+    ).bindparams(p_id=person.id)
+    session.exec(sql)
     # 2) remove any person–tag links
     session.exec(
         delete(PersonTagLink).where(PersonTagLink.person_id == person_id)
@@ -303,34 +322,51 @@ def get_similarities(
     session: Session = Depends(get_session),
 ):
     # ensure person exists
-    if not session.get(Person, person_id):
+    person = session.get(Person, person_id)
+    if not person:
         raise HTTPException(404, "Person not found")
+    target_row = session.exec(
+        text(
+            "SELECT embedding FROM person_embeddings "
+            "WHERE person_id = :p_id LIMIT 1"
+        ).bindparams(p_id=person_id)
+    ).first()
+    if not target_row:
+        return []
 
-    sims = session.exec(
-        select(PersonSimilarity)
-        .where(PersonSimilarity.person_id == person_id)
-        .order_by(PersonSimilarity.similarity.desc())
-        .limit(16)
-    ).all()
+    vec_json = target_row[0]
 
-    result: list[SimilarPerson] = []
+    # 3) one GROUP-BY query:
+    sql = text(
+        """
+      SELECT
+        p.id                                  AS person_id,
+        p.name                                AS name,
+        ROUND(
+            (1.0 - (MIN(pe.distance)*MIN(pe.distance)) / 2.0) * 100,
+            2
+            ) AS similarity_pct
+      FROM person_embeddings AS pe
+      JOIN person AS p
+        ON p.id = pe.person_id
+      WHERE
+        pe.person_id    != :p_id              -- drop self
+        AND pe.embedding MATCH :vec           -- top-level MATCH
+        AND k               = :k              -- KNN constraint
+      GROUP BY
+        pe.person_id, p.name
+      ORDER BY
+        MIN(pe.distance)                      -- closest first
+    """
+    ).bindparams(
+        p_id=person_id, vec=vec_json, k=20  # your desired neighbours
+    )
 
-    for sim in sims:
-        logger.debug("Other: %s", sim)
-        other = session.get(Person, sim.other_id)
-        if not other:
-            session.exec(
-                delete(PersonSimilarity).where(
-                    PersonSimilarity.other_id == sim.other_id
-                )
-            )
-            continue
-        result.append(
-            SimilarPerson(
-                id=other.id, name=other.name, similarity=sim.similarity
-            )
-        )
-    return result
+    rows = session.exec(sql).all()
+    return [
+        SimilarPerson(id=rid, name=rname, similarity=sim)
+        for rid, rname, sim in rows
+    ]
 
 
 @router.post(
@@ -347,7 +383,7 @@ def refresh_similarities(
         raise HTTPException(404, "Person not found")
 
     # enqueue the compute in the background
-    background_tasks.add_task(refresh_similarities_for_person, person_id)
+    refresh_similarities_for_person(person_id)
     return {"detail": "Similarity refresh started"}
 
 

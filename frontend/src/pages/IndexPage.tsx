@@ -1,7 +1,17 @@
+// src/pages/IndexPage.tsx
 import React, { useState, useEffect, useCallback, Fragment } from 'react'
-import MediaCard from '../components/MediaCard'
-import { MediaIndex, PersonIndex } from '../types'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
+import { MediaIndex, PersonIndex } from '../types'
+import MediaCard from '../components/MediaCard'
+import {
+  Box,
+  Typography,
+  ToggleButton,
+  ToggleButtonGroup,
+  ImageList,
+  ImageListItem,
+  CircularProgress,
+} from '@mui/material'
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 const ITEMS_PER_PAGE = 20
@@ -14,25 +24,22 @@ export default function IndexPage() {
   const fetchPage = useCallback(
     (cursor: string | null, limit: number) => {
       const params = new URLSearchParams()
-      params.set("limit", limit.toString())
-      params.set("sort", sortOrder)
-      tags.forEach(tag => params.append("tags", tag))
-      if (cursor) {
-        params.set("cursor", cursor)
-      }
+      params.set('limit', limit.toString())
+      params.set('sort', sortOrder)
+      tags.forEach(tag => params.append('tags', tag))
+      if (cursor) params.set('cursor', cursor)
 
-      return fetch(`${API}/media/?${params.toString()}`)
-        .then(res => {
-          if (!res.ok) throw new Error(res.statusText)
-          return res.json() as Promise<CursorResponse<MediaIndex>>
-        })
+      return fetch(`${API}/media/?${params.toString()}`).then(res => {
+        if (!res.ok) throw new Error(res.statusText)
+        return res.json() as Promise<CursorResponse<MediaIndex>>
+      })
     },
-    [API, sortOrder, tags]
+    [sortOrder, tags]
   )
 
   const {
     items: mediaItems,
-    setItems: setItems,
+    setItems: setMediaItems,
     hasMore,
     loading,
     loaderRef,
@@ -46,50 +53,69 @@ export default function IndexPage() {
   }, [])
 
   return (
-    <div className="bg-background text-text min-h-screen">
-      <main className="p-4 space-y-4">
-        {/* Order Switch */}
-        <div className="flex justify-center mb-6">
-          <label
-            htmlFor="order-toggle"
-            className="inline-flex items-center p-1 bg-gray-800 rounded-md shadow-inner cursor-pointer"
+    <Box sx={{ bgcolor: '#1C1C1E', color: '#FFF', minHeight: '100vh', p: 2 }}>
+      {/* Sort Toggle */}
+      <Box display="flex" justifyContent="center" mb={3}>
+        <ToggleButtonGroup
+          value={sortOrder}
+          exclusive
+          onChange={(_, v) => v && setSortOrder(v)}
+          sx={{
+            bgcolor: '#2C2C2E',
+            borderRadius: 2,
+          }}
+        >
+          <ToggleButton
+            value="newest"
+            sx={{
+              color: sortOrder === 'newest' ? '#FF2E88' : '#BFA2DB',
+              borderColor: '#5F4B8B',
+              '&.Mui-selected': { bgcolor: '#5F4B8B', color: '#FFF' },
+            }}
           >
-            <input
-              id="order-toggle"
-              type="checkbox"
-              className="hidden peer"
-              checked={sortOrder === 'popular'}
-              onChange={e => setSortOrder(e.target.checked ? 'popular' : 'newest')}
-            />
-            <span className="px-4 py-2 rounded-l-md bg-accent text-text peer-checked:bg-gray-700 peer-checked:text-gray-300">
-              Newest
-            </span>
-            <span className="px-4 py-2 rounded-r-md bg-gray-700 text-gray-300 peer-checked:bg-accent peer-checked:text-text">
-              Most Viewed
-            </span>
-          </label>
-        </div>
-        {/* Media + People grid */}
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 gap-4">
-          {mediaItems.map((m, idx) => (
-            <Fragment key={m.id}>
-              <div className="transition-transform transform hover:shadow-lg hover:-translate-y-1">
-                <MediaCard media={m} />
-              </div>
-            </Fragment>
-          ))}
-        </div>
+            Newest
+          </ToggleButton>
+          <ToggleButton
+            value="popular"
+            sx={{
+              color: sortOrder === 'popular' ? '#FF2E88' : '#BFA2DB',
+              borderColor: '#5F4B8B',
+              '&.Mui-selected': { bgcolor: '#5F4B8B', color: '#FFF' },
+            }}
+          >
+            Most Viewed
+          </ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
 
-        {/* Loading & sentinel */}
-        {loading && (
-          <div className="py-4 text-center text-gray-500">Loading more…</div>
-        )}
-        {!loading && hasMore && (
-          <div ref={loaderRef} className="py-4 text-center text-gray-500">
-            Scroll to load more…
-          </div>
-        )}
-      </main>
-    </div>
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 2,
+          gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
+          alignItems: 'start',
+          mb: 4,
+        }}
+      >
+        {mediaItems.map(media => (
+          <Box key={media.id}>
+            <MediaCard media={media} />
+          </Box>
+        ))}
+      </Box>
+
+
+      {/* Loading / Sentinel */}
+      {loading && (
+        <Box textAlign="center" py={3}>
+          <CircularProgress sx={{ color: '#FF2E88' }} />
+        </Box>
+      )}
+      {!loading && hasMore && (
+        <Box ref={loaderRef} textAlign="center" py={2} sx={{ color: '#BFA2DB' }}>
+          Scroll to load more…
+        </Box>
+      )}
+    </Box>
   )
 }

@@ -1,11 +1,18 @@
-// frontend/src/pages/TagDetailPage.tsx
-import React, { useState, useEffect } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { Media, Person, Tag } from '../types'
+import React, { useEffect, useState } from 'react'
+import { useParams, Link as RouterLink } from 'react-router-dom'
+import {
+    Container,
+    Box,
+    Typography,
+    Grid,
+} from '@mui/material'
 import MediaCard from '../components/MediaCard'
 import PersonCard from '../components/PersonCard'
+import { Tag, Media, Person } from '../types'
 
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
+const BG_SECTION = '#1C1C1E'
+const TEXT_PRIMARY = '#FFF'
+const ACCENT = '#FF2E88'
 
 export default function TagDetailPage() {
     const { id } = useParams<{ id: string }>()
@@ -13,40 +20,58 @@ export default function TagDetailPage() {
 
     useEffect(() => {
         if (!id) return
-        fetch(`${API}/tags/${id}`)
+        fetch(`${import.meta.env.VITE_API_BASE_URL}/tags/${id}`)
             .then(res => {
-                if (!res.ok) throw new Error("Tag not found")
-                return res.json()
+                if (!res.ok) throw new Error('Tag not found')
+                return res.json() as Promise<Tag>
             })
-            .then((t: Tag) => setTag(t))
+            .then(setTag)
             .catch(console.error)
     }, [id])
 
-    if (!tag) return <div className="p-4">Loading…</div>
+    if (!tag) {
+        return (
+            <Box p={4} textAlign="center">
+                <Typography color="text.secondary">Loading…</Typography>
+            </Box>
+        )
+    }
 
     return (
-        <div className="bg-background text-text min-h-screen p-6">
-            <h1 className="text-3xl font-semibold mb-4">Tag: #{tag.name}</h1>
+        <Container maxWidth="lg" sx={{ pt: 4, pb: 6, bgcolor: BG_SECTION, minHeight: '100vh' }}>
+            <Typography variant="h4" gutterBottom sx={{ color: ACCENT }}>
+                Tag: #{tag.name}
+            </Typography>
 
-            <section className="mb-12">
-                <h2 className="text-2xl font-medium mb-2">Media</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Media Section */}
+            <Box mb={6}>
+                <Typography variant="h5" gutterBottom sx={{ color: TEXT_PRIMARY }}>
+                    Media
+                </Typography>
+                <Grid container spacing={2}>
                     {(tag.media ?? []).map((m: Media) => (
-                        <MediaCard key={m.id} media={m} />
+                        <Grid item key={m.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                            <MediaCard media={m} />
+                        </Grid>
                     ))}
-                </div>
-            </section>
+                </Grid>
+            </Box>
 
-            <section>
-                <h2 className="text-2xl font-medium mb-2">People</h2>
-                <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-4">
+            {/* People Section */}
+            <Box>
+                <Typography variant="h5" gutterBottom sx={{ color: TEXT_PRIMARY }}>
+                    People
+                </Typography>
+                <Grid container spacing={2}>
                     {(tag.persons ?? []).map((p: Person) => (
-                        <Link to={`/person/${p.id}`} key={p.id}>
-                            <PersonCard person={p} />
-                        </Link>
+                        <Grid item key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2.4 }}>
+                            <Box component={RouterLink} to={`/person/${p.id}`} sx={{ textDecoration: 'none' }}>
+                                <PersonCard person={p} />
+                            </Box>
+                        </Grid>
                     ))}
-                </div>
-            </section>
-        </div>
+                </Grid>
+            </Box>
+        </Container>
     )
 }
