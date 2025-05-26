@@ -65,7 +65,7 @@ class Face(SQLModel, table=True):
 
 class Media(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    path: str
+    path: str = Field(unique=True)
     filename: str = Field(index=True)
     size: int
     duration: float | None = None

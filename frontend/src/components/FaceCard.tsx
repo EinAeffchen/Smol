@@ -42,6 +42,7 @@ export default function FaceCard({
     onDelete: () => void
 }) {
     const [mode, setMode] = useState<'none' | 'search' | 'new'>('none')
+    const overlayOpen = mode !== 'none'
     const [query, setQuery] = useState('')
     const [creating, setCreating] = useState(false)
 
@@ -97,6 +98,8 @@ export default function FaceCard({
                 color: '#FFF',
                 position: 'relative',
                 overflow: 'visible',
+                // bring this card above its siblings when the overlay is open:
+                zIndex: overlayOpen ? (theme) => theme.zIndex.tooltip : 'auto',
                 '&:hover .hover-actions': {
                     opacity: 1,
                 },
@@ -200,8 +203,20 @@ export default function FaceCard({
                 </Box>
             </Collapse>
 
-            <Collapse in={mode === 'new'}>
-                <Box px={1} pb={1}>
+            <Collapse in={mode === 'new'} >
+                <Box
+                    sx={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        width: '100%',
+                        bgcolor: '#2C2C2E',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
+                        borderRadius: 1,
+                        p: 1,
+                        zIndex: 1,  // child only needs to be >= 0 now
+                    }}
+                >
                     {['name', 'age', 'gender'].map(field => (
                         <TextField
                             key={field}
@@ -220,7 +235,7 @@ export default function FaceCard({
                         onClick={createAssign}
                         variant="contained"
                         disabled={creating}
-                        sx={{ bgcolor: '#FF2E88', position: 'relative' }}
+                        sx={{ bgcolor: '#FF2E88', mt: 1 }}
                     >
                         {creating ? (
                             <CircularProgress size={18} sx={{ color: 'white' }} />
@@ -232,6 +247,6 @@ export default function FaceCard({
 
                 </Box>
             </Collapse>
-        </Card>
+        </Card >
     )
 }

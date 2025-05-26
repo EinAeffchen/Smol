@@ -11,7 +11,6 @@ from app.database import init_db, init_vec_index
 from app.api.processors import router as proc_router
 from app.processor_registry import load_processors
 from fastapi.middleware.cors import CORSMiddleware
-from app.write_queue import write_queue
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -27,7 +26,6 @@ async def lifespan(app: FastAPI):
     init_db()
     init_vec_index()
     load_processors()
-    write_queue.start()
     yield
 
 
@@ -55,7 +53,7 @@ app.mount(
 )
 app.mount(
     "/originals",
-    StaticFiles(directory=str(MEDIA_DIR), html=True),
+    StaticFiles(directory=str(MEDIA_DIR)),
     name="originals",
 )
 app.mount(

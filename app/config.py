@@ -54,10 +54,8 @@ tokenizer = open_clip.get_tokenizer("xlm-roberta-large-ViT-H-14")
 # face recognition settings
 MAX_FRAMES_PER_VIDEO = 30
 FACE_RECOGNITION_MIN_CONFIDENCE = 0.75
-FACE_MATCH_COSINE_THRESHOLD = 0.6
+FACE_MATCH_COSINE_THRESHOLD = 0.85
 FACE_RECOGNITION_MIN_FACE_PIXELS = 60 * 60
 PERSON_MIN_FACE_COUNT = (
     2  # how many matching faces must a person have for auto creation
 )
-
-

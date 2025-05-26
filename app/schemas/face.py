@@ -11,6 +11,8 @@ class FaceRead(BaseModel):
 
 class FaceAssign(BaseModel):
     person_id: int
+class FaceAssignReturn(BaseModel):
+    face_id: int
 
 
 class CursorPage(BaseModel):

@@ -1,10 +1,10 @@
 import json
+import os
 from datetime import datetime, timedelta
 from typing import Annotated, Any
-from fastapi import Request
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
-from pydantic import BaseModel
 from sqlalchemy import and_, delete, or_, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
@@ -63,7 +63,7 @@ def list_media(
     person_id: int | None = Query(
         None, description="Filter by detected person ID"
     ),
-    sort: Annotated[str, Query(enum=["newest", "popular"])] = "newest",
+    sort: Annotated[str, Query(enum=["newest", "latest"])] = "newest",
     cursor: str | None = Query(
         None,
         description="encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
@@ -80,10 +80,10 @@ def list_media(
         sort_col = Media.created_at
         # Type of the value in the cursor for 'newest'
         parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
-    elif sort == "popular":
-        sort_col = Media.views
-        # Type of the value in the cursor for 'popular'
-        parse_val_from_cursor = lambda val_str: int(val_str)
+    elif sort == "latest":
+        sort_col = Media.inserted_at
+        # Type of the value in the cursor for 'latest'
+        parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
     else:
         # Handle invalid sort parameter, perhaps default or raise error
         raise ValueError(f"Unsupported sort option: {sort}")
@@ -108,16 +108,15 @@ def list_media(
                     ),
                 )
             )
-
+    logger.warning(q)
     if person_id:
         q = q.join(Media.faces).where(Face.person_id == person_id)
 
     results = session.exec(q.limit(limit)).all()
     if len(results) == limit:
         last = results[-1]
-        v = getattr(last, "created_at" if sort == "newest" else "views")
-        # isoformat for dates, simple int for views
-        val_token = v.isoformat() if sort == "newest" else str(v)
+        v = getattr(last, "created_at" if sort == "newest" else "inserted_at")
+        val_token = v.isoformat()
         next_cursor = f"{val_token}_{last.id}"
     else:
         next_cursor = None
@@ -209,12 +208,6 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
     if not media:
         raise HTTPException(404, "Media not found")
 
-        # bump the view count
-    media.views += 1
-    session.add(media)
-    session.commit()
-    session.refresh(media)
-
     seen = set()
     persons: list[PersonRead] = []
     orphans: list[Face] = []
@@ -238,6 +231,7 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
 def scenes_vtt(
     media_id: int, request: Request, session: Session = Depends(get_session)
 ):
+    API_URL = os.environ.get("API_PUBLIC_URL", "http://localhost:8000")
     scenes = session.exec(
         select(Scene)
         .where(Scene.media_id == media_id)
@@ -256,7 +250,7 @@ def scenes_vtt(
         # pick a tiny epsilon if end_time is missing
         end_time = s.end_time or (s.start_time + 0.1)
         end = format_timestamp(end_time)
-        lines += [f"{start} --> {end}", f"/thumbnails/{s.thumbnail_path}", ""]
+        lines += [f"{start} --> {end}", f"{API_URL}/thumbnails/{s.thumbnail_path}", ""]
 
     return PlainTextResponse("\n".join(lines), media_type="text/vtt")
 

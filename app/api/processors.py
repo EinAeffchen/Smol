@@ -55,11 +55,11 @@ def start_conversion(
     session.add(task)
     session.commit()
     session.refresh(task)
-    background_tasks.add_task(_run_conversion, task.id, str(media.path))
+    background_tasks.add_task(_run_conversion, task.id, str(media.path), media.id)
     return task
 
 
-def _run_conversion(task_id: str, media_path: str):
+def _run_conversion(task_id: str, media_path: str, media_id:int):
     with Session(engine) as session:
         task: ProcessingTask = session.get(ProcessingTask, task_id)
         # mark running
@@ -125,7 +125,11 @@ def _run_conversion(task_id: str, media_path: str):
         task.processed = 100
         task.status = "finished"
         task.finished_at = datetime.now(timezone.utc)
+        media = session.get(Media, media_id)
         new_file = full_path.with_stem(original_stem).with_suffix(".mp4")
+        media.path = new_file
+        media.filename = new_file.name
+        session.add(media)
         if new_file.exists():
             full_path.unlink()
         session.add(task)

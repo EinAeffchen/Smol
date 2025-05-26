@@ -5,14 +5,12 @@ from sqlmodel import Session, delete, select, text
 from app.config import THUMB_DIR
 from app.database import get_session, safe_commit, safe_execute
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
-from app.schemas.face import FaceAssign, FaceRead, CursorPage
-from app.schemas.person import PersonRead
+from app.schemas.face import FaceAssign, CursorPage, FaceAssignReturn
+from app.schemas.person import PersonMinimal
 from app.logger import logger
-from app.database import engine
-from app.utils import get_person_embedding
-from app.write_queue import write_queue
+from app.utils import update_person_embedding
 import json
-import time
+from fastapi import Response
 
 router = APIRouter()
 
@@ -20,19 +18,20 @@ router = APIRouter()
 @router.post(
     "/{face_id}/assign",
     summary="Assign an existing face to a person",
-    response_model=Face,
+    response_model=FaceAssignReturn,
 )
 async def assign_face(
     face_id: int,
     body: FaceAssign = Body(...),
     session: Session = Depends(get_session),
 ):
+    person_id = body.person_id
+    logger.warning("Assigning face %s to %s", face_id, person_id)
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
-    if face.person_id == body.person_id:
-        return face
-    person = session.get(Person, body.person_id)
+
+    person = session.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
@@ -41,22 +40,14 @@ async def assign_face(
         old_person_id = old_person.id
     else:
         old_person_id = None
+
     face.person = person
-
     session.add(face)
-    face_id = face.id
-    person_id = person.id
-
-    session.refresh(face)
-    safe_commit(session)
-
     if old_person_id and old_person_id != body.person_id:
         old_person_can_be_deleted(session, old_person_id)
     update_face_embedding(session, face_id, person_id)
     safe_commit(session)
-    session.expunge(face)
-    session.close()
-    return face
+    return FaceAssignReturn(face_id=face_id)
 
 
 def update_face_embedding(
@@ -78,15 +69,9 @@ def update_face_embedding(
             """DELETE FROM face_embeddings
                    WHERE face_id=:f_id"""
         ).bindparams(f_id=face_id)
+    safe_execute(session, sql)
     if person_id:
-        safe_execute(session, sql)
-        person_embedding = get_person_embedding(session, person_id)
-        sql = text(
-            """
-            INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
-            VALUES(:p_id, :emb)"""
-        ).bindparams(p_id=person_id, emb=json.dumps(person_embedding.tolist()))
-        safe_execute(session, sql)
+        update_person_embedding(session, person_id)
 
 
 @router.delete(
@@ -103,16 +88,19 @@ def delete_face(face_id: int, session: Session = Depends(get_session)):
     thumb = THUMB_DIR / face.thumbnail_path
     if thumb.exists():
         thumb.unlink()
+
     face_id = face.id
     if face.person:
         person_id = face.person.id
     else:
         person_id = None
     session.delete(face)
-    if not old_person_can_be_deleted(session, person_id):
-        update_face_embedding(session, face_id, person_id, delete_face=True)
+
+    update_face_embedding(session, face_id, person_id, delete_face=True)
+    if person_id:
+        old_person_can_be_deleted(session, person_id)
     safe_commit(session)
-    session.close()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 class FaceCreatePerson(BaseModel):
@@ -150,7 +138,7 @@ def get_orphans(
 @router.post(
     "/{face_id}/create_person",
     summary="Create a new person from this face and assign",
-    response_model=PersonRead,
+    response_model=PersonMinimal,
     status_code=status.HTTP_201_CREATED,
 )
 async def create_person_from_face(
@@ -172,7 +160,7 @@ async def create_person_from_face(
     )
     session.add(person)
     session.flush()
-
+    return_obj = PersonMinimal(id=person.id)
     person_id = person.id
     face.person_id = person_id
     session.add(face)
@@ -186,7 +174,7 @@ async def create_person_from_face(
         old_person_can_be_deleted(session, previous_person_id)
     update_face_embedding(session, face_id, person_id)
     session.close()
-    return person
+    return return_obj
 
 
 def old_person_can_be_deleted(session: Session, person_id: int | None):

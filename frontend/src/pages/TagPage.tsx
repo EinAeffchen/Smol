@@ -1,5 +1,5 @@
 // src/pages/TagsPage.tsx
-import React, { useCallback } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import { Container, Typography, Grid, Box, CircularProgress } from '@mui/material'
 import TagCard from '../components/TagCard'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
@@ -14,18 +14,36 @@ export default function TagsPage() {
       fetch(
         `${API}/tags/${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
       ).then(res => {
-        if (!res.ok) throw new Error(res.statusText)
-        return res.json() as Promise<CursorResponse<Tag>>
+        if (!res.ok) throw new Error(`Failed to fetch tags: ${res.statusText}`);
+        return res.json() as Promise<CursorResponse<Tag>>;
       }),
     [API]
-  )
+  );
 
   const {
     items: tags,
+    setItems: setTags,
     hasMore,
     loading,
     loaderRef,
   } = useInfinite<Tag>(fetchTags, ITEMS_PER_PAGE, [])
+
+  const [tagsToDisplay, setTagsToDisplay] = useState<Tag[]>([]);
+
+  useEffect(() => {
+    setTagsToDisplay(tags);
+  }, [tags]);
+
+
+  const handleTagDeleted = useCallback((deletedTagId: number) => {
+    console.log('[TagsPage] handleTagDeleted triggered for tag ID:', deletedTagId);
+    setTags(currentTags => {
+      const tagsBeforeFilter = currentTags.length;
+      const newTags = currentTags.filter(tag => tag.id !== deletedTagId);
+      console.log(`[TagsPage] Tags before filter: ${tagsBeforeFilter}, After filter: ${newTags.length}`);
+      return newTags;
+    });
+  }, [setTags]);
 
   return (
     <Container maxWidth="lg" sx={{ pt: 4, pb: 6 }}>
@@ -36,7 +54,7 @@ export default function TagsPage() {
       <Grid container spacing={4}>
         {tags.map(tag => (
           <Grid key={tag.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>  {/* 1,2,3,4 per row */}
-            <TagCard tag={tag} />
+            <TagCard tag={tag} onTagDeleted={handleTagDeleted} />
           </Grid>
         ))}
       </Grid>

@@ -1,7 +1,7 @@
 # app/processors/exif.py
 from pathlib import Path
 from datetime import datetime
-from PIL import ExifTags
+from PIL import ExifTags, ImageFile
 from sqlmodel import select
 from app.processors.base import MediaProcessor
 from app.models import Media, ExifData, Scene
@@ -11,6 +11,7 @@ from PIL.MpoImagePlugin import MpoImageFile
 from app.database import safe_commit
 from sqlalchemy.orm import Session
 import ffmpeg
+
 from dateutil import parser
 from app.logger import logger
 import traceback
@@ -149,7 +150,7 @@ class ExifProcessor(MediaProcessor):
         self,
         media: Media,
         session,
-        scenes: list[tuple[Scene, MatLike] | MpoImageFile | Scene],
+        scenes: list[tuple[Scene, MatLike]] | list[ImageFile] | list[Scene],
     ):
         # 1) skip if already extracted
         if session.exec(
@@ -159,11 +160,12 @@ class ExifProcessor(MediaProcessor):
 
         # 2) only on JPEG/TIFF
         fn = Path(media.filename)
-        print(scenes)
-        if fn.suffix in ((".jpg", ".jpeg", ".tiff")):
+        suffix = fn.suffix.lower()
+        if suffix in (".jpg", ".jpeg", ".tiff"):
             self._process_image(scenes[0], session, media)
-        elif fn.suffix in VIDEO_SUFFIXES:
+        elif suffix in VIDEO_SUFFIXES:
             self._process_video(media, session)
+        return True
 
     def load_model(self):
         """Doesn't need a model"""

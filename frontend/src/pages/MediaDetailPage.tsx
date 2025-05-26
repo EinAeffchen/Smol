@@ -12,6 +12,7 @@ import {
     DialogTitle,
     DialogActions,
     Snackbar,
+    LinearProgress,
     Alert,
 } from '@mui/material'
 import { VideoWithPreview } from '../components/VideoPlayer'
@@ -38,7 +39,6 @@ export default function MediaDetailPage() {
     const [dialogType, setDialogType] = useState<'convert' | 'deleteRecord' | 'deleteFile' | null>(null)
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
     const [showExif, setShowExif] = useState(false)
-
     const { assignFace, createPersonFromFace, deleteFace, setProfileFace } = useFaceActions()
 
     // Load media detail
@@ -54,8 +54,29 @@ export default function MediaDetailPage() {
         }
     }, [id])
     useEffect(() => {
+        setDetail(null)
         loadDetail()
     }, [id])
+    useEffect(() => {
+        if (!task || task.status === "finished") return
+
+        const interval = setInterval(async () => {
+            try {
+                const res = await fetch(`${API}/tasks/${task.id}`)
+                if (!res.ok) throw new Error()
+                const updated = await res.json()
+                setTask(updated)
+                if (updated.status === "finished") {
+                    clearInterval(interval)
+                    loadDetail()  // refresh media to reflect new file
+                }
+            } catch {
+                console.warn("Failed to update task progress")
+            }
+        }, 1500)
+
+        return () => clearInterval(interval)
+    }, [task])
 
     if (!detail) return <Typography p={2}>Loading…</Typography>
 
@@ -69,7 +90,7 @@ export default function MediaDetailPage() {
     const confirmConvert = async () => {
         if (!media) return
         try {
-            const res = await fetch(`${API}/media/${media.id}/converter`, { method: 'POST' })
+            const res = await fetch(`${API}/api/media/${media.id}/converter`, { method: 'POST' })
             if (!res.ok) throw new Error()
             const t: Task = await res.json()
             setTask(t)
@@ -119,6 +140,20 @@ export default function MediaDetailPage() {
             },
         })
     }
+
+    const handleTagUpdateFromChild = (updatedMediaObject: Media) => {
+        setDetail(prevDetailState => {
+            if (!prevDetailState) {
+                // This should ideally not happen if UI elements using this are only rendered when detail exists
+                console.error("Cannot update media: previous detail state is null.");
+                return null;
+            }
+            return {
+                ...prevDetailState, // Preserve other parts of MediaDetail (persons, orphans, etc.)
+                media: updatedMediaObject, // Update only the media property
+            };
+        });
+    };
 
     // Face assignment handlers
     const onAssign = async (faceId: number, personId: number) => {
@@ -174,21 +209,21 @@ export default function MediaDetailPage() {
             <Dialog open={dialogType === 'convert'} onClose={closeDialog}>
                 <DialogTitle>Convert Video Format?</DialogTitle>
                 <DialogActions>
-                    <Button onClick={closeDialog}>Cancel</Button>
+                    <Button onClick={closeDialog} sx={{ color: "white" }}>Cancel</Button>
                     <Button variant="contained" onClick={confirmConvert}>Confirm</Button>
                 </DialogActions>
             </Dialog>
             <Dialog open={dialogType === 'deleteRecord'} onClose={closeDialog}>
                 <DialogTitle>Delete Database Record?</DialogTitle>
                 <DialogActions>
-                    <Button onClick={closeDialog}>Cancel</Button>
+                    <Button onClick={closeDialog} sx={{ color: "white" }}>Cancel</Button>
                     <Button variant="contained" color={ERROR} onClick={confirmDeleteRecord}>Delete</Button>
                 </DialogActions>
             </Dialog>
             <Dialog open={dialogType === 'deleteFile'} onClose={closeDialog}>
                 <DialogTitle>Delete File from Disk?</DialogTitle>
                 <DialogActions>
-                    <Button onClick={closeDialog}>Cancel</Button>
+                    <Button onClick={closeDialog} sx={{ color: "white" }}>Cancel</Button>
                     <Button variant="contained" color={ERROR} onClick={confirmDeleteFile}>Delete</Button>
                 </DialogActions>
             </Dialog>
@@ -199,12 +234,24 @@ export default function MediaDetailPage() {
                     {snackbar.message}
                 </Alert>
             </Snackbar>
+            {task && task.status === "running" && (
+                <Box mb={2}>
+                    <Typography variant="body2" gutterBottom>
+                        Converting… {task.processed}%
+                    </Typography>
+                    <LinearProgress
+                        variant="determinate"
+                        value={task.processed}
+                        sx={{ height: 8, borderRadius: 1, bgcolor: 'grey.800' }}
+                    />
+                </Box>
+            )}
 
             {/* Centered Media */}
             <Box display="flex" justifyContent="center" mb={4}>
                 <Paper elevation={4} sx={{ width: '100%', maxWidth: 800, maxHeight: 500, overflow: 'hidden', borderRadius: 2, bgcolor: 'background.paper' }}>
                     {media.duration ? (
-                        <VideoWithPreview media={media} />
+                        <VideoWithPreview key={media.id} media={media} />
                     ) : (
                         <Box component="img" src={`${API}/originals/${media.path}`} alt={media.filename} sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     )}
@@ -242,7 +289,7 @@ export default function MediaDetailPage() {
             </Box>
             {/* Tags */}
             {(media.tags.length > 0 &&
-                <Tags media={media} onUpdate={setDetail} />
+                <Tags media={media} onUpdate={handleTagUpdateFromChild} />
             )
             }
             {/* Similar Content */}

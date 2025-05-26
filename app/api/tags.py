@@ -113,6 +113,13 @@ def remove_tag_from_media(
     safe_commit(session)
 
 
+@router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_tag(tag_id: int, session: Session = Depends(get_session)):
+    session.exec(delete(MediaTagLink).where(MediaTagLink.tag_id == tag_id))
+    session.exec(delete(Tag).where(Tag.id == tag_id))
+    safe_commit(session)
+
+
 # Assign / remove on Person
 @router.post(
     "/persons/{person_id}/{tag_id}", status_code=status.HTTP_204_NO_CONTENT

@@ -185,7 +185,6 @@ export default function PersonDetailPage() {
     const handleDelete = async (faceId: number) => {
         await deleteFace(faceId)
         await loadDetail()
-        await loadSuggestedFaces()
     }
 
     async function doMerge(targetId: number) {

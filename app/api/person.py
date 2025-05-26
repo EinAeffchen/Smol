@@ -26,6 +26,7 @@ from app.schemas.person import (
 )
 from app.utils import (
     get_person_embedding,
+    update_person_embedding,
     refresh_similarities_for_person,
 )
 
@@ -95,12 +96,14 @@ def suggest_faces(
               FROM face_embeddings
              WHERE embedding MATCH :vec
                     and person_id = -1
+                    and distance < 1.5
              ORDER BY distance
             LIMIT :k
             """
     ).bindparams(vec=json.dumps(target.tolist()), k=limit)
     rows = session.exec(sql).all()
     face_ids = [r[0] for r in rows]
+    logger.warning(rows)
 
     faces = session.exec(select(Face).where(Face.id.in_(face_ids))).all()
     id_map = {f.id: f for f in faces}
@@ -127,7 +130,6 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         session.add(person)
         session.commit()
         session.refresh(person)
-    person.views += 1
     q = (
         select(Face)
         .where(Face.person_id == person.id)
@@ -251,15 +253,7 @@ def merge_persons(
     # Delete the now-empty source person
     session.delete(source)
     safe_commit(session)
-    target_emb = get_person_embedding(session, tid)
-    sql = text(
-        """
-        UPDATE person_embeddings
-        set embedding=:emb
-        WHERE person_id=:p_id
-        """
-    ).bindparams(p_id=tid, emb=json.dumps(target_emb.tolist()))
-    session.exec(sql)
+    update_person_embedding(session, tid)
     sql = text(
         """
         DELETE FROM person_embeddings
@@ -325,16 +319,7 @@ def get_similarities(
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(404, "Person not found")
-    target_row = session.exec(
-        text(
-            "SELECT embedding FROM person_embeddings "
-            "WHERE person_id = :p_id LIMIT 1"
-        ).bindparams(p_id=person_id)
-    ).first()
-    if not target_row:
-        return []
-
-    vec_json = target_row[0]
+    vec = get_person_embedding(session, person_id)
 
     # 3) one GROUP-BY query:
     sql = text(
@@ -359,7 +344,9 @@ def get_similarities(
         MIN(pe.distance)                      -- closest first
     """
     ).bindparams(
-        p_id=person_id, vec=vec_json, k=20  # your desired neighbours
+        p_id=person_id,
+        vec=json.dumps(vec.tolist()),
+        k=20,  # your desired neighbours
     )
 
     rows = session.exec(sql).all()

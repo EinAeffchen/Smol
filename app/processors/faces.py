@@ -8,8 +8,7 @@ from PIL import Image
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text
 import json
-from PIL import ImageOps
-
+from app.api.media import delete_media_record
 from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, THUMB_DIR
 from app.database import safe_commit
 from app.models import ExifData, Face, Media, Scene
@@ -87,9 +86,8 @@ class FaceProcessor(MediaProcessor):
         self,
         media: Media,
         session,
-        scenes: list[tuple[Scene, MatLike] | ImageFile | Scene],
+        scenes: list[tuple[Scene, MatLike]] | list[ImageFile] | list[Scene],
     ):
-        logger.debug("SCENES: %s", scenes)
         # 1) skip if already extracted
         if session.exec(
             select(Media).where(
@@ -101,16 +99,18 @@ class FaceProcessor(MediaProcessor):
             logger.debug("ALREADY FACES")
             return
         for scene in tqdm(scenes):
-            if isinstance(scene, tuple):
-                scene = scene[1]
-            elif isinstance(scene, Scene):
-                scene = Image.open(THUMB_DIR / scene.thumbnail_path)
-                scene = np.array(scene.convert("RGB"))
-            else:
-                scene = np.array(scene.convert("RGB"))
-
-            if isinstance(scene, ImageFile):
-                scene = ImageOps.exif_transpose(scene)
+            try:
+                if isinstance(scene, tuple):
+                    scene = scene[1]
+                elif isinstance(scene, Scene):
+                    scene = Image.open(THUMB_DIR / scene.thumbnail_path)
+                    scene = np.array(scene.convert("RGB"))
+                else:
+                    scene = np.array(scene.convert("RGB"))
+            except OSError:
+                logger.warning("FAILED ON %s", media.path)
+                delete_media_record(media.id, session)
+                return False
 
             faces = self.model.get(scene)
             face_objs = self._parse_faces(faces, scene, media)
@@ -129,6 +129,7 @@ class FaceProcessor(MediaProcessor):
         media.faces_extracted = True
         media.embeddings_created = True
         safe_commit(session)
+        return True
 
     def load_model(self):
         self.model = FaceAnalysis(

@@ -32,13 +32,20 @@ export function useInfinite<T>(
       setLoading(false);
     });
   }, [cursor, fetchPage, hasMore, limit, loading]);
-
+  //TODO continue fixing cursor on sort change here
   // on mount or when resetDeps change, clear state and load first page
   useEffect(() => {
+    console.log("Triggered reset deps!");
     setItems([]);
     setCursor(null);
     setHasMore(true);
-    loadMore();
+    setLoading(true);
+    fetchPage(null, limit).then(({ items: firstItems, next_cursor }) => {
+      setItems(firstItems);
+      setCursor(next_cursor);
+      setHasMore(next_cursor !== null);
+      setLoading(false);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, resetDeps);
 

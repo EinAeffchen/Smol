@@ -12,6 +12,8 @@ from scenedetect import AdaptiveDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlmodel import Session, select
 from tqdm import tqdm
+from sqlalchemy import text
+import json
 
 
 from app.config import (
@@ -22,25 +24,25 @@ from app.config import (
 )
 from app.database import engine, safe_commit
 from app.logger import logger
-from app.models import Face, Media, Person, PersonSimilarity, Scene
+from app.models import (
+    Face,
+    Media,
+    Person,
+    PersonSimilarity,
+    Scene,
+    ProcessingTask,
+)
 
 
-def process_file(filepath: Path):
-    path = filepath.relative_to(MEDIA_DIR)
+def process_file(filepath: Path) -> Media:
     with Session(engine) as session:
-        exists = session.exec(
-            select(Media).where(Media.path == str(path))
-        ).first()
-        if exists:
-            return
         try:
             probe = ffmpeg.probe(filepath)
         except Exception as e:
-            logger.error(filepath)
-            logger.error(e)
-            raise
+            logger.error("Can't process %s", filepath)
+            return
         size = os.path.getsize(filepath)
-        if filepath.suffix in VIDEO_SUFFIXES:
+        if filepath.suffix.lower() in VIDEO_SUFFIXES:
             duration = float(probe["format"].get("duration", 0))
         else:
             duration = None
@@ -52,7 +54,7 @@ def process_file(filepath: Path):
         height = int(vs[0]["height"]) if vs else None
 
         media = Media(
-            path=str(path),
+            path=str(filepath.relative_to(MEDIA_DIR)),
             filename=filepath.name,
             size=size,
             duration=duration,
@@ -61,26 +63,33 @@ def process_file(filepath: Path):
             faces_extracted=False,
             embeddings_created=False,
             created_at=creation_date,
+            embedding=None,
         )
-        session.add(media)
-        safe_commit(session)
-        session.refresh(media)
+        return media
 
-    # generate thumbnails
+
+def generate_thumbnails(media: Media):
     thumb_path = THUMB_DIR / f"{media.id}.jpg"
-    if path.suffix in VIDEO_SUFFIXES:
+    filepath = Path(media.path)
+    full_path = MEDIA_DIR / filepath
+    if filepath.suffix.lower() in VIDEO_SUFFIXES:
         (
-            ffmpeg.input(str(filepath), ss=1)
+            ffmpeg.input(str(full_path), ss=1)
             .filter("scale", 480, -1)
             .output(str(thumb_path), vframes=1)
             .run(quiet=True, overwrite_output=True)
         )
     else:
         try:
-            img = Image.open(filepath)
+            img = Image.open(full_path)
             img = ImageOps.exif_transpose(img)
         except UnidentifiedImageError:
             logger.warning("Couldn't open %s", filepath)
+            return False
+        except OSError as e:
+            logger.warning(
+                "Failed to process image %s, because of: %s", filepath, e
+            )
             return False
         img.thumbnail((480, -1))
         try:
@@ -88,22 +97,46 @@ def process_file(filepath: Path):
         except OSError:
             img = img.convert("RGB")
             img.save(thumb_path, format="JPEG")
-            
+
+        assert thumb_path.is_file()
+    return True
 
 
 def get_person_embedding(
-    session: Session, person_id: int
-) -> np.ndarray | None:
-    embeddings = session.exec(
-        select(Face.embedding).where(
-            Face.person_id == person_id, Face.embedding != None
-        )
-    ).all()
-    if not embeddings:
-        return None
-    arr = np.stack([np.array(e, dtype=np.float32) for e in embeddings])
-    avg = arr.mean(axis=0)
-    return avg / np.linalg.norm(avg)
+    session: Session, person_id: int, face_embeddings: list | None = None
+) -> np.ndarray:
+    if not face_embeddings:
+        face_embeddings = session.exec(
+            select(Face.embedding).where(
+                Face.person_id == person_id, Face.embedding != None
+            )
+        ).all()
+
+    if not face_embeddings:
+        logger.warning(f"No embeddings found for person {person_id}")
+        return
+
+    embeddings_array = np.stack(
+        [np.array(e, dtype=np.float32) for e in face_embeddings]
+    )
+    centroid = embeddings_array.mean(axis=0)
+    centroid /= np.linalg.norm(centroid)
+    return centroid
+
+
+def update_person_embedding(session: Session, person_id: int):
+    # Retrieve all embeddings associated with this person
+    centroid = get_person_embedding(session, person_id)
+
+    # Update the embedding in your embeddings table
+    sql = text(
+        """
+        INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
+        VALUES (:p_id, :emb)
+    """
+    ).bindparams(p_id=person_id, emb=json.dumps(centroid.tolist()))
+    session.exec(sql)
+    safe_commit(session)
 
 
 def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
@@ -117,6 +150,7 @@ def _split_by_scenes(
     media: Media, scenes: Iterable[TimecodePair]
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
+    logger.warning("Splitting by scenes")
     for i, (start_time, end_time) in tqdm(
         enumerate(scenes), total=len(scenes)
     ):
@@ -152,6 +186,7 @@ def _split_by_scenes(
 
 
 def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
+    logger.warning("Splitting by frames")
     scene_objs = []
     video_path = MEDIA_DIR / media.path
     cap = cv2.VideoCapture(str(video_path))
@@ -159,7 +194,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
     duration = total / fps
-    min_frame_step = int(fps * 30)  # Max one screenshot every 30 seconds
+    min_frame_step = int(fps * 10)  # Max one screenshot every 20 seconds
 
     step = max(total // (MAX_FRAMES_PER_VIDEO), min_frame_step)
     frame_indices = list(range(0, total, step))
@@ -236,7 +271,15 @@ def update_exif_gps(path: str, lon: float, lat: float):
     exif_dict["GPS"].update(gps_ifd)
     exif_bytes = piexif.dump(exif_dict)
     img = Image.open(str(image_path))
+    img = ImageOps.exif_transpose(img)
     img.save(str(image_path), exif=exif_bytes)
+
+
+def complete_task(session: Session, task: ProcessingTask):
+    task.status = "completed"
+    task.finished_at = datetime.now(timezone.utc)
+    session.add(task)
+    safe_commit(session)
 
 
 def split_video(
@@ -251,7 +294,7 @@ def split_video(
         show_progress=True,
     )
     logger.error("Detecting scenes...")
-    if len(scenes) > 10:
+    if len(scenes) >= 10:
         return _split_by_scenes(media, scenes)
     else:
         return _split_by_frames(media)

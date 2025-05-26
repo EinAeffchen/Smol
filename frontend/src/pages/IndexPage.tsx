@@ -5,11 +5,8 @@ import { MediaIndex, PersonIndex } from '../types'
 import MediaCard from '../components/MediaCard'
 import {
   Box,
-  Typography,
   ToggleButton,
   ToggleButtonGroup,
-  ImageList,
-  ImageListItem,
   CircularProgress,
 } from '@mui/material'
 
@@ -19,7 +16,7 @@ const ITEMS_PER_PAGE = 20
 export default function IndexPage() {
   const [tags, setTags] = useState<string[]>([])
   const [people, setPeople] = useState<PersonIndex[]>([])
-  const [sortOrder, setSortOrder] = useState<'newest' | 'popular'>('newest')
+  const [sortOrder, setSortOrder] = useState<'newest' | 'latest'>('newest')
 
   const fetchPage = useCallback(
     (cursor: string | null, limit: number) => {
@@ -34,16 +31,17 @@ export default function IndexPage() {
         return res.json() as Promise<CursorResponse<MediaIndex>>
       })
     },
-    [sortOrder, tags]
+    [API, sortOrder, tags]
   )
 
   const {
     items: mediaItems,
-    setItems: setMediaItems,
     hasMore,
     loading,
     loaderRef,
-  } = useInfinite<MediaIndex>(fetchPage, ITEMS_PER_PAGE, [tags, sortOrder])
+  } = useInfinite<MediaIndex>(fetchPage, ITEMS_PER_PAGE, [sortOrder, tags])
+
+
 
   useEffect(() => {
     fetch(`${API}/persons/`)
@@ -73,17 +71,17 @@ export default function IndexPage() {
               '&.Mui-selected': { bgcolor: '#5F4B8B', color: '#FFF' },
             }}
           >
-            Newest
+            Created At
           </ToggleButton>
           <ToggleButton
-            value="popular"
+            value="latest"
             sx={{
-              color: sortOrder === 'popular' ? '#FF2E88' : '#BFA2DB',
+              color: sortOrder === 'latest' ? '#FF2E88' : '#BFA2DB',
               borderColor: '#5F4B8B',
               '&.Mui-selected': { bgcolor: '#5F4B8B', color: '#FFF' },
             }}
           >
-            Most Viewed
+            Inserted At
           </ToggleButton>
         </ToggleButtonGroup>
       </Box>

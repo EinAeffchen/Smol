@@ -16,6 +16,11 @@ class PersonUpdate(BaseModel):
     profile_face_id: int | None = None
 
 
+class PersonMinimal(SQLModel):
+    id: int
+    name: str | None = None
+
+
 class PersonRead(SQLModel):
     id: int
     name: str | None
@@ -36,7 +41,7 @@ class SimilarPerson(SQLModel):
     name: str | None
     similarity: float
 
+
 class CursorPage(BaseModel):
     items: list[PersonRead]
     next_cursor: str | None
-

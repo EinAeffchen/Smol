@@ -14,6 +14,8 @@ from app.config import preprocess, model
 from sqlalchemy import text
 import json
 from tqdm import tqdm
+from app.api.media import delete_media_record
+from app.utils import safe_commit
 
 
 class SceneTagger(MediaProcessor):
@@ -27,8 +29,14 @@ class SceneTagger(MediaProcessor):
 
     def _get_embedding(self, media: ImageFile | cv2.typing.MatLike):
         if not isinstance(media, ImageFile):
-            media = Image.fromarray(media).convert("RGB")
-        img_tensor = preprocess(media).unsqueeze(0)
+            media_obj = Image.fromarray(media).convert("RGB")
+        else:
+            media_obj = media
+        try:
+            img_tensor = preprocess(media_obj).unsqueeze(0)
+        except OSError as e:
+            logger.warning("Failed processing because %s", e)
+            return False
         with torch.no_grad():
             img_features = model.encode_image(img_tensor)
         img_features /= img_features.norm(dim=-1, keepdim=True)
@@ -38,7 +46,7 @@ class SceneTagger(MediaProcessor):
         self,
         media: Media,
         session,
-        scenes: list[tuple[Scene, MatLike] | ImageFile | Scene],
+        scenes: list[tuple[Scene, MatLike]] | list[ImageFile] | list[Scene],
     ):
         # 1) skip if already extracted
         if session.exec(
@@ -51,7 +59,13 @@ class SceneTagger(MediaProcessor):
         embeddings = list()
         for scene in tqdm(scenes):
             if isinstance(scene, ImageFile):
-                embeddings.append(self._get_embedding(scene))
+                embedding = self._get_embedding(scene)
+                if not embedding:
+                    logger.debug("FAILED ON %s", media.path)
+                    delete_media_record(media.id, session)
+                    safe_commit(session)
+                    return False
+                embeddings.append(embedding)
             elif isinstance(scene, tuple):
                 embedding = self._get_embedding(scene[1])
                 embeddings.append(embedding)
@@ -80,7 +94,8 @@ class SceneTagger(MediaProcessor):
                         """
         ).bindparams(id=media.id, emb=json.dumps(media.embedding))
         session.exec(sql)
-        session.commit()
+        safe_commit(session)
+        return True
 
     def get_results(self, media_id: int, session):
         return session.exec(

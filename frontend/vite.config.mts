@@ -18,11 +18,7 @@ export default defineConfig({
     include: ["prop‐types"], // <-- add this
   },
   build: {
-    sourcemap: true,
-    minify: false,
-    commonjsOptions: {
-      include: [/node_modules/],
-    },
+    minify: true,
   },
   define: {
     // force React library to think it's in development mode:

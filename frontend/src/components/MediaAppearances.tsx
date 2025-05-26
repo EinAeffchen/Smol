@@ -17,7 +17,7 @@ export function MediaAppearances({ medias }: { medias: MediaPreview[] }) {
     })
 
     const columnCount = Math.max(1, Math.floor(width / CARD_WIDTH))
-    const columnWidth = Math.floor(width / columnCount)-3
+    const columnWidth = Math.floor(width / columnCount)-4
     const rowCount = Math.ceil(medias.length / columnCount)
 
     return (
