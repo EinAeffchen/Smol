@@ -11,6 +11,8 @@ import {
 } from '@mui/material'
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
+
+console.log(API);
 const ITEMS_PER_PAGE = 20
 
 export default function IndexPage() {

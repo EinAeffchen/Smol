@@ -231,7 +231,7 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
 def scenes_vtt(
     media_id: int, request: Request, session: Session = Depends(get_session)
 ):
-    API_URL = os.environ.get("API_PUBLIC_URL", "http://localhost:8000")
+    API_URL = os.environ.get("API_PUBLIC_URL", f"http://localhost:{os.environ.get('PORT')}")
     scenes = session.exec(
         select(Scene)
         .where(Scene.media_id == media_id)

@@ -1,6 +1,19 @@
 SHELL := /usr/bin/bash
 .SHELLFLAGS := -ec
 
+ENV_FILE ?= .env
+
+ifneq ($(strip $(wildcard $(ENV_FILE))),)
+    include $(ENV_FILE)
+
+    _ENV_VARS_TO_EXPORT := $(shell grep -vE '^\s*#|^\s*$$' $(ENV_FILE) | cut -d= -f1)
+    ifneq ($(_ENV_VARS_TO_EXPORT),)
+        export $(_ENV_VARS_TO_EXPORT)
+    endif
+    _ENV_VARS_TO_EXPORT :=
+endif
+
+
 ifndef MEDIA_DIR
   $(error MEDIA_DIR is not set)
 endif
@@ -19,7 +32,7 @@ install: $(VENV)/bin/activate
 	@$(PIP) install -r requirements.txt
 
 up: 
-	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port 8000
+	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port $(PORT)
 
 build: install
 	cd frontend && npm install && npm run build
