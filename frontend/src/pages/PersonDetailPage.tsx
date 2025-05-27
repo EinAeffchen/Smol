@@ -30,6 +30,7 @@ import DetectedFaces from '../components/DetectedFaces'
 import { useFaceActions } from '../hooks/useFaceActions'
 import { FaceRead, Person, PersonDetail, SimilarPerson, Tag } from '../types'
 import { MediaAppearances } from '../components/MediaAppearances'
+import { PersonEditForm } from '../components/PersonEditForm'
 const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
 export default function PersonDetailPage() {
@@ -60,6 +61,7 @@ export default function PersonDetailPage() {
         setSnackbar({ open: true, message, severity })
     }
     const loadDetail = useCallback(async () => {
+        console.log(id)
         if (!id) return
         try {
             const res = await fetch(`${API}/persons/${id}`)
@@ -230,50 +232,7 @@ export default function PersonDetailPage() {
                     src={`${API}/thumbnails/${person.profile_face?.thumbnail_path}`}
                     sx={{ width: 100, height: 100, border: '4px solid #FF2E88' }}
                 />
-                <Box component="form" onSubmit={onSave} sx={{ flex: 1 }}>
-                    <Grid container spacing={2} alignItems="flex-end">
-                        <Grid size={{ xs: 12, md: 3 }}>
-                            <TextField
-                                fullWidth
-                                label="Name"
-                                name="name"
-                                value={form.name}
-                                onChange={e => setForm({ ...form, name: e.target.value })}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 3 }}>
-                            <TextField
-                                fullWidth
-                                label="Age"
-                                name="age"
-                                type="number"
-                                value={form.age}
-                                onChange={e => setForm({ ...form, age: e.target.value })}
-                            />
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 3 }}>
-                            <FormControl fullWidth>
-                                <InputLabel>Gender</InputLabel>
-                                <Select
-                                    name="gender"
-                                    value={form.gender}
-                                    onChange={e => setForm({ ...form, gender: e.target.value })}
-                                    label="Gender"
-                                >
-                                    <MenuItem value="">— select —</MenuItem>
-                                    <MenuItem value="male">Male</MenuItem>
-                                    <MenuItem value="female">Female</MenuItem>
-                                    <MenuItem value="other">Other</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </Grid>
-                        <Grid size={{ xs: 12, md: 3 }}>
-                            <Button fullWidth type="submit" variant="contained" color="primary" disabled={saving} size="large" sx={{ height: '56px' }}>
-                                {saving ? 'Saving…' : 'Save'}
-                            </Button>
-                        </Grid>
-                    </Grid>
-                </Box>
+                {person && <PersonEditForm initialPersonData={form} onSave={onSave} saving={saving} />}
             </Paper>
 
             {/* Snackbar */}
@@ -340,6 +299,8 @@ export default function PersonDetailPage() {
             <Box mt={4}>
                 <DetectedFaces
                     faces={faces}
+                    title="Detected Faces"
+                    horizontal
                     profileFaceId={person.profile_face_id}
                     onAssign={handleAssign}
                     onCreate={handleCreate}
