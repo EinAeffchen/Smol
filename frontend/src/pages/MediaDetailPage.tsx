@@ -24,6 +24,7 @@ import SimilarContent from '../components/MediaRelatedContent'
 import { useFaceActions } from '../hooks/useFaceActions'
 import { MediaDetail, Task } from '../types'
 import { MediaExif } from '../components/MediaExif'
+import { READ_ONLY } from '../config'
 
 const ACCENT = '#5F4B8B'
 const ERROR = 'error'
@@ -198,9 +199,13 @@ export default function MediaDetailPage() {
                     >
                         {showExif ? 'Hide EXIF' : 'Show EXIF'}
                     </Button>
-                    <Button variant="contained" sx={{ bgcolor: ACCENT, mr: 1 }} onClick={() => openDialog('convert')}>Convert</Button>
-                    <Button variant="contained" color={ERROR} sx={{ mr: 1 }} onClick={() => openDialog('deleteRecord')}>Delete Record</Button>
-                    <Button variant="contained" color={ERROR} onClick={() => openDialog('deleteFile')}>Delete File</Button>
+                    {!READ_ONLY && (
+                        <>
+                            <Button variant="contained" sx={{ bgcolor: ACCENT, mr: 1 }} onClick={() => openDialog('convert')}>Convert</Button>
+                            <Button variant="contained" color={ERROR} sx={{ mr: 1 }} onClick={() => openDialog('deleteRecord')}>Delete Record</Button>
+                            <Button variant="contained" color={ERROR} onClick={() => openDialog('deleteFile')}>Delete File</Button>
+                        </>
+                    )}
                 </Box>
             </Box>
 
@@ -283,8 +288,12 @@ export default function MediaDetailPage() {
             )}
 
             <Box mb={4}>
-                <Typography variant="h6" gutterBottom>Add tag to media</Typography>
-                <TagAdder ownerType="media" ownerId={media.id} existingTags={media.tags ?? []} onTagAdded={handleTagAdded} />
+                {!READ_ONLY && (
+                    <>
+                        <Typography variant="h6" gutterBottom>Add tag to media</Typography>
+                        <TagAdder ownerType="media" ownerId={media.id} existingTags={media.tags ?? []} onTagAdded={handleTagAdded} />
+                    </>
+                )}
             </Box>
             {/* Tags */}
             {(media.tags.length > 0 &&

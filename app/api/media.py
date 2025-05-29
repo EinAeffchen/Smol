@@ -9,7 +9,7 @@ from sqlalchemy import and_, delete, or_, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
 
-from app.config import MEDIA_DIR, MIN_CLIP_SEARCH_SIMILARITY, THUMB_DIR
+from app.config import READ_ONLY, MEDIA_DIR, MIN_CLIP_SEARCH_SIMILARITY, THUMB_DIR
 from app.database import get_session, safe_commit
 from app.logger import logger
 from app.models import ExifData, Face, Media, MediaTagLink, Person, Scene, Tag
@@ -108,7 +108,6 @@ def list_media(
                     ),
                 )
             )
-    logger.warning(q)
     if person_id:
         q = q.join(Media.faces).where(Face.person_id == person_id)
 
@@ -163,7 +162,6 @@ def list_images(
         before_id = int(cursor)
         # keyset predicate
         stmt = stmt.where(Media.id < before_id)
-    logger.debug("LIMIT: %s", limit)
     stmt = stmt.order_by(Media.id.desc())
     medias = session.exec(stmt.limit(limit)).all()
     next_cursor = str(medias[-1].id) if len(medias) == limit else None
@@ -279,6 +277,8 @@ def delete_file(session: Session, media_id: int):
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_media_file(media_id: int, session: Session = Depends(get_session)):
+    if READ_ONLY:
+        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
     delete_file(session, media_id)
 
 
@@ -291,6 +291,8 @@ def delete_media_record(
     media_id: int,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
@@ -365,6 +367,8 @@ def update_geolocation(
     data: GeoUpdate,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
     media = session.exec(
         select(Media)
         .options(selectinload(Media.exif))

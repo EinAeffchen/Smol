@@ -2,6 +2,7 @@
 import React from 'react'
 import { NavLink } from 'react-router-dom'
 import TasksPanel from './TasksPanel'
+import { READ_ONLY } from '../config'
 
 export default function ControlPanelModal({ onClose }: { onClose(): void }) {
   return (
@@ -72,7 +73,9 @@ export default function ControlPanelModal({ onClose }: { onClose(): void }) {
         </nav>
 
         {/* --- Your existing task panel component below --- */}
-        <TasksPanel />
+        {!READ_ONLY && (
+          < TasksPanel />
+        )}
       </div>
     </div>
   )

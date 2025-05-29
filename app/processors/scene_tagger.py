@@ -54,14 +54,13 @@ class SceneTagger(MediaProcessor):
                 Media.ran_auto_tagging.is_(True), Media.id == media.id
             )
         ).first():
-            logger.debug("Already tagged!")
             return
         embeddings = list()
         for scene in tqdm(scenes):
             if isinstance(scene, ImageFile):
                 embedding = self._get_embedding(scene)
                 if not embedding:
-                    logger.debug("FAILED ON %s", media.path)
+                    logger.warning("FAILED ON %s", media.path)
                     delete_media_record(media.id, session)
                     safe_commit(session)
                     return False

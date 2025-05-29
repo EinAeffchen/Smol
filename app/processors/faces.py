@@ -96,7 +96,6 @@ class FaceProcessor(MediaProcessor):
                 Media.embeddings_created.is_(True),
             )
         ).first():
-            logger.debug("ALREADY FACES")
             return
         for scene in tqdm(scenes):
             try:

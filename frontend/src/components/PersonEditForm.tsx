@@ -9,6 +9,7 @@ import {
     Select,
     TextField,
 } from '@mui/material'
+import { READ_ONLY } from '../config'
 
 export function PersonEditForm({ initialPersonData, onSave, saving }) {
     const [form, setForm] = useState(initialPersonData);
@@ -77,11 +78,13 @@ export function PersonEditForm({ initialPersonData, onSave, saving }) {
                         </Select>
                     </FormControl>
                 </Grid>
-                <Grid size={{ xs: 12, md: 3 }}>
-                    <Button fullWidth type="submit" variant="contained" color="primary" disabled={saving} size="large" sx={{ height: '56px' }}>
-                        {saving ? 'Saving…' : 'Save'}
-                    </Button>
-                </Grid>
+                {!READ_ONLY && (
+                    <Grid size={{ xs: 12, md: 3 }}>
+                        <Button fullWidth type="submit" variant="contained" color="primary" disabled={saving} size="large" sx={{ height: '56px' }}>
+                            {saving ? 'Saving…' : 'Save'}
+                        </Button>
+                    </Grid>
+                )}
             </Grid>
         </Box>
     );

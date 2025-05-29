@@ -2,16 +2,15 @@
 import pkgutil
 import importlib
 from pathlib import Path
-from typing import List
 
 from app.processors.base import MediaProcessor
 from app.logger import logger
 
 # this will hold instances of every MediaProcessor
-processors: List[MediaProcessor] = []
+processors: list[MediaProcessor] = []
 
 
-def load_processors() -> List[MediaProcessor]:
+def load_processors() -> list[MediaProcessor]:
     """
     Scan the app/processors folder, import every module,
     instantiate any MediaProcessor subclasses, and return them.

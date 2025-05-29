@@ -8,10 +8,11 @@ import {
   ToggleButtonGroup,
   CircularProgress,
 } from '@mui/material'
+import { API, READ_ONLY } from '../config';
 
-const API = import.meta.env.VITE_API_BASE_URL || ''
 
 console.log(API);
+console.log(READ_ONLY);
 const ITEMS_PER_PAGE = 20
 
 export default function IndexPage() {

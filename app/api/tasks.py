@@ -1,36 +1,37 @@
 import asyncio
 import json
+import os
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 
 import hdbscan
-from collections import defaultdict
-import matplotlib.pyplot as plt
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import func, or_
 from sqlmodel import Session, delete, func, select, text, update
 from tqdm import tqdm
-import os
+
 from app.api.media import delete_media_record
 from app.config import (
     FACE_MATCH_COSINE_THRESHOLD,
     IMAGE_SUFFIXES,
     MEDIA_DIR,
     PERSON_MIN_FACE_COUNT,
+    READ_ONLY,
     VIDEO_SUFFIXES,
 )
-from app.database import engine, get_session, safe_commit, safe_execute
+from app.database import engine, get_session, safe_commit
 from app.logger import logger
 from app.models import Face, Media, Person, PersonSimilarity, ProcessingTask
 from app.processor_registry import processors
 from app.utils import (
-    process_file,
-    split_video,
     complete_task,
     generate_thumbnails,
     get_person_embedding,
+    process_file,
+    split_video,
 )
 
 router = APIRouter()
@@ -46,6 +47,10 @@ router = APIRouter()
 async def start_media_processing(
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     # count all media that still need processing
     total = session.exec(
         select(func.count())
@@ -180,6 +185,10 @@ def start_person_clustering(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     task = ProcessingTask(task_type="cluster_persons")
     session.add(task)
     safe_commit(session)
@@ -396,6 +405,10 @@ def cancel_task(
     task_id: str,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     task = session.get(ProcessingTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
@@ -447,6 +460,10 @@ def start_scan(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     # 1) discover all NEW files
     new_files = []
     logger.info("Scanning %s...", MEDIA_DIR)
@@ -467,6 +484,10 @@ def start_scan(
 
 @router.post("/reset/processing", summary="Resets media processing status")
 def reset_processing(session: Session = Depends(get_session)):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     session.exec(update(Media).values(faces_extracted=False))
     session.exec(update(Media).values(embeddings_created=False))
     session.exec(text("DELETE FROM face_embeddings"))
@@ -481,6 +502,10 @@ def reset_processing(session: Session = Depends(get_session)):
 
 @router.post("/reset/clustering", summary="Resets person clustering")
 def reset_clustering(session: Session = Depends(get_session)):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     session.exec(delete(PersonSimilarity))
     session.exec(
         update(Face).values(person_id=None).where(Face.person_id != None)

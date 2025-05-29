@@ -2,7 +2,7 @@ from fastapi import APIRouter, Query, Body, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlmodel import Session, delete, select, text
 
-from app.config import THUMB_DIR
+from app.config import THUMB_DIR, READ_ONLY
 from app.database import get_session, safe_commit, safe_execute
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
 from app.schemas.face import FaceAssign, CursorPage, FaceAssignReturn
@@ -14,7 +14,8 @@ from fastapi import Response
 
 router = APIRouter()
 
-
+logger.warning("READ_ONLY: %s", READ_ONLY)
+logger.warning("READ_ONLY: %s", type(READ_ONLY))
 @router.post(
     "/{face_id}/assign",
     summary="Assign an existing face to a person",
@@ -25,6 +26,10 @@ async def assign_face(
     body: FaceAssign = Body(...),
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     person_id = body.person_id
     logger.warning("Assigning face %s to %s", face_id, person_id)
     face = session.get(Face, face_id)
@@ -58,6 +63,10 @@ def update_face_embedding(
     person_id: int | None,
     delete_face: bool = False,
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     if not delete_face and person_id:
         sql = text(
             """
@@ -82,6 +91,10 @@ def update_face_embedding(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_face(face_id: int, session: Session = Depends(get_session)):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(404, "Face not found")
@@ -148,6 +161,10 @@ async def create_person_from_face(
     body: FaceCreatePerson = Body(...),
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")

@@ -16,7 +16,7 @@ import MenuIcon from '@mui/icons-material/Menu'
 import SettingsIcon from '@mui/icons-material/Settings'
 import ControlPanelModal from './ControlPanelModal'
 
-const API = import.meta.env.VITE_API_BASE_URL ?? ""
+import { API, READ_ONLY } from '../config';
 
 
 export function Header() {
@@ -24,6 +24,22 @@ export function Header() {
   const [q, setQ] = useState('')
   const [category, setCategory] = useState<'media' | 'person' | 'tag'>('media')
   const navigate = useNavigate()
+
+  const allNavItems: [string, string][] = [
+    ['Images', '/images'],
+    ['Videos', '/videos'],
+    ['Tags', '/tags'],
+    ['People', '/people'],
+    ['Unassigned Faces', '/orphanfaces'], // This is the one to conditionally hide
+    ['Map', '/map'],
+    ['Geotagger', '/maptagger'],
+  ];
+
+  const pathsToExcludeInReadOnly: string[] = ['/orphanfaces', '/maptagger'];
+  // Filter out 'Unassigned Faces' if in READ_ONLY mode
+  const visibleNavItems = READ_ONLY
+    ? allNavItems.filter(([label, path]) => !pathsToExcludeInReadOnly.includes(path))
+    : allNavItems;
 
   function onSearchSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -98,15 +114,7 @@ export function Header() {
 
           {/* Desktop nav */}
           <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 2 }}>
-            {[
-              ['Images', '/images'],
-              ['Videos', '/videos'],
-              ['Tags', '/tags'],
-              ['People', '/people'],
-              ['Unassigned Faces', '/orphanfaces'],
-              ['Map', '/map'],
-              ['Geotagger', '/maptagger'],
-            ].map(([label, to]) => (
+            {visibleNavItems.map(([label, to]) => (
               <NavLink
                 key={to}
                 to={to}
@@ -120,18 +128,19 @@ export function Header() {
               </NavLink>
             ))}
           </Box>
-
-          <IconButton
-            onClick={() => setOpenPanel(true)}
-            sx={{
-              ml: 2,
-              color: '#BFA2DB',
-              display: { xs: 'none', md: 'inline-flex' }, // visible only on desktop/tablet
-            }}
-            title="Open Control Panel"
-          >
-            <SettingsIcon />
-          </IconButton>
+          {!READ_ONLY && (
+            <IconButton
+              onClick={() => setOpenPanel(true)}
+              sx={{
+                ml: 2,
+                color: '#BFA2DB',
+                display: { xs: 'none', md: 'inline-flex' }, // visible only on desktop/tablet
+              }}
+              title="Open Control Panel"
+            >
+              <SettingsIcon />
+            </IconButton>
+          )}
           {/* Mobile Menu Button */}
           <IconButton
             sx={{ color: '#BFA2DB', display: { xs: 'flex', md: 'none' } }}

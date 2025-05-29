@@ -42,16 +42,27 @@ IMAGE_SUFFIXES = [
     ".gif",
     ".bmp",
 ]
-READ_ONLY = os.environ.get("READ_ONLY", False)
+READ_ONLY = os.environ.get("READ_ONLY", "False")
+if READ_ONLY.lower() == "true":
+    READ_ONLY = True
+else:
+    READ_ONLY = False
 
 # ------- AI Settings -------------
 # Image embedding and text search model
 MIN_CLIP_SEARCH_SIMILARITY = 0.1
-model, preprocess, _ = open_clip.create_model_and_transforms(
-    "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k"
-)
-tokenizer = open_clip.get_tokenizer("xlm-roberta-large-ViT-H-14")
+if READ_ONLY is False:
+    model, preprocess, _ = open_clip.create_model_and_transforms(
+        "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k", device="cuda"
+    )
+else:
+    model, preprocess, _ = open_clip.create_model_and_transforms(
+        "xlm-roberta-large-ViT-H-14",
+        pretrained="frozen_laion5b_s13b_b90k",
+        device="cpu",
+    )
 
+tokenizer = open_clip.get_tokenizer("xlm-roberta-large-ViT-H-14")
 # face recognition settings
 MAX_FRAMES_PER_VIDEO = 30
 FACE_RECOGNITION_MIN_CONFIDENCE = 0.75

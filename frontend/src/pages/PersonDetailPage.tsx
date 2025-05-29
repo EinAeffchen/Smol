@@ -26,7 +26,8 @@ import { useFaceActions } from '../hooks/useFaceActions'
 import { FaceRead, Person, PersonDetail, SimilarPerson, Tag } from '../types'
 import { MediaAppearances } from '../components/MediaAppearances'
 import { PersonEditForm } from '../components/PersonEditForm'
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API, READ_ONLY } from '../config'
+
 
 export default function PersonDetailPage() {
     const { id } = useParams<{ id: string }>()
@@ -203,13 +204,15 @@ export default function PersonDetailPage() {
                 <Grid size={{ xs: 12, md: "auto" }} >
                     <Typography variant="h4">{person.name || 'Unnamed'}</Typography>
                 </Grid>
-                <Grid size={{ xs: 12, md: "auto" }}>
-                    <Stack direction="row" spacing={1} justifyContent="flex-end">
-                        <Button variant="contained" color="secondary" onClick={() => setMergeOpen(true)}>Merge</Button>
-                        <Button variant="contained" color="secondary" onClick={() => loadSimilar()}>Refresh Similar Persons</Button>
-                        <Button variant="contained" color="error" onClick={() => setConfirmDelete(true)}>Delete</Button>
-                    </Stack>
-                </Grid>
+                {!READ_ONLY && (
+                    <Grid size={{ xs: 12, md: "auto" }}>
+                        <Stack direction="row" spacing={1} justifyContent="flex-end">
+                            <Button variant="contained" color="secondary" onClick={() => setMergeOpen(true)}>Merge</Button>
+                            <Button variant="contained" color="secondary" onClick={() => loadSimilar()}>Refresh Similar Persons</Button>
+                            <Button variant="contained" color="error" onClick={() => setConfirmDelete(true)}>Delete</Button>
+                        </Stack>
+                    </Grid>
+                )}
             </Grid>
 
             {/* Profile  Form as horizontal layout */}
@@ -218,7 +221,8 @@ export default function PersonDetailPage() {
                     src={`${API}/thumbnails/${person.profile_face?.thumbnail_path}`}
                     sx={{ width: 100, height: 100, border: '4px solid #FF2E88' }}
                 />
-                {person && <PersonEditForm initialPersonData={form} onSave={onSave} saving={saving} />}
+
+                {person && !READ_ONLY && <PersonEditForm initialPersonData={form} onSave={onSave} saving={saving} />}
             </Paper>
 
             {/* Snackbar */}
@@ -249,7 +253,9 @@ export default function PersonDetailPage() {
             <Box mt={4} sx={{ bgcolor: '#2C2C2E', p: 2, borderRadius: 2 }}>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                     <Typography variant="h6">Tags</Typography>
-                    <TagAdder ownerType="persons" ownerId={person.id} existingTags={person.tags ?? []} onTagAdded={() => loadDetail()} />
+                    {!READ_ONLY && (
+                        <TagAdder ownerType="persons" ownerId={person.id} existingTags={person.tags ?? []} onTagAdded={() => loadDetail()} />
+                    )}
                 </Box>
                 <Stack direction="row" spacing={1} flexWrap="wrap">
                     {(person.tags ?? []).map((tag: Tag) => (

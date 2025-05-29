@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import media, person, tasks, face, tags, search
-from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR
+from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR, READ_ONLY
 from app.database import init_db, init_vec_index
 from app.api.processors import router as proc_router
 from app.processor_registry import load_processors
@@ -23,9 +23,10 @@ logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
-    init_db()
-    init_vec_index()
-    load_processors()
+    if not READ_ONLY:
+        init_db()
+        init_vec_index()
+        load_processors()
     yield
 
 

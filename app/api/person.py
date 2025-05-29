@@ -29,6 +29,7 @@ from app.utils import (
     update_person_embedding,
     refresh_similarities_for_person,
 )
+from app.config import READ_ONLY
 
 router = APIRouter()
 
@@ -103,7 +104,6 @@ def suggest_faces(
     ).bindparams(vec=json.dumps(target.tolist()), k=limit)
     rows = session.exec(sql).all()
     face_ids = [r[0] for r in rows]
-    logger.warning(rows)
 
     faces = session.exec(select(Face).where(Face.id.in_(face_ids))).all()
     id_map = {f.id: f for f in faces}
@@ -117,74 +117,6 @@ def suggest_faces(
         )
         for f in ordered
     ]
-
-
-@router.get("/{person_id}/minimal", response_model=PersonDetail)
-def get_person(person_id: int, session: Session = Depends(get_session)):
-    person = session.get(Person, person_id)
-    if not person:
-        raise HTTPException(status_code=404, detail="Person not found")
-
-    if person.profile_face_id and not person.profile_face:
-        person.profile_face_id = None
-        session.add(person)
-        session.commit()
-        session.refresh(person)
-    q = (
-        select(Face)
-        .where(Face.person_id == person.id)
-        .options(selectinload(Face.media), defer(Face.embedding))
-    )
-    faces: list[Face] = session.exec(q).all()
-    seen = set()
-    medias: list[dict[str, Any]] = []
-    for f in faces:
-        m = f.media
-        if not m or m.id in seen:
-            continue
-        seen.add(m.id)
-        medias.append(
-            {
-                "id": m.id,
-                "path": m.path,
-                "filename": m.filename,
-                "duration": m.duration,
-                "width": m.width,
-                "height": m.height,
-                "views": m.views,
-                "inserted_at": m.inserted_at.isoformat(),
-            }
-        )
-        medias = sorted(medias, key=lambda a: a["inserted_at"])
-    dict_person = {
-        "id": person.id,
-        "name": person.name,
-        "age": person.age,
-        "gender": person.gender,
-    }
-    if person.profile_face_id and person.profile_face:
-        dict_person["profile_face_id"] = person.profile_face_id
-        dict_person["profile_face"] = {
-            "id": person.profile_face.id,
-            "thumbnail_path": person.profile_face.thumbnail_path,
-        }
-        dict_person["tags"] = person.tags
-        logger.warning("PERSON: %s", dict_person)
-    serialized_faces = [
-        {
-            "id": face.id,
-            "person_id": face.person_id,
-            "thumbnail_path": face.thumbnail_path,
-            "media_id": face.media_id,
-        }
-        for face in faces
-    ]
-    logger.warning("FACES: %s", serialized_faces)
-    return {
-        "person": dict_person,
-        "faces": serialized_faces,
-        "medias": medias,
-    }
 
 
 @router.get("/{person_id}", response_model=PersonDetail)
@@ -237,7 +169,6 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
             "thumbnail_path": person.profile_face.thumbnail_path,
         }
         dict_person["tags"] = person.tags
-        logger.warning("PERSON: %s", dict_person)
     serialized_faces = [
         {
             "id": face.id,
@@ -247,7 +178,6 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         }
         for face in faces
     ]
-    logger.warning("FACES: %s", serialized_faces)
     return {
         "person": dict_person,
         "faces": serialized_faces,
@@ -265,6 +195,10 @@ def update_person(
     data: PersonUpdate,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(404, "Person not found")
@@ -283,6 +217,10 @@ def set_profile_face(
     face_id: int | None,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(404, "Person not found")
@@ -302,6 +240,10 @@ def merge_persons(
     body: MergePersonsRequest,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     sid, tid = body.source_id, body.target_id
     if sid == tid:
         raise HTTPException(
@@ -343,6 +285,8 @@ def merge_persons(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_person(person_id: int, session: Session = Depends(get_session)):
+    if READ_ONLY:
+        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -466,26 +410,11 @@ def refresh_similarities(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
     if not session.get(Person, person_id):
         raise HTTPException(404, "Person not found")
 
     # enqueue the compute in the background
     refresh_similarities_for_person(person_id)
     return {"detail": "Similarity refresh started"}
-
-
-@router.post(
-    "/{person_id}/auto-set-age",
-    summary="Automatically sets age and gender based on faces",
-    status_code=status.HTTP_202_ACCEPTED,
-)
-def auto_set_age(
-    person_id: int,
-    session: Session = Depends(get_session),
-):
-    person = session.get(Person, person_id)
-    if not person:
-        raise HTTPException(404, "Person not found")
-
-    session.add(person)
-    safe_commit(session)

@@ -37,7 +37,7 @@ export default function DetectedFaces({
     useResizeObserver(containerRef, (entry) => {
         setWidth(entry.contentRect.width)
     })
-
+    // TODO update to receive person id and load faces via infiniteTag
     const columnCount = Math.max(1, Math.floor(width / CARD_WIDTH))
     const columnWidth = Math.floor(width / columnCount) - 2
 

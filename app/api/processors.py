@@ -5,7 +5,7 @@ from app.models import Media, ProcessingTask
 from app.database import engine, get_session
 from app.processor_registry import load_processors
 from datetime import datetime, timezone
-from app.config import MEDIA_DIR
+from app.config import MEDIA_DIR, READ_ONLY
 from app.logger import logger
 import subprocess
 import ffmpeg
@@ -42,6 +42,8 @@ def start_conversion(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
+    if READ_ONLY:
+        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(404, "Media not found")
@@ -75,7 +77,6 @@ def _run_conversion(task_id: str, media_path: str, media_id:int):
         info = ffmpeg.probe(str(full_path))
         dur_s = float(info["format"]["duration"])
         dur_us = dur_s * 1000000
-        logger.debug(dur_us)
         # run ffmpeg with stderr piped so we can parse “progress=…”
         # Here’s one way using the “-progress” flag:
         cmd = [

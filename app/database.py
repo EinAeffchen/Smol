@@ -44,7 +44,7 @@ def safe_commit(session, retries=5, delay=0.5):
             session.commit()
             return
         except OperationalError as e:
-            logger.debug("OPERATION ERROR: %s", str(e))
+            logger.error("OPERATION ERROR: %s", str(e))
             if "locked" in str(e):
                 session.rollback()
                 if i < retries - 1:

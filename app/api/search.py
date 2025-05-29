@@ -1,24 +1,18 @@
 # app/api/processors.py
 import json
-from datetime import datetime
-from typing import Literal, Optional, Union
+from typing import Literal
 
 import numpy as np
 import torch
-from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
-from sqlalchemy import or_, text
-from sqlalchemy.dialects import sqlite
-from sqlmodel import Session, and_, or_, select
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import text
+from sqlmodel import Session, select
 
-from app.config import MIN_CLIP_SEARCH_SIMILARITY, model, tokenizer
+from app.config import model, tokenizer
 from app.database import get_session
 from app.logger import logger
-from app.models import Face, Media, Person, Tag
+from app.models import Media, Person, Tag
 from app.schemas.search import CursorPage, SearchResult
-from app.schemas.tag import TagRead
-from app.schemas.media import MediaPreview
-from app.schemas.person import PersonRead
 
 router = APIRouter()
 
@@ -78,7 +72,6 @@ def search(
         ).all()
         id_map = {m.id: m for m in medias}
         ordered = [id_map[mid] for mid in media_ids if mid in id_map]
-        logger.warning("Page: %s - results: %s", page, len(medias))
         if len(medias) == limit:
             next_cursor = str(page + 1)
         else:
