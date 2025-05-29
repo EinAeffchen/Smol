@@ -9,7 +9,7 @@ from fastapi import (
     Query,
     status,
 )
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, defer
 from sqlmodel import Session, delete, select, text, update
 
 from app.database import get_session, safe_commit
@@ -119,7 +119,7 @@ def suggest_faces(
     ]
 
 
-@router.get("/{person_id}", response_model=PersonDetail)
+@router.get("/{person_id}/minimal", response_model=PersonDetail)
 def get_person(person_id: int, session: Session = Depends(get_session)):
     person = session.get(Person, person_id)
     if not person:
@@ -133,7 +133,7 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
     q = (
         select(Face)
         .where(Face.person_id == person.id)
-        .options(selectinload(Face.media))
+        .options(selectinload(Face.media), defer(Face.embedding))
     )
     faces: list[Face] = session.exec(q).all()
     seen = set()
@@ -169,18 +169,88 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
             "thumbnail_path": person.profile_face.thumbnail_path,
         }
         dict_person["tags"] = person.tags
-        logger.debug("PERSON: %s", dict_person)
+        logger.warning("PERSON: %s", dict_person)
+    serialized_faces = [
+        {
+            "id": face.id,
+            "person_id": face.person_id,
+            "thumbnail_path": face.thumbnail_path,
+            "media_id": face.media_id,
+        }
+        for face in faces
+    ]
+    logger.warning("FACES: %s", serialized_faces)
     return {
         "person": dict_person,
-        "faces": [
+        "faces": serialized_faces,
+        "medias": medias,
+    }
+
+
+@router.get("/{person_id}", response_model=PersonDetail)
+def get_person(person_id: int, session: Session = Depends(get_session)):
+    person = session.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    if person.profile_face_id and not person.profile_face:
+        person.profile_face_id = None
+        session.add(person)
+        session.commit()
+        session.refresh(person)
+    q = (
+        select(Face)
+        .where(Face.person_id == person.id)
+        .options(selectinload(Face.media), defer(Face.embedding))
+    )
+    faces: list[Face] = session.exec(q).all()
+    seen = set()
+    medias: list[dict[str, Any]] = []
+    for f in faces:
+        m = f.media
+        if not m or m.id in seen:
+            continue
+        seen.add(m.id)
+        medias.append(
             {
-                "id": face.id,
-                "person_id": face.person_id,
-                "thumbnail_path": face.thumbnail_path,
-                "media_id": face.media_id,
+                "id": m.id,
+                "path": m.path,
+                "filename": m.filename,
+                "duration": m.duration,
+                "width": m.width,
+                "height": m.height,
+                "views": m.views,
+                "inserted_at": m.inserted_at.isoformat(),
             }
-            for face in faces
-        ],
+        )
+        medias = sorted(medias, key=lambda a: a["inserted_at"])
+    dict_person = {
+        "id": person.id,
+        "name": person.name,
+        "age": person.age,
+        "gender": person.gender,
+    }
+    if person.profile_face_id and person.profile_face:
+        dict_person["profile_face_id"] = person.profile_face_id
+        dict_person["profile_face"] = {
+            "id": person.profile_face.id,
+            "thumbnail_path": person.profile_face.thumbnail_path,
+        }
+        dict_person["tags"] = person.tags
+        logger.warning("PERSON: %s", dict_person)
+    serialized_faces = [
+        {
+            "id": face.id,
+            "person_id": face.person_id,
+            "thumbnail_path": face.thumbnail_path,
+            "media_id": face.media_id,
+        }
+        for face in faces
+    ]
+    logger.warning("FACES: %s", serialized_faces)
+    return {
+        "person": dict_person,
+        "faces": serialized_faces,
         "medias": medias,
     }
 
@@ -308,52 +378,82 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
 
 @router.get(
     "/{person_id}/similarities",
-    response_model=list[SimilarPerson],
-    summary="Get stored similarity scores for a person",
+    response_model=list[SimilarPerson],  # Uses the updated SimilarPerson model
+    summary="Get stored similarity scores for a person including name and thumbnail",
 )
 def get_similarities(
     person_id: int,
     session: Session = Depends(get_session),
+    # k_neighbors: int = 20, # Optional: make 'k' a query parameter
 ):
-    # ensure person exists
     person = session.get(Person, person_id)
     if not person:
-        raise HTTPException(404, "Person not found")
-    vec = get_person_embedding(session, person_id)
+        raise HTTPException(status_code=404, detail="Person not found")
 
-    # 3) one GROUP-BY query:
+    vec = get_person_embedding(
+        session, person_id
+    )  # Assuming this returns the embedding vector
+    if (
+        vec is None
+    ):  # If the target person has no embedding, no similarities can be found
+        return []
+
+    k_val = 20  # Your desired number of neighbors
+
+    # Updated SQL query
     sql = text(
         """
-      SELECT
-        p.id                                  AS person_id,
-        p.name                                AS name,
-        ROUND(
-            (1.0 - (MIN(pe.distance)*MIN(pe.distance)) / 2.0) * 100,
-            2
-            ) AS similarity_pct
-      FROM person_embeddings AS pe
-      JOIN person AS p
-        ON p.id = pe.person_id
-      WHERE
-        pe.person_id    != :p_id              -- drop self
-        AND pe.embedding MATCH :vec           -- top-level MATCH
-        AND k               = :k              -- KNN constraint
-      GROUP BY
-        pe.person_id, p.name
-      ORDER BY
-        MIN(pe.distance)                      -- closest first
-    """
+        SELECT
+            p.id                          AS person_id,
+            p.name                        AS person_name, -- aliased to avoid confusion if 'name' is a keyword
+            profile_f.thumbnail_path      AS thumbnail_path,
+            ROUND(
+                (1.0 - (MIN(pe.distance) * MIN(pe.distance)) / 2.0) * 100,
+                2
+            )                             AS similarity_pct
+        FROM person_embeddings AS pe
+        JOIN person AS p
+            ON p.id = pe.person_id
+        LEFT JOIN face AS profile_f -- LEFT JOIN to include persons even if they don't have a profile face
+            ON p.profile_face_id = profile_f.id -- Assuming Person table has profile_face_id
+        WHERE
+            pe.person_id != :p_id          -- Exclude the person themselves
+            AND pe.embedding MATCH :vec    -- Vector similarity match (specific to your pg_embedding setup)
+            AND pe.k = :k_param            -- If 'k' is a parameter for the MATCH or a column in person_embeddings
+                                           -- Ensure this 'k' usage is correct for your pg_embedding extension.
+                                           -- Often, for KNN, you'd use ORDER BY embedding_distance LIMIT k.
+                                           -- If pe.k is a column, this is filtering on that column.
+        GROUP BY
+            p.id, p.name, profile_f.thumbnail_path -- Include all selected non-aggregated columns
+        ORDER BY
+            MIN(pe.distance) ASC           -- Closest first
+        LIMIT :limit_val                   -- Limit the number of results
+        """
     ).bindparams(
         p_id=person_id,
-        vec=json.dumps(vec.tolist()),
-        k=20,  # your desired neighbours
+        vec=(
+            json.dumps(vec.tolist())
+            if hasattr(vec, "tolist")
+            else json.dumps(vec)
+        ),  # Handle numpy array or list
+        k_param=k_val,  # Parameter for the 'pe.k = :k_param' condition
+        limit_val=k_val,  # Parameter for the LIMIT clause
     )
 
-    rows = session.exec(sql).all()
-    return [
-        SimilarPerson(id=rid, name=rname, similarity=sim)
-        for rid, rname, sim in rows
-    ]
+    result_rows = session.exec(sql).all()
+
+    similar_persons_list = []
+    for row in result_rows:
+        similar_persons_list.append(
+            SimilarPerson(
+                id=row.person_id,
+                name=row.person_name,
+                thumbnail=row.thumbnail_path,  # Populate the new thumbnail field
+                similarity=row.similarity_pct,
+            )
+        )
+
+    return similar_persons_list
 
 
 @router.post(

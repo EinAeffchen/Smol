@@ -54,7 +54,7 @@ export default function DetectedFaces({
             </Typography>
 
             {horizontal ? (
-                <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', py: 1 }}>
+                <Stack direction="row" spacing={2} sx={{ overflowX: 'auto', overflowY: "hidden", py: 1 }}>
                     {faces.map(face => (
                         <Box key={face.id} sx={{ flex: '0 0 auto', width: 130 }}>
                             <FaceCard

@@ -1,4 +1,3 @@
-// src/pages/SearchResultsPage.tsx
 import React, { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import {

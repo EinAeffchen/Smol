@@ -13,16 +13,22 @@ import {
 export function PersonEditForm({ initialPersonData, onSave, saving }) {
     const [form, setForm] = useState(initialPersonData);
 
-    // Handle input changes locally
-    const handleChange = (e) => {
-        const { name, value, type } = e.target;
+    React.useEffect(() => {
+        setForm(initialPersonData);
+    }, [initialPersonData]);
+
+    const handleChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
+        const target = e.target as HTMLInputElement; // Type assertion for typical input/select
+        const { name, value } = target;
+        const type = target.type; // Get type from the target itself
+
         setForm(prevForm => ({
             ...prevForm,
-            [name]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value
+            [name!]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value
         }));
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         onSave(form);
     };
@@ -30,13 +36,14 @@ export function PersonEditForm({ initialPersonData, onSave, saving }) {
     return (
         <Box component="form" onSubmit={handleSubmit} sx={{ flex: 1 }}>
             <Grid container spacing={2} alignItems="flex-end">
+                {/* Your Grid syntax is correct */}
                 <Grid size={{ xs: 12, md: 3 }}>
                     <TextField
                         fullWidth
                         label="Name"
                         name="name"
                         value={form.name}
-                        onChange={e => setForm({ ...form, name: e.target.value })}
+                        onChange={handleChange} // Use generic handler
                     />
                 </Grid>
                 <Grid size={{ xs: 12, md: 3 }}>
@@ -46,7 +53,12 @@ export function PersonEditForm({ initialPersonData, onSave, saving }) {
                         name="age"
                         type="number"
                         value={form.age}
-                        onChange={e => setForm({ ...form, age: e.target.value })}
+                        onChange={handleChange} // Use generic handler
+                        slotProps={{
+                            inputLabel: {
+                                shrink: form.age !== '' && form.age !== undefined && form.age !== null && form.age.toString().length > 0
+                            }
+                        }} // Conditional shrink
                     />
                 </Grid>
                 <Grid size={{ xs: 12, md: 3 }}>
@@ -55,7 +67,7 @@ export function PersonEditForm({ initialPersonData, onSave, saving }) {
                         <Select
                             name="gender"
                             value={form.gender}
-                            onChange={e => setForm({ ...form, gender: e.target.value })}
+                            onChange={handleChange as any} // Use generic handler
                             label="Gender"
                         >
                             <MenuItem value="">— select —</MenuItem>

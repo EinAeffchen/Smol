@@ -1,4 +1,3 @@
-// src/pages/TagsPage.tsx
 import React, { useCallback, useState, useEffect } from 'react'
 import { Container, Typography, Grid, Box, CircularProgress } from '@mui/material'
 import TagCard from '../components/TagCard'

@@ -1,4 +1,3 @@
-// src/components/MediaCard.tsx
 import React, { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Card, CardActionArea, CardMedia, Box, Typography } from '@mui/material'

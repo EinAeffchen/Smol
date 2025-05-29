@@ -1,4 +1,3 @@
-// src/components/TagAdder.tsx
 import React, { useState, useEffect } from 'react'
 import {
     Box,
@@ -107,7 +106,7 @@ export default function TagAdder({
         tag => !existingTags.some(existingTag => existingTag.id === tag.id)
     );
     return (
-        <Box display="flex" gap={1} alignItems="center" sx={{ width: '100%' }}>
+        <Box display="flex" gap={1} alignItems="center" sx={{ width: '90%' }}>
             <Autocomplete
                 freeSolo // Allows users to enter text not present in suggestions
                 fullWidth

@@ -42,6 +42,7 @@ IMAGE_SUFFIXES = [
     ".gif",
     ".bmp",
 ]
+READ_ONLY = os.environ.get("READ_ONLY", False)
 
 # ------- AI Settings -------------
 # Image embedding and text search model

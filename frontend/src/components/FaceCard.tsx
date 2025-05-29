@@ -1,4 +1,3 @@
-// src/components/FaceCard.tsx
 import React, { useState, useEffect } from 'react'
 import {
     Avatar,

@@ -40,6 +40,7 @@ class SimilarPerson(SQLModel):
     id: int
     name: str | None
     similarity: float
+    thumbnail: str|None = None 
 
 
 class CursorPage(BaseModel):

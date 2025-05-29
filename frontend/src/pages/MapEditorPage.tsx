@@ -1,4 +1,3 @@
-// src/pages/MapEditorPage.tsx
 import React, { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'

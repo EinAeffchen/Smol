@@ -31,23 +31,25 @@ async def assign_face(
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
 
-    person = session.get(Person, person_id)
-    if not person:
+    new_person = session.get(Person, person_id)
+    if not new_person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    old_person = face.person
-    if old_person:
-        old_person_id = old_person.id
-    else:
-        old_person_id = None
+    original_person_object = face.person
+    original_person_id: int | None = None
+    if original_person_object:
+        original_person_id = original_person_object.id
 
-    face.person = person
+    face.person = new_person
+
     session.add(face)
-    if old_person_id and old_person_id != body.person_id:
-        old_person_can_be_deleted(session, old_person_id)
+
+    if original_person_id and original_person_id != body.person_id:
+        old_person_can_be_deleted(session, original_person_id)
     update_face_embedding(session, face_id, person_id)
+    person_id = face.person_id
     safe_commit(session)
-    return FaceAssignReturn(face_id=face_id)
+    return FaceAssignReturn(face_id=face_id, person_id=person_id)
 
 
 def update_face_embedding(
@@ -184,7 +186,6 @@ def old_person_can_be_deleted(session: Session, person_id: int | None):
         session, select(Face).where(Face.person_id == person_id)
     ).first()
     if remaining:
-        session.close()
         return False
 
     # delete any tag links

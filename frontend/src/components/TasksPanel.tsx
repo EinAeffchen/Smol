@@ -1,11 +1,9 @@
-// src/components/TasksPanel.tsx
 import React, { useState, useEffect } from 'react'
 import { Box, Typography, Button, LinearProgress, Paper, Stack } from '@mui/material'
 import { Task, TaskType } from '../types'
 
 const API = import.meta.env.VITE_API_BASE_URL || ''
 
-// human-readable labels for task types
 type TaskLabels = Record<TaskType, string>
 const TASK_LABELS: TaskLabels = {
     scan: 'Scan Folder',

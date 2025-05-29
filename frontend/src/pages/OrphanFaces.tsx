@@ -1,4 +1,3 @@
-// src/pages/OrphanFacesPage.tsx
 import React, { useCallback } from 'react'
 import { Container, Box, Typography, Grid, CircularProgress } from '@mui/material'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
@@ -9,7 +8,6 @@ const API = import.meta.env.VITE_API_BASE_URL ?? ''
 const ITEMS_PER_PAGE = 48
 
 export default function OrphanFacesPage() {
-    // fetch unassigned faces (orphans)
     const fetchOrphans = useCallback((cursor: string | null, limit: number) =>
         fetch(
             `${API}/faces/orphans${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`

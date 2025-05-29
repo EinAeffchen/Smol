@@ -13,17 +13,12 @@ import {
     DialogActions,
     DialogContent,
     DialogTitle,
-    FormControl,
     Grid,
-    InputLabel,
-    MenuItem,
-    Select,
     Stack,
     TextField,
     Typography,
     Paper
 } from '@mui/material'
-import MediaCard from '../components/MediaCard'
 import SimilarPersonCard from '../components/SimilarPersonCard'
 import TagAdder from '../components/TagAdder'
 import DetectedFaces from '../components/DetectedFaces'
@@ -46,8 +41,7 @@ export default function PersonDetailPage() {
     const [searchTerm, setSearchTerm] = useState('')
     const [candidates, setCandidates] = useState<Person[]>([])
 
-    const [similar, setSimilar] = useState<SimilarPerson[]>([])
-    const [richSimilar, setRichSimilar] = useState<SimilarPerson[]>([])
+    const [similarPersons, setSimilarPersons] = useState<SimilarPerson[]>([])
     const [loadingSim, setLoadingSim] = useState(false)
 
     const [suggestedFaces, setSuggestedFaces] = useState<FaceRead[]>([])
@@ -61,12 +55,12 @@ export default function PersonDetailPage() {
         setSnackbar({ open: true, message, severity })
     }
     const loadDetail = useCallback(async () => {
-        console.log(id)
         if (!id) return
         try {
             const res = await fetch(`${API}/persons/${id}`)
             if (!res.ok) throw new Error('Failed to fetch')
             const data = await res.json()
+            console.log(`[PersonDetailPage] loadDetail for ID ${id} - Received API data.faces:`, JSON.parse(JSON.stringify(data.faces)));
             setDetail(data)
             setForm({
                 name: data.person.name ?? '',
@@ -91,39 +85,32 @@ export default function PersonDetailPage() {
         }
     }, [id])
 
-    async function loadSimilar() {
-        if (!id) return
-        setSimilar([]);
-        setLoadingSim(true)
-        const res = await fetch(`${API}/persons/${id}/similarities`)
-        if (!res.ok) return
-        const data = await res.json()
-        setSimilar(data)
-        setLoadingSim(false)
-    }
+    const loadSimilar = useCallback(async () => {
+        if (!id) return;
+        setSimilarPersons([]); // Clear previous data
+        setLoadingSim(true);
+        try {
+            const res = await fetch(`${API}/persons/${id}/similarities`);
+            if (!res.ok) {
+                console.error('Failed to fetch similarities:', res.status);
+                // Handle error appropriately, maybe set an error state
+                return;
+            }
+            const data: SimilarPersonWithDetails[] = await res.json();
+            setSimilarPersons(data);
+        } catch (error) {
+            console.error('Error loading similarities:', error);
+            // Handle error appropriately
+        } finally {
+            setLoadingSim(false);
+        }
+    }, [id, API]);
 
     useEffect(() => {
         loadDetail()
         loadSuggestedFaces()
         loadSimilar()
     }, [id])
-
-    useEffect(() => {
-        if (similar.length === 0) {
-            setRichSimilar([])
-            return
-        }
-        Promise.all(similar.map(async p => {
-            const res = await fetch(`${API}/persons/${p.id}`)
-            if (!res.ok) return p
-            const detail = await res.json()
-            return {
-                ...p,
-                name: detail.person.name,
-                thumbnail: detail.person.profile_face?.thumbnail_path,
-            }
-        })).then(setRichSimilar)
-    }, [similar])
 
     async function deletePerson() {
         if (!id) return
@@ -137,30 +124,29 @@ export default function PersonDetailPage() {
         setConfirmDelete(false)
     }
 
-    async function onSave(e: FormEvent) {
-        e.preventDefault()
-        if (!id) return
-        setSaving(true)
+    async function onSave(formDataFromChild: { name: string; age: string; gender: string }) {
+        if (!id) return;
+        setSaving(true);
         try {
             const payload: any = {
-                name: form.name,
-                gender: form.gender,
-            }
-            if (form.age !== '') payload.age = Number(form.age)
+                name: formDataFromChild.name,
+                gender: formDataFromChild.gender,
+            };
+            if (formDataFromChild.age !== '') payload.age = Number(formDataFromChild.age);
 
             const res = await fetch(`${API}/persons/${id}`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
-            })
-            if (!res.ok) throw new Error(await res.text())
-            await loadDetail()
-            showMessage('Saved successfully', 'success')
+            });
+            if (!res.ok) throw new Error(await res.text());
+            await loadDetail();
+            showMessage('Saved successfully', 'success');
         } catch (err) {
-            console.error(err)
-            showMessage('Save failed', 'error')
+            console.error(err);
+            showMessage('Save failed', 'error');
         } finally {
-            setSaving(false)
+            setSaving(false);
         }
     }
 
@@ -209,7 +195,7 @@ export default function PersonDetailPage() {
 
     if (loading || !detail) return <Typography p={2}>Loading…</Typography>
     const { person, faces, medias } = detail
-
+    console.log(faces);
     return (
         <Container maxWidth="lg" sx={{ pt: 2, pb: 6 }}>
             {/* Title and controls */}
@@ -295,19 +281,22 @@ export default function PersonDetailPage() {
 
             {/* Media */}
             <MediaAppearances medias={medias}></MediaAppearances>
+
             {/* Detected Faces */}
-            <Box mt={4}>
-                <DetectedFaces
-                    faces={faces}
-                    title="Detected Faces"
-                    horizontal
-                    profileFaceId={person.profile_face_id}
-                    onAssign={handleAssign}
-                    onCreate={handleCreate}
-                    onDelete={handleDelete}
-                    onSetProfile={(faceId) => handleProfileAssignment(faceId, person.id)}
-                />
-            </Box>
+            {faces.length > 0 && (
+                <Box mt={4}>
+                    <DetectedFaces
+                        faces={faces}
+                        title="Detected Faces"
+                        horizontal
+                        profileFaceId={person.profile_face_id}
+                        onAssign={handleAssign}
+                        onCreate={handleCreate}
+                        onDelete={handleDelete}
+                        onSetProfile={(faceId) => handleProfileAssignment(faceId, person.id)}
+                    />
+                </Box>
+            )}
 
             {/* Suggested Faces */}
             {suggestedFaces.length > 0 && (
@@ -325,11 +314,11 @@ export default function PersonDetailPage() {
             )}
 
             {/* Similar People */}
-            {richSimilar?.length > 0 && (
+            {similarPersons?.length > 0 && (
                 <Box mt={4}>
                     <Typography variant="h6" gutterBottom>Similar People</Typography>
                     <Grid container spacing={2}>
-                        {richSimilar.map(p => (
+                        {similarPersons.map(p => (
                             <Grid key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
                                 <SimilarPersonCard {...p} />
                             </Grid>

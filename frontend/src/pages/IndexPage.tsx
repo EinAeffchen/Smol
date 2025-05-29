@@ -1,4 +1,3 @@
-// src/pages/IndexPage.tsx
 import React, { useState, useEffect, useCallback, Fragment } from 'react'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { MediaIndex, PersonIndex } from '../types'

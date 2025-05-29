@@ -1,4 +1,3 @@
-// src/hooks/useInfinite.ts
 import { useState, useRef, useEffect, useCallback } from "react";
 
 export type CursorResponse<T> = {
@@ -7,7 +6,6 @@ export type CursorResponse<T> = {
 };
 
 export function useInfinite<T>(
-  // fetchPage now takes (cursor, limit) and returns items + next_cursor
   fetchPage: (
     cursor: string | null,
     limit: number
@@ -32,8 +30,7 @@ export function useInfinite<T>(
       setLoading(false);
     });
   }, [cursor, fetchPage, hasMore, limit, loading]);
-  //TODO continue fixing cursor on sort change here
-  // on mount or when resetDeps change, clear state and load first page
+
   useEffect(() => {
     console.log("Triggered reset deps!");
     setItems([]);
@@ -46,10 +43,8 @@ export function useInfinite<T>(
       setHasMore(next_cursor !== null);
       setLoading(false);
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, resetDeps);
 
-  // intersection observer for infinite scroll
   useEffect(() => {
     if (loading || !hasMore) return;
     const el = loaderRef.current;

@@ -1,4 +1,3 @@
-// src/pages/MapPage.tsx
 import React, { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { useSearchParams, Link as RouterLink } from 'react-router-dom'

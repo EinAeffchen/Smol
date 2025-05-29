@@ -1,4 +1,3 @@
-// src/components/MediaExif.tsx
 import React, { useState, useEffect } from 'react'
 import { Box, Typography, Link as RouterLink, CircularProgress } from '@mui/material'
 import { Link } from 'react-router-dom'
