@@ -1,8 +1,4 @@
-import React, { useState, useEffect, useCallback, FormEvent } from 'react'
-import Snackbar from '@mui/material/Snackbar'
 import CancelIcon from '@mui/icons-material/Cancel'
-import Alert from '@mui/material/Alert'
-import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
     Avatar,
     Box,
@@ -14,20 +10,27 @@ import {
     DialogContent,
     DialogTitle,
     Grid,
+    Paper,
     Stack,
     TextField,
     Typography,
-    Paper
+    CircularProgress
 } from '@mui/material'
-import SimilarPersonCard from '../components/SimilarPersonCard'
-import TagAdder from '../components/TagAdder'
+import LazyLoadSection from '../components/LazyLoadSection'
+import Alert from '@mui/material/Alert'
+import Snackbar from '@mui/material/Snackbar'
+import { useCallback, useEffect, useState } from 'react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import DetectedFaces from '../components/DetectedFaces'
-import { useFaceActions } from '../hooks/useFaceActions'
-import { FaceRead, Person, PersonDetail, SimilarPerson, Tag } from '../types'
 import { MediaAppearances } from '../components/MediaAppearances'
 import { PersonEditForm } from '../components/PersonEditForm'
+import SimilarPersonCard from '../components/SimilarPersonCard'
+import TagAdder from '../components/TagAdder'
 import { API, READ_ONLY } from '../config'
-
+import { useFaceActions } from '../hooks/useFaceActions'
+import { Face, FaceRead, Person, PersonDetail, SimilarPerson, Tag } from '../types'
+import { SimilarPersonWithDetails } from '../types'
+import { CursorResponse, useInfinite } from '../hooks/useInfinite'
 
 export default function PersonDetailPage() {
     const { id } = useParams<{ id: string }>()
@@ -38,42 +41,94 @@ export default function PersonDetailPage() {
     const [form, setForm] = useState({ name: '', age: '', gender: '' })
     const [saving, setSaving] = useState(false)
 
+    // States for the paginated "Detected Faces" section
+    const [detectedFacesList, setDetectedFacesList] = useState<FaceRead[]>([]);
+    const [facesNextCursor, setFacesNextCursor] = useState<string | null>(null);
+    const [loadingMoreFaces, setLoadingMoreFaces] = useState<boolean>(false);
+    const [hasMoreFaces, setHasMoreFaces] = useState<boolean>(true); // Assume more initially
+
+
     const [mergeOpen, setMergeOpen] = useState(false)
     const [searchTerm, setSearchTerm] = useState('')
     const [candidates, setCandidates] = useState<Person[]>([])
-
     const [similarPersons, setSimilarPersons] = useState<SimilarPerson[]>([])
-    const [loadingSim, setLoadingSim] = useState(false)
-
     const [suggestedFaces, setSuggestedFaces] = useState<FaceRead[]>([])
 
     const { assignFace, createPersonFromFace, deleteFace, setProfileFace } = useFaceActions()
-
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
     const [confirmDelete, setConfirmDelete] = useState(false)
 
     const showMessage = (message: string, severity: 'success' | 'error' = 'success') => {
         setSnackbar({ open: true, message, severity })
     }
+
     const loadDetail = useCallback(async () => {
-        if (!id) return
+        if (!id) return;
         try {
-            const res = await fetch(`${API}/persons/${id}`)
-            if (!res.ok) throw new Error('Failed to fetch')
-            const data = await res.json()
-            console.log(`[PersonDetailPage] loadDetail for ID ${id} - Received API data.faces:`, JSON.parse(JSON.stringify(data.faces)));
-            setDetail(data)
+            const res = await fetch(`${API}/persons/${id}`);
+            if (!res.ok) throw new Error('Failed to fetch person details');
+            const personData: PersonDetail = await res.json(); // Assuming this no longer sends bulk faces
+            setDetail(personData);
             setForm({
-                name: data.person.name ?? '',
-                age: data.person.age ?? '',
-                gender: data.person.gender ?? '',
-            })
+                name: personData.person.name ?? '',
+                age: personData.person.age?.toString() ?? '', // Ensure age is string for form
+                gender: personData.person.gender ?? '',
+            });
         } catch (err) {
-            console.error(err)
-        } finally {
-            setLoading(false)
+            console.error("Error in loadDetail:", err);
+            setDetail(null);
         }
-    }, [id])
+    }, [id, API]);
+
+    const fetchFacesPage = useCallback(async (personId: string, cursor: string | null, limit: number = 20): Promise<CursorResponse<FaceRead> | null> => {
+        let url = `${API}/persons/${personId}/faces?limit=${limit}`;
+        if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+        try {
+            const res = await fetch(url);
+            if (!res.ok) {
+                console.error(`Failed to fetch faces for person ${personId}: ${res.status}`);
+                return null;
+            }
+            return await res.json();
+        } catch (error) {
+            console.error(`Error fetching faces for person ${personId}:`, error);
+            return null;
+        }
+    }, [API]);
+
+
+    const loadInitialDetectedFaces = useCallback(async (personId: string) => {
+        if (!personId) return;
+        setLoadingMoreFaces(true); // Use this for initial load as well
+        setDetectedFacesList([]);
+        setFacesNextCursor(null);
+        setHasMoreFaces(true); // Reset assumption
+
+        const pageData = await fetchFacesPage(personId, null);
+        if (pageData) {
+            setDetectedFacesList(pageData.items);
+            setFacesNextCursor(pageData.next_cursor);
+            setHasMoreFaces(!!pageData.next_cursor && pageData.items.length > 0);
+        } else {
+            setHasMoreFaces(false);
+        }
+        setLoadingMoreFaces(false);
+    }, [fetchFacesPage]);
+
+    const loadMoreDetectedFaces = useCallback(async () => {
+        if (!id || !facesNextCursor || loadingMoreFaces || !hasMoreFaces) return;
+        setLoadingMoreFaces(true);
+        const pageData = await fetchFacesPage(id, facesNextCursor);
+        if (pageData?.items) {
+            setDetectedFacesList(prevFaces => [...prevFaces, ...pageData.items]);
+            setFacesNextCursor(pageData.next_cursor);
+            setHasMoreFaces(!!pageData.next_cursor && pageData.items.length > 0);
+        } else {
+            setHasMoreFaces(false); // No more items or error
+        }
+        setLoadingMoreFaces(false);
+    }, [id, facesNextCursor, loadingMoreFaces, hasMoreFaces, fetchFacesPage]);
+
 
     const loadSuggestedFaces = useCallback(async () => {
         if (!id) return
@@ -89,7 +144,6 @@ export default function PersonDetailPage() {
     const loadSimilar = useCallback(async () => {
         if (!id) return;
         setSimilarPersons([]); // Clear previous data
-        setLoadingSim(true);
         try {
             const res = await fetch(`${API}/persons/${id}/similarities`);
             if (!res.ok) {
@@ -102,16 +156,78 @@ export default function PersonDetailPage() {
         } catch (error) {
             console.error('Error loading similarities:', error);
             // Handle error appropriately
-        } finally {
-            setLoadingSim(false);
         }
     }, [id, API]);
 
     useEffect(() => {
-        loadDetail()
-        loadSuggestedFaces()
-        loadSimilar()
-    }, [id])
+        if (id) {
+            setLoading(true);
+            setDetail(null);
+            setDetectedFacesList([]);
+            setFacesNextCursor(null);
+            setHasMoreFaces(true);
+            setLoadingMoreFaces(false);
+            setSuggestedFaces([]);
+            setSimilarPersons([]);
+            // ... reset other page-specific states
+
+            const initialLoad = async () => {
+                await Promise.all([
+                    loadDetail(),
+                    loadInitialDetectedFaces(id),
+                    loadSuggestedFaces(), // Consider lazy loading these
+                    loadSimilar()       // Consider lazy loading these
+                ]);
+                // Load non-critical sections after main content or via lazy load
+                loadSuggestedFaces();
+                loadSimilar();
+                setLoading(false);
+            };
+            initialLoad();
+        } else {
+            setLoading(false);
+            setDetail(null);
+            // Clear other states
+        }
+    }, [id, loadDetail, loadInitialDetectedFaces, loadSimilar, loadSuggestedFaces]); // Add memoized loaders
+
+    const handleAssignWrapper = async (faceId: number, assignedToPersonId: number) => {
+        await assignFace(faceId, assignedToPersonId); // Call action from useFaceActions
+        if (detail && assignedToPersonId !== detail.person.id) {
+            // Face assigned to someone else, remove from this person's list
+            setDetectedFacesList(prev => prev.filter(f => f.id !== faceId));
+        } else if (detail && assignedToPersonId === detail.person.id) {
+            // Face assigned to THIS person (e.g., from suggestions). Refresh this person's face list.
+            if (id) loadInitialDetectedFaces(id); // Or a more targeted update if possible
+        }
+        // Refresh other relevant data
+        loadDetail(); // For profile face changes, etc.
+        loadSuggestedFaces(); // A suggestion might have been used
+    };
+
+    const handleDeleteWrapper = async (faceId: number) => {
+        await deleteFace(faceId);
+        setDetectedFacesList(prev => prev.filter(f => f.id !== faceId));
+        // Also remove from suggestedFaces if it was there (though onDelete is usually on assigned faces)
+        setSuggestedFaces(prev => prev.filter(f => f.id !== faceId));
+        loadDetail(); // Person's face count / profile face might change
+    };
+
+    const handleCreateWrapper = async (faceId: number, data: any): Promise<Person> => {
+        const newPerson = await createPersonFromFace(faceId, data);
+        // The face 'faceId' is now assigned to 'newPerson'.
+        // Remove it from the suggestedFaces list of the current person (if it was there).
+        setSuggestedFaces(prev => prev.filter(f => f.id !== faceId));
+        // If this face was somehow also in detectedFacesList (e.g. if list showed unassigned), remove it.
+        setDetectedFacesList(prev => prev.filter(f => f.id !== faceId));
+        navigate(`/person/${newPerson.id}`); // Navigate to the newly created person
+        return newPerson;
+    };
+
+    const handleProfileAssignmentWrapper = async (faceId: number, personIdToAssign: number) => {
+        await setProfileFace(faceId, personIdToAssign);
+        loadDetail(); // Reload to show the new profile face
+    };
 
     async function deletePerson() {
         if (!id) return
@@ -166,10 +282,6 @@ export default function PersonDetailPage() {
         await loadSuggestedFaces()
         // await loadSimilar()
     }
-    const handleProfileAssignment = async (faceId: number, personId: number) => {
-        await setProfileFace(faceId, personId)
-        await loadDetail()
-    }
 
     const handleDelete = async (faceId: number) => {
         await deleteFace(faceId)
@@ -195,8 +307,7 @@ export default function PersonDetailPage() {
     }, [mergeOpen, searchTerm])
 
     if (loading || !detail) return <Typography p={2}>Loading…</Typography>
-    const { person, faces, medias } = detail
-    console.log(faces);
+    const { person, medias } = detail
     return (
         <Container maxWidth="lg" sx={{ pt: 2, pb: 6 }}>
             {/* Title and controls */}
@@ -288,50 +399,59 @@ export default function PersonDetailPage() {
             {/* Media */}
             <MediaAppearances medias={medias}></MediaAppearances>
 
-            {/* Detected Faces */}
-            {faces.length > 0 && (
-                <Box mt={4}>
-                    <DetectedFaces
-                        faces={faces}
-                        title="Detected Faces"
-                        horizontal
-                        profileFaceId={person.profile_face_id}
-                        onAssign={handleAssign}
-                        onCreate={handleCreate}
-                        onDelete={handleDelete}
-                        onSetProfile={(faceId) => handleProfileAssignment(faceId, person.id)}
-                    />
-                </Box>
+            {/* Detected Faces for THIS person */}
+            <DetectedFaces
+                title="Detected Faces"
+                faces={detectedFacesList}
+                profileFaceId={person.profile_face_id}
+                onSetProfile={(faceId) => handleProfileAssignmentWrapper(faceId, person.id)}
+                onAssign={handleAssignWrapper}
+                onCreate={handleCreateWrapper} // Usually not called from THIS list, but from suggestions
+                onDelete={handleDeleteWrapper}
+                onLoadMore={loadMoreDetectedFaces}
+                hasMore={hasMoreFaces}
+                isLoadingMore={loadingMoreFaces}
+            />
+            {/* Show initial loading for detected faces if the list is empty */}
+            {loadingMoreFaces && detectedFacesList.length === 0 && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
+            )}
+            {/* Message if no faces found for this person after trying to load */}
+            {!loadingMoreFaces && detectedFacesList.length === 0 && !hasMoreFaces && (
+                <Box mt={2} sx={{ textAlign: 'center' }}><Typography variant="body2" color="text.secondary">No faces detected for this person.</Typography></Box>
             )}
 
             {/* Suggested Faces */}
-            {suggestedFaces.length > 0 && (
-                <Box mt={4}>
-                    <DetectedFaces
-                        faces={suggestedFaces}
-                        title="Is this the same person?"
-                        horizontal
-                        onAssign={handleAssign}
-                        onCreate={handleCreate}
-                        onDelete={handleDelete}
-                        onSetProfile={() => { }}
-                    />
-                </Box>
-            )}
+            <LazyLoadSection onIntersect={loadSuggestedFaces} placeholderHeight="220px">
+                {suggestedFaces.length > 0 && (
+                    <Box mt={4}>
+                        <DetectedFaces
+                            faces={suggestedFaces}
+                            title="Is this the same person?"
+                            onAssign={handleAssignWrapper}
+                            onCreate={handleCreateWrapper}
+                            onDelete={handleDeleteWrapper}
+                            onSetProfile={() => { }}
+                        />
+                    </Box>
+                )}
+            </LazyLoadSection>
 
             {/* Similar People */}
-            {similarPersons?.length > 0 && (
-                <Box mt={4}>
-                    <Typography variant="h6" gutterBottom>Similar People</Typography>
-                    <Grid container spacing={2}>
-                        {similarPersons.map(p => (
-                            <Grid key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
-                                <SimilarPersonCard {...p} />
-                            </Grid>
-                        ))}
-                    </Grid>
-                </Box>
-            )}
+            <LazyLoadSection onIntersect={loadSimilar} placeholderHeight="250px">
+                {similarPersons?.length > 0 && (
+                    <Box mt={4}>
+                        <Typography variant="h6" gutterBottom>Similar People</Typography>
+                        <Grid container spacing={2}>
+                            {similarPersons.map(p => (
+                                <Grid key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+                                    <SimilarPersonCard {...p} />
+                                </Grid>
+                            ))}
+                        </Grid>
+                    </Box>
+                )}
+            </LazyLoadSection>
 
             {/* Merge Dialog */}
             <Dialog open={mergeOpen} onClose={() => setMergeOpen(false)}>

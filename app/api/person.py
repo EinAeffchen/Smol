@@ -12,7 +12,7 @@ from fastapi import (
 from sqlalchemy.orm import selectinload, defer
 from sqlmodel import Session, delete, select, text, update
 
-from app.database import get_session, safe_commit
+from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
 from app.models import Face, Person, PersonTagLink
 from app.schemas.person import (
@@ -24,6 +24,7 @@ from app.schemas.person import (
     PersonUpdate,
     SimilarPerson,
 )
+from app.schemas.face import CursorPage as FaceCursorPage
 from app.utils import (
     get_person_embedding,
     update_person_embedding,
@@ -119,6 +120,41 @@ def suggest_faces(
     ]
 
 
+@router.get("/{person_id}/faces", response_model=FaceCursorPage)
+def get_faces(
+    person_id: int,
+    session: Session = Depends(get_session),
+    cursor: str | None = Query(
+        None,
+        description="encoded as `<id>`; e.g. `1234`",
+    ),
+    limit: int = 10,
+):
+    person = session.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    before_id = None
+    if cursor:
+        before_id = int(cursor)
+    q = (
+        select(Face)
+        .where(Face.person_id == person.id)
+        .options(defer(Face.embedding))
+        .order_by(Face.id.desc())
+    )
+    if before_id:
+        q = q.where(Face.id < before_id)
+
+    faces = safe_execute(session, q.limit(limit)).all()
+    if len(faces) == limit:
+        next_cursor = str(faces[-1].id)
+    else:
+        next_cursor = None
+
+    return FaceCursorPage(next_cursor=next_cursor, items=faces)
+
+
 @router.get("/{person_id}", response_model=PersonDetail)
 def get_person(person_id: int, session: Session = Depends(get_session)):
     person = session.get(Person, person_id)
@@ -169,18 +205,8 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
             "thumbnail_path": person.profile_face.thumbnail_path,
         }
         dict_person["tags"] = person.tags
-    serialized_faces = [
-        {
-            "id": face.id,
-            "person_id": face.person_id,
-            "thumbnail_path": face.thumbnail_path,
-            "media_id": face.media_id,
-        }
-        for face in faces
-    ]
     return {
         "person": dict_person,
-        "faces": serialized_faces,
         "medias": medias,
     }
 
@@ -286,7 +312,9 @@ def merge_persons(
 )
 def delete_person(person_id: int, session: Session = Depends(get_session)):
     if READ_ONLY:
-        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
@@ -411,7 +439,9 @@ def refresh_similarities(
     session: Session = Depends(get_session),
 ):
     if READ_ONLY:
-        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     if not session.get(Person, person_id):
         raise HTTPException(404, "Person not found")
 

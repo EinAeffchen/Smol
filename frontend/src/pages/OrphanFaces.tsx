@@ -3,8 +3,8 @@ import { Container, Box, Typography, Grid, CircularProgress } from '@mui/materia
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import FaceCard from '../components/FaceCard'
 import { FaceRead } from '../types'
+import { API } from '../config'
 
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
 const ITEMS_PER_PAGE = 48
 
 export default function OrphanFacesPage() {

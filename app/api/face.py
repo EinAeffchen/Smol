@@ -1,21 +1,30 @@
-from fastapi import APIRouter, Query, Body, Depends, HTTPException, status
+import json
+
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    HTTPException,
+    Query,
+    Response,
+    status,
+)
 from pydantic import BaseModel
+from sqlalchemy.orm import defer
 from sqlmodel import Session, delete, select, text
 
-from app.config import THUMB_DIR, READ_ONLY
+from app.config import READ_ONLY, THUMB_DIR
 from app.database import get_session, safe_commit, safe_execute
-from app.models import Face, Person, PersonSimilarity, PersonTagLink
-from app.schemas.face import FaceAssign, CursorPage, FaceAssignReturn
-from app.schemas.person import PersonMinimal
 from app.logger import logger
+from app.models import Face, Person, PersonSimilarity, PersonTagLink
+from app.schemas.face import CursorPage, FaceAssign, FaceAssignReturn
+from app.schemas.person import PersonMinimal
 from app.utils import update_person_embedding
-import json
-from fastapi import Response
 
 router = APIRouter()
 
-logger.warning("READ_ONLY: %s", READ_ONLY)
-logger.warning("READ_ONLY: %s", type(READ_ONLY))
+
+
 @router.post(
     "/{face_id}/assign",
     summary="Assign an existing face to a person",
@@ -137,7 +146,10 @@ def get_orphans(
     if cursor:
         before_id = int(cursor)
     query = (
-        select(Face).where(Face.person_id.is_(None)).order_by(Face.id.desc())
+        select(Face)
+        .where(Face.person_id.is_(None))
+        .options(defer(Face.embedding))
+        .order_by(Face.id.desc())
     )
     if before_id:
         query = query.where(Face.id < before_id)

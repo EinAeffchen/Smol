@@ -72,6 +72,13 @@ export interface Task {
   processed: number;
 }
 
+export interface SimilarPersonWithDetails {
+  id: number;
+  name?: string;
+  similarity: number;
+  thumbnail?: string;
+}
+
 export interface SimilarPerson {
   id: number;
   name?: string;

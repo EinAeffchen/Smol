@@ -53,7 +53,7 @@ else:
 MIN_CLIP_SEARCH_SIMILARITY = 0.1
 if READ_ONLY is False:
     model, preprocess, _ = open_clip.create_model_and_transforms(
-        "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k", device="cuda"
+        "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k"
     )
 else:
     model, preprocess, _ = open_clip.create_model_and_transforms(
@@ -66,7 +66,7 @@ tokenizer = open_clip.get_tokenizer("xlm-roberta-large-ViT-H-14")
 # face recognition settings
 MAX_FRAMES_PER_VIDEO = 30
 FACE_RECOGNITION_MIN_CONFIDENCE = 0.75
-FACE_MATCH_COSINE_THRESHOLD = 0.85
+FACE_MATCH_COSINE_THRESHOLD = 0.55
 FACE_RECOGNITION_MIN_FACE_PIXELS = 60 * 60
 PERSON_MIN_FACE_COUNT = (
     2  # how many matching faces must a person have for auto creation

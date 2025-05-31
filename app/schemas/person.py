@@ -6,8 +6,6 @@ from sqlmodel import SQLModel
 class PersonDetail(BaseModel):
     person: dict  # or import dict[str, Any] if you want a strict shape
     medias: list[dict]  # list of Media dicts
-    faces: list[dict]
-
 
 class PersonUpdate(BaseModel):
     name: str | None = None
