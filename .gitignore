@@ -127,7 +127,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-docker-compose.yml
 *.Zone.Identifier
 
 smol.db
