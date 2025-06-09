@@ -23,7 +23,7 @@ export function MediaExif({ show, mediaId }: MediaExifProps) {
     // Fetch EXIF when shown
     useEffect(() => {
         if (show && exif === undefined) {
-            fetch(`${API}/api/media/${mediaId}/processors/exif`)
+            fetch(`${API}/media/${mediaId}/processors/exif`)
                 .then(res => (res.ok ? res.json() : null))
                 .then(body => setExif(body))
                 .catch(() => setExif(null))

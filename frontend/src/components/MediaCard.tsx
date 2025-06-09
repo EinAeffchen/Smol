@@ -13,8 +13,8 @@ function formatDuration(d?: number): string {
 export default function MediaCard({ media }: { media: Media }) {
   const API = import.meta.env.VITE_API_BASE_URL
   const isVideo = typeof media.duration === 'number'
-  const mediaUrl = `${API}/originals/${media.path}`
-  const thumbUrl = `${API}/thumbnails/${media.id}.jpg`
+  const mediaUrl = `/originals/${media.path}`
+  const thumbUrl = `/thumbnails/${media.id}.jpg`
   const [hovered, setHovered] = useState(false)
 
   return (

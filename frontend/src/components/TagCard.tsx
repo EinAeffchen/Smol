@@ -146,7 +146,7 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                             {tag.media.slice(0, 4).map(m => (
                                 <Avatar
                                     key={`m-${m.id}`}
-                                    src={`${API}/thumbnails/${m.id}.jpg`} // Ensure this endpoint works for media
+                                    src={`/thumbnails/${m.id}.jpg`} // Ensure this endpoint works for media
                                     alt={m.filename || 'Media thumbnail'}
                                     variant="rounded"
                                 />

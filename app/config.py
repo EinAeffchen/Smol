@@ -19,7 +19,8 @@ STATIC_DIR: Path = SMOL_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True, parents=True)
 # Where thumbnails are written
 THUMB_DIR = SMOL_DIR / "thumbnails"
-MODELS_DIR = Path(__file__).parent / "models"
+MODELS_DIR = SMOL_DIR/"models"
+MODELS_DIR.mkdir(exist_ok=True, parents=True)
 
 VIDEO_SUFFIXES = [
     ".mp4",
@@ -51,16 +52,16 @@ else:
 # ------- AI Settings -------------
 # Image embedding and text search model
 MIN_CLIP_SEARCH_SIMILARITY = 0.1
-if READ_ONLY is False:
-    model, preprocess, _ = open_clip.create_model_and_transforms(
-        "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k"
-    )
-else:
-    model, preprocess, _ = open_clip.create_model_and_transforms(
-        "xlm-roberta-large-ViT-H-14",
-        pretrained="frozen_laion5b_s13b_b90k",
-        device="cpu",
-    )
+# if READ_ONLY is False:
+#     model, preprocess, _ = open_clip.create_model_and_transforms(
+#         "xlm-roberta-large-ViT-H-14", pretrained="frozen_laion5b_s13b_b90k"
+#     )
+# else:
+model, preprocess, _ = open_clip.create_model_and_transforms(
+    "xlm-roberta-large-ViT-H-14",
+    pretrained="frozen_laion5b_s13b_b90k",
+    device="cpu",
+)
 
 tokenizer = open_clip.get_tokenizer("xlm-roberta-large-ViT-H-14")
 # face recognition settings

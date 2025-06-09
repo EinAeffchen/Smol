@@ -208,7 +208,7 @@ export default function FaceCard({
                 <Box sx={{ position: 'relative' }}>
                     <CardActionArea component={Link} to={`/media/${face.media_id}`}>
                         <Avatar
-                            src={`${API}/thumbnails/${face.thumbnail_path}`}
+                            src={`/thumbnails/${face.thumbnail_path}`}
                             variant="rounded"
                             sx={{ width: '100%', height: 124, borderRadius: 2, border: isProfile ? '3px solid #FF2E88' : 'none' }}
                         />

@@ -329,7 +329,7 @@ export default function PersonDetailPage() {
             {/* Profile  Form as horizontal layout */}
             <Paper sx={{ display: 'flex', p: 3, gap: 4, alignItems: 'center', bgcolor: '#2C2C2E', mb: 4 }}>
                 <Avatar
-                    src={`${API}/thumbnails/${person.profile_face?.thumbnail_path}`}
+                    src={`/thumbnails/${person.profile_face?.thumbnail_path}`}
                     sx={{ width: 100, height: 100, border: '4px solid #FF2E88' }}
                 />
 

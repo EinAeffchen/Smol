@@ -56,9 +56,9 @@ def search(
             SELECT media_id, distance
               FROM media_embeddings
              WHERE embedding MATCH :vec
-               AND distance < :max_dist
+                AND k = :k
+                AND distance < :max_dist
              ORDER BY distance
-            LIMIT :k
             """
         ).bindparams(
             vec=json.dumps(vec), max_dist=max_dist, k=limit * max_pages

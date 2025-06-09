@@ -12,7 +12,7 @@ export function VideoWithPreview({ media }: { media: Media }) {
     const plyrInstanceRef = useRef<Plyr | null>(null);
 
     const [loading, setLoading] = useState(true)
-    const mediaUrl = `${API}/originals/${media.path}`
+    const mediaUrl = `/originals/${media.path}`
 
     useEffect(() => {
         if (!playerContainerRef.current || !media.path) {

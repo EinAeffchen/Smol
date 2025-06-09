@@ -15,6 +15,7 @@ def load_processors() -> list[MediaProcessor]:
     Scan the app/processors folder, import every module,
     instantiate any MediaProcessor subclasses, and return them.
     """
+    logger.debug("Loading processors!")
     # only import once
     if processors:
         return processors

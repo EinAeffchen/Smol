@@ -97,10 +97,10 @@ def suggest_faces(
             SELECT face_id, distance
               FROM face_embeddings
              WHERE embedding MATCH :vec
+                    and k = :k
                     and person_id = -1
                     and distance < 1.5
              ORDER BY distance
-            LIMIT :k
             """
     ).bindparams(vec=json.dumps(target.tolist()), k=limit)
     rows = session.exec(sql).all()

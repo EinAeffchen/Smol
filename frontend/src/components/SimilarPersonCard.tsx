@@ -14,7 +14,7 @@ export default function SimilarPersonCard({ id, name, similarity, thumbnail }: S
       >
         {thumbnail ? (
           <Avatar
-            src={`${API}/thumbnails/${thumbnail}`}
+            src={`/thumbnails/${thumbnail}`}
             sx={{ width: 64, height: 64, mb: 1, border: '2px solid #FF2E88' }}
           />
         ) : (

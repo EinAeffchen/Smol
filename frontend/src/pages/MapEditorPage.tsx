@@ -193,7 +193,7 @@ export default function MapEditorPage() {
                             >
                                 <Box
                                     component="img"
-                                    src={`${API}/thumbnails/${m.id}.jpg`}
+                                    src={`/thumbnails/${m.id}.jpg`}
                                     alt=""
                                     sx={{
                                         width: '100%',

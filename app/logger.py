@@ -6,7 +6,7 @@ def setup_logger():
     logging.getLogger("PIL.TiffImagePlugin").setLevel(logging.CRITICAL + 1)
 
     logger = logging.getLogger(__name__)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     logger.propagate = False
     if not logger.handlers:
         ch = logging.StreamHandler()

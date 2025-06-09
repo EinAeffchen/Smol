@@ -104,6 +104,9 @@ def _run_media_processing(task_id: str):
     session.add(task)
     safe_commit(session)
 
+    for proc in processors:
+        proc.load_model()
+
     for media in medias:
         logger.info("Processing: %s", media.filename)
         # allow cancellation
@@ -139,8 +142,6 @@ def _run_media_processing(task_id: str):
                 session.add(scene[0])
         safe_commit(session)
 
-        for proc in processors:
-            proc.load_model()
         broken = False
         for proc in processors:
             try:
@@ -308,8 +309,8 @@ def assign_to_existing_persons(
                 SELECT person_id, distance
                   FROM person_embeddings
                  WHERE embedding MATCH :vec
+                 and K = 1
                  ORDER BY distance
-                LIMIT 1
             """
         ).bindparams(vec=vec_param)
         row = session.exec(sql).first()

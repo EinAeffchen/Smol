@@ -257,7 +257,7 @@ export default function MediaDetailPage() {
                     {media.duration ? (
                         <VideoWithPreview key={media.id} media={media} />
                     ) : (
-                        <Box component="img" src={`${API}/originals/${media.path}`} alt={media.filename} sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                        <Box component="img" src={`/originals/${media.path}`} alt={media.filename} sx={{ width: '100%', height: '100%', objectFit: 'contain' }} />
                     )}
                 </Paper>
             </Box>

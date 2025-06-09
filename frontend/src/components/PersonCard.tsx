@@ -16,7 +16,7 @@ export default function PersonCard({ person }: { person: Person }) {
   const API = import.meta.env.VITE_API_BASE_URL ?? ''
   const thumb =
     person.profile_face?.thumbnail_path
-      ? `${API}/thumbnails/${person.profile_face.thumbnail_path}`
+      ? `/thumbnails/${person.profile_face.thumbnail_path}`
       : undefined
 
   return (

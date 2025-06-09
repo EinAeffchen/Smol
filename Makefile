@@ -44,3 +44,6 @@ test:
 
 dev:
 	cd frontend && npm run dev
+
+docker-start:
+	docker compose up -d --build

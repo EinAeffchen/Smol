@@ -74,12 +74,14 @@ def safe_execute(
 
 
 def init_db():
+    logger.debug("Setting up db!")
     from app.models import Face, Media, MediaTagLink, Person, Tag, Scene
 
     SQLModel.metadata.create_all(engine)
 
 
 def init_vec_index():
+    logger.debug("Setting up vector index!")
     with engine.begin() as conn:
         # 1) virtual table over (media_id, embedding)
         conn.execute(

@@ -332,9 +332,9 @@ def get_similar_media(
       SELECT media_id
         FROM media_embeddings
        WHERE embedding MATCH :vec
-         AND distance < :maxd
+            AND k=:k
+            AND distance < :maxd
        ORDER BY distance
-       LIMIT :k
     """
     ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k)
     rows = session.exec(sql).all()

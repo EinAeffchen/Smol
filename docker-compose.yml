@@ -1,22 +1,15 @@
 services:
-  myapp:
+  smol:
+    user: "${UID}"
     build: .
     image: smol
-    runtime: nvidia
     container_name: smol
     ports:
       - "8000:8000" # Or your preferred host port
     volumes:
-      - ./media2:/app/media
+      - ./mnt/d/OneDrive/Fotos:/app/media
     environment:
       - PORT=8000
       - MEDIA_DIR=/app/media
       # Add any other environment variables your app needs
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1 # Or 'all' to use all available GPUs
-              capabilities: [gpu]

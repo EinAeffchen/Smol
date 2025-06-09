@@ -4,12 +4,12 @@ sqlmodel==0.0.24
 pydantic==2.11.3
 python-multipart==0.0.20
 ffmpeg-python==0.2.0
-opencv-python==4.11.0.86
+opencv-python-headless==4.11.0.86
 insightface==0.7.3
 watchdog==6.0.0
 alembic==1.15.2
 open_clip_torch==2.32.0
-onnxruntime-gpu==1.21.1
+onnxruntime==1.21.1
 scenedetect==0.6.6
 transformers==4.51.3
 piexif==1.1.3

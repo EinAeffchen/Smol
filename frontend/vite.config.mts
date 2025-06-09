@@ -15,7 +15,7 @@ export default defineConfig(({ mode, command }) => {
   // ---- END DEBUG LOG ----
   
   return {
-    // base: "/static/", // Uncomment and set if your app is served from a sub-path
+    base: "/static/", // Uncomment and set if your app is served from a sub-path
     plugins: [react()],
     server: {
       port: 5173,
@@ -27,15 +27,15 @@ export default defineConfig(({ mode, command }) => {
         },
       },
     },
-    optimizeDeps: {
-      include: ["prop-types"],
-    },
+    // optimizeDeps: {
+    //   include: ["prop-types"],
+    // },
     build: {
       minify: true,
     },
-    define: {
-      "process.env.NODE_ENV": JSON.stringify(mode),
-    },
+    // define: {
+    //   "process.env.NODE_ENV": JSON.stringify(mode),
+    // },
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),

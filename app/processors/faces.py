@@ -1,21 +1,22 @@
 # app/processors/exif.py
+import json
 import time
 from pathlib import Path
 
+import numpy as np
 from cv2.typing import MatLike
 from insightface.app import FaceAnalysis
 from PIL import Image
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text
-import json
+from tqdm import tqdm
+
 from app.api.media import delete_media_record
 from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, THUMB_DIR
 from app.database import safe_commit
+from app.logger import logger
 from app.models import ExifData, Face, Media, Scene
 from app.processors.base import MediaProcessor
-from app.logger import logger
-import numpy as np
-from tqdm import tqdm
 
 
 class FaceProcessor(MediaProcessor):
@@ -138,7 +139,8 @@ class FaceProcessor(MediaProcessor):
         self.model.prepare(ctx_id=0)  # ctx_id=0 for GPU, -1 for CPU
 
     def unload(self):
-        del self.model
+        if self.model:
+            del self.model
 
     def get_results(self, media_id: int, session):
         return session.exec(

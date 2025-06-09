@@ -40,12 +40,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(proc_router, prefix="/api", tags=["processors"])
-app.include_router(media, prefix="/media", tags=["media"])
-app.include_router(person, prefix="/persons", tags=["persons"])
-app.include_router(tasks, prefix="/tasks", tags=["tasks"])
-app.include_router(face, prefix="/faces", tags=["faces"])
-app.include_router(tags, prefix="/tags", tags=["tags"])
-app.include_router(search, prefix="/search", tags=["search"])
+app.include_router(media, prefix="/api/media", tags=["media"])
+app.include_router(person, prefix="/api/persons", tags=["persons"])
+app.include_router(tasks, prefix="/api/tasks", tags=["tasks"])
+app.include_router(face, prefix="/api/faces", tags=["faces"])
+app.include_router(tags, prefix="/api/tags", tags=["tags"])
+app.include_router(search, prefix="/api/search", tags=["search"])
 
 app.mount(
     "/thumbnails",
@@ -59,7 +59,7 @@ app.mount(
 )
 app.mount(
     "/static",
-    StaticFiles(directory=str(STATIC_DIR)),
+    StaticFiles(directory=str(STATIC_DIR), html=True),
     name="static",
 )
 app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
