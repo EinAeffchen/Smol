@@ -10,7 +10,7 @@ const ITEMS_PER_PAGE = 48
 export default function OrphanFacesPage() {
     const fetchOrphans = useCallback((cursor: string | null, limit: number) =>
         fetch(
-            `${API}/faces/orphans${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
+            `${API}/api/faces/orphans${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
         )
             .then(res => {
                 if (!res.ok) throw new Error(res.statusText)
@@ -28,7 +28,7 @@ export default function OrphanFacesPage() {
 
     // assign a face to an existing person
     async function assignFace(faceId: number, personId: number) {
-        await fetch(`${API}/faces/${faceId}/assign`, {
+        await fetch(`${API}/api/faces/${faceId}/assign`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ person_id: personId }),
@@ -38,7 +38,7 @@ export default function OrphanFacesPage() {
 
     // create a new person from a face
     async function createPersonFromFace(faceId: number, data: any) {
-        const res = await fetch(`${API}/faces/${faceId}/create_person`, {
+        const res = await fetch(`${API}/api/faces/${faceId}/create_person`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data),
@@ -50,7 +50,12 @@ export default function OrphanFacesPage() {
 
     // delete a face entirely
     async function deleteFace(faceId: number) {
-        await fetch(`${API}/faces/${faceId}`, { method: 'DELETE' })
+        await fetch(`${API}/api/faces/${faceId}`, { method: 'DELETE' })
+        setOrphans(prev => prev.filter(f => f.id !== faceId))
+    }
+    // detach a face
+    async function detachFace(faceId: number) {
+        await fetch(`${API}/api/faces/${faceId}/detach`, { method: 'POST' })
         setOrphans(prev => prev.filter(f => f.id !== faceId))
     }
 
@@ -88,6 +93,7 @@ export default function OrphanFacesPage() {
                             onAssign={pid => assignFace(face.id, pid)}
                             onCreate={data => createPersonFromFace(face.id, data)}
                             onDelete={() => deleteFace(face.id)}
+                            onDetach={() => detachFace(face.id)}
                         />
                     </Grid>
                 ))}

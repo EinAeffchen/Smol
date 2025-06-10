@@ -1,4 +1,3 @@
-// src/components/DetectedFaces.tsx
 import React, { useRef, useEffect, useCallback } from 'react';
 import { Box, Stack, Typography, CircularProgress } from '@mui/material'; // Added CircularProgress
 import { FaceRead, Person } from '../types';
@@ -12,6 +11,7 @@ interface DetectedFacesProps {
     onAssign: (faceId: number, personId: number) => void;
     onCreate: (faceId: number, data: any) => Promise<Person>; // Or appropriate return type
     onDelete: (faceId: number) => void;
+    onDetach: (faceId: number) => void;
     onLoadMore?: () => void;         // Optional: Function to call to load more
     hasMore?: boolean;               // Optional: Boolean indicating if more items can be loaded
     isLoadingMore?: boolean;         // Optional: Boolean indicating if currently loading more
@@ -25,6 +25,7 @@ export default function DetectedFaces({
     onAssign,
     onCreate,
     onDelete,
+    onDetach,
     onLoadMore,
     hasMore,
     isLoadingMore,
@@ -95,6 +96,7 @@ export default function DetectedFaces({
                             onAssign={(personId) => onAssign(face.id, personId)}
                             onCreate={(data) => onCreate(face.id, data)}
                             onDelete={() => onDelete(face.id)}
+                            onDetach={() => onDetach(face.id)}
                         />
                     </Box>
                 ))}

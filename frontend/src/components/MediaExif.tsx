@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react'
 import { Box, Typography, Link as RouterLink, CircularProgress } from '@mui/material'
 import { Link } from 'react-router-dom'
+import { API } from '../config'
 
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
 const BG_OVERLAY = 'rgba(0, 0, 0, 0.6)'
 const TEXT = '#FFF'
 const ACCENT = '#FF2E88'
@@ -23,7 +23,7 @@ export function MediaExif({ show, mediaId }: MediaExifProps) {
     // Fetch EXIF when shown
     useEffect(() => {
         if (show && exif === undefined) {
-            fetch(`${API}/media/${mediaId}/processors/exif`)
+            fetch(`${API}/api/media/${mediaId}/processors/exif`)
                 .then(res => (res.ok ? res.json() : null))
                 .then(body => setExif(body))
                 .catch(() => setExif(null))

@@ -1,23 +1,39 @@
-import React, { useState, useEffect } from 'react'
-import { Box, Typography, Button, LinearProgress, Paper, Stack } from '@mui/material'
-import { Task, TaskType } from '../types'
+import React, { useState, useEffect } from 'react';
+import {
+    Box,
+    Typography,
+    Button,
+    LinearProgress,
+    Stack,
+    List,
+    ListItem,
+    ListItemButton,
+    ListItemIcon,
+    ListItemText,
+    Divider,
+} from '@mui/material';
+import { Task, TaskType } from '../types';
+import { API } from '../config';
 
-const API = import.meta.env.VITE_API_BASE_URL || ''
+import SyncIcon from '@mui/icons-material/Sync';
+import MovieIcon from '@mui/icons-material/Movie';
+import Diversity3Icon from '@mui/icons-material/Diversity3';
 
-type TaskLabels = Record<TaskType, string>
+
+type TaskLabels = Record<TaskType, string>;
 const TASK_LABELS: TaskLabels = {
     scan: 'Scan Folder',
     process_media: 'Process Media',
     cluster_persons: 'Cluster Persons',
-}
+};
 
-export default function TasksPanel() {
-    const [tasks, setTasks] = useState<Task[]>([])
+export default function TaskManager() {
+    const [tasks, setTasks] = useState<Task[]>([]);
 
     // fetch active tasks\  
     const fetchTasks = async () => {
         try {
-            const res = await fetch(`${API}/tasks/active`)
+            const res = await fetch(`${API}/api/tasks/active`)
             const data: Task[] = await res.json()
             setTasks(data)
         } catch (err) {
@@ -28,7 +44,7 @@ export default function TasksPanel() {
     // start a new task
     const startTask = async (type: TaskType) => {
         try {
-            const res = await fetch(`${API}/tasks/${type}`, { method: 'POST' })
+            const res = await fetch(`${API}/api/tasks/${type}`, { method: 'POST' })
             if (res.ok) {
                 await fetchTasks()
             } else {
@@ -42,7 +58,7 @@ export default function TasksPanel() {
     // cancel a running task
     const cancelTask = async (id: string) => {
         try {
-            const res = await fetch(`${API}/tasks/${id}/cancel`, { method: 'POST' })
+            const res = await fetch(`${API}/api/tasks/${id}/cancel`, { method: 'POST' })
             if (res.ok) {
                 fetchTasks()
             } else {
@@ -53,106 +69,78 @@ export default function TasksPanel() {
         }
     }
 
-    // polling
     useEffect(() => {
-        fetchTasks()
-        const iv = setInterval(fetchTasks, 3000)
-        return () => clearInterval(iv)
-    }, [])
+        fetchTasks();
+        const iv = setInterval(fetchTasks, 2000);
+        return () => clearInterval(iv);
+    }, []);
+
+    const isTaskRunning = (type: TaskType) => tasks.some(t => t.task_type === type && t.status === 'running');
 
     return (
-        <Paper
-            elevation={4}
-            sx={{
-                p: 3,
-                bgcolor: '#1C1C1E',
-                color: '#FFF',
-                borderRadius: 2,
-                boxShadow: 3,
-            }}
-        >
-            <Typography variant="h6" gutterBottom sx={{ color: '#FF2E88' }}>
-                Control Panel
-            </Typography>
-
-            <Stack spacing={2}>
-                {tasks.map(t => {
-                    const pct = t.total > 0 ? Math.round((t.processed / t.total) * 100) : 0
-                    return (
-                        <Box
-                            key={t.id}
-                            sx={{
-                                p: 2,
-                                bgcolor: '#2C2C2E',
-                                borderLeft: '4px solid #5F4B8B',
-                                borderRadius: 1,
-                            }}
-                        >
-                            <Box display="flex" justifyContent="space-between" alignItems="center">
-                                <Typography variant="subtitle2" sx={{ color: '#FF2E88' }}>
-                                    {TASK_LABELS[t.task_type]}
-                                </Typography>
-                                <Typography variant="caption">
-                                    {t.status}{t.status === 'running' && ` (${pct}%)`}
-                                </Typography>
+        <Box>
+            {/* Active Tasks Section */}
+            {tasks.length > 0 && (
+                <Stack spacing={2} mb={2}>
+                    <Typography variant="overline" color="text.secondary">Active Tasks</Typography>
+                    {tasks.map(t => {
+                        const pct = t.total > 0 ? Math.round((t.processed / t.total) * 100) : (t.status === 'finished' ? 100 : 0);
+                        return (
+                            // CHANGED: Redesigned task item for a cleaner look
+                            <Box key={t.id}>
+                                <Box display="flex" justifyContent="space-between" alignItems="center">
+                                    <Typography variant="body2" fontWeight="bold">
+                                        {TASK_LABELS[t.task_type]}
+                                    </Typography>
+                                    <Typography variant="caption" color="text.secondary">
+                                        {t.status}{t.status === 'running' && ` (${pct}%)`}
+                                    </Typography>
+                                </Box>
+                                <LinearProgress
+                                    variant="determinate"
+                                    value={pct}
+                                    sx={{
+                                        height: 6,
+                                        borderRadius: 3,
+                                        mt: 0.5,
+                                        bgcolor: 'grey.800',
+                                        '& .MuiLinearProgress-bar': { bgcolor: '#5F4B8B' }, // Using the calmer purple
+                                    }}
+                                />
+                                {t.status === 'running' && (
+                                    <Button size="small" onClick={() => cancelTask(t.id)} sx={{ mt: 0.5, ml: -1, color: "text.secondary" }}>
+                                        Cancel
+                                    </Button>
+                                )}
                             </Box>
-                            <LinearProgress
-                                variant="determinate"
-                                value={pct}
-                                sx={{
-                                    height: 8,
-                                    borderRadius: 1,
-                                    mt: 1,
-                                    backgroundColor: '#3A3A3C',
-                                    '& .MuiLinearProgress-bar': { bgcolor: '#FF2E88' },
-                                }}
-                            />
-                            {t.status === 'running' && (
-                                <Button
-                                    size="small"
-                                    onClick={() => cancelTask(t.id)}
-                                    sx={{ mt: 1, color: '#FF2E88' }}
-                                >
-                                    Cancel
-                                </Button>
-                            )}
-                        </Box>
-                    )
-                })}
-            </Stack>
+                        );
+                    })}
+                </Stack>
+            )}
 
-            <Stack spacing={1} mt={3}>
-                <Button
-                    variant="contained"
-                    onClick={() => startTask('scan')}
-                    sx={{
-                        bgcolor: '#5F4B8B',
-                        '&:hover': { bgcolor: '#4A3A6A' },
-                    }}
-                >
-                    Scan Folder
-                </Button>
-                <Button
-                    variant="contained"
-                    onClick={() => startTask('process_media')}
-                    sx={{
-                        bgcolor: '#5F4B8B',
-                        '&:hover': { bgcolor: '#4A3A6A' },
-                    }}
-                >
-                    Process Media
-                </Button>
-                <Button
-                    variant="contained"
-                    onClick={() => startTask('cluster_persons')}
-                    sx={{
-                        bgcolor: '#5F4B8B',
-                        '&:hover': { bgcolor: '#4A3A6A' },
-                    }}
-                >
-                    Cluster Persons
-                </Button>
-            </Stack>
-        </Paper>
-    )
+            <Divider sx={{ my: 2 }} />
+
+            {/* CHANGED: Action buttons are now a clean list */}
+            <List>
+                <ListItem disablePadding>
+                    <ListItemButton onClick={() => startTask('scan')} disabled={isTaskRunning('scan')}>
+                        <ListItemIcon><SyncIcon /></ListItemIcon>
+                        <ListItemText primary="Scan Media Folder" />
+                    </ListItemButton>
+                </ListItem>
+                <ListItem disablePadding>
+                    <ListItemButton onClick={() => startTask('process_media')} disabled={isTaskRunning('process_media')}>
+                        <ListItemIcon><MovieIcon /></ListItemIcon>
+                        <ListItemText primary="Process New Media" />
+                    </ListItemButton>
+                </ListItem>
+                <ListItem disablePadding>
+                    <ListItemButton onClick={() => startTask('cluster_persons')} disabled={isTaskRunning('cluster_persons')}>
+                        <ListItemIcon><Diversity3Icon /></ListItemIcon>
+                        <ListItemText primary="Cluster All Persons" />
+                    </ListItemButton>
+                </ListItem>
+            </List>
+        </Box>
+    );
 }

@@ -99,7 +99,7 @@ def suggest_faces(
              WHERE embedding MATCH :vec
                     and k = :k
                     and person_id = -1
-                    and distance < 1.5
+                    and distance < 1.3
              ORDER BY distance
             """
     ).bindparams(vec=json.dumps(target.tolist()), k=limit)

@@ -40,7 +40,6 @@ async def assign_face(
             status_code=403, detail="Not allowed in READ_ONLY mode."
         )
     person_id = body.person_id
-    logger.warning("Assigning face %s to %s", face_id, person_id)
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
@@ -64,6 +63,33 @@ async def assign_face(
     person_id = face.person_id
     safe_commit(session)
     return FaceAssignReturn(face_id=face_id, person_id=person_id)
+
+@router.post(
+    "/{face_id}/detach",
+    summary="Detaches an existing face from a person",
+    response_model=FaceAssignReturn,
+)
+async def detach_face(
+    face_id: int,
+    session: Session = Depends(get_session),
+):
+    if READ_ONLY:
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
+    
+    face = session.get(Face, face_id)
+    if not face:
+        raise HTTPException(status_code=404, detail="Face not found")
+
+    person_id = face.person_id
+    face.person_id = None
+    session.add(face)
+
+    old_person_can_be_deleted(session, person_id)
+    update_face_embedding(session, face_id, -1) # -1 detaches face from person in embedding table
+    safe_commit(session)
+    return FaceAssignReturn(face_id=face_id, person_id=-1)
 
 
 def update_face_embedding(
@@ -90,7 +116,7 @@ def update_face_embedding(
                    WHERE face_id=:f_id"""
         ).bindparams(f_id=face_id)
     safe_execute(session, sql)
-    if person_id:
+    if person_id and person_id > 0:
         update_person_embedding(session, person_id)
 
 

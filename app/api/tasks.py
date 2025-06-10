@@ -546,7 +546,6 @@ def _run_scan(task_id: str):
     sess.commit()
     medias = list()
     for i, filepath in tqdm(enumerate(media_paths)):
-        logger.warning("Parsing %s", filepath)
         # bail if cancelled
         medias.append(
             process_file(MEDIA_DIR / filepath)

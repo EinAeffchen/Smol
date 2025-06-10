@@ -21,7 +21,7 @@ export default function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<IndexPage />} />
           <Route path="/searchresults" element={<SearchPage />} />
-          <Route path="/media/:id" element={<MediaDetailPage />} />
+          <Route path="/medium/:id" element={<MediaDetailPage />} />
           <Route path="/images" element={<ImagesPage />} />
           <Route path="/map" element={<MapPage />} />
           <Route path="/maptagger" element={<MapEditorPage />} />

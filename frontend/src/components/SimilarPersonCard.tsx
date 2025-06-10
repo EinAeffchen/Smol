@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom'
 import { Card, CardActionArea, CardContent, Avatar, Typography, Box } from '@mui/material'
 import { SimilarPerson } from '../types'
-
-const API = import.meta.env.VITE_API_BASE_URL
+import { API } from '../config'
 
 export default function SimilarPersonCard({ id, name, similarity, thumbnail }: SimilarPerson) {
   return (
@@ -14,7 +13,7 @@ export default function SimilarPersonCard({ id, name, similarity, thumbnail }: S
       >
         {thumbnail ? (
           <Avatar
-            src={`/thumbnails/${thumbnail}`}
+            src={`${API}/thumbnails/${thumbnail}`}
             sx={{ width: 64, height: 64, mb: 1, border: '2px solid #FF2E88' }}
           />
         ) : (

@@ -18,8 +18,7 @@ import {
     CircularProgress,
 } from '@mui/material'
 import { MediaPreview } from '../types'
-
-const API = import.meta.env.VITE_API_BASE_URL || ''
+import { API } from '../config'
 
 function ClickHandler({ selected, setTempPos }: { selected: MediaPreview | null; setTempPos: (pos: [number, number]) => void }) {
     useMapEvents({
@@ -49,7 +48,7 @@ export default function MapEditorPage() {
     const [searchLoading, setSearchLoading] = useState(false)
 
     useEffect(() => {
-        fetch(`${API}/media/missing_geo`)
+        fetch(`${API}/api/media/missing_geo`)
             .then(res => res.json())
             .then(setOrphans)
             .catch(console.error)
@@ -89,7 +88,7 @@ export default function MapEditorPage() {
         setSaving(true)
         try {
             const [latitude, longitude] = tempPos
-            const res = await fetch(`${API}/media/${selected.id}/geolocation`, {
+            const res = await fetch(`${API}/api/media/${selected.id}/geolocation`, {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ latitude, longitude }),
@@ -193,7 +192,7 @@ export default function MapEditorPage() {
                             >
                                 <Box
                                     component="img"
-                                    src={`/thumbnails/${m.id}.jpg`}
+                                    src={`${API}/thumbnails/${m.id}.jpg`}
                                     alt=""
                                     sx={{
                                         width: '100%',

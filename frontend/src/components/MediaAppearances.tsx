@@ -3,12 +3,12 @@ import { useRef, useState } from 'react'
 import { FixedSizeGrid as GridVirtual } from 'react-window'
 import useResizeObserver from '@react-hook/resize-observer'
 import MediaCard from './MediaCard'  // adjust if needed
-import { MediaPreview } from '../types'
+import { Media } from '../types'
 
 const CARD_WIDTH = 240
 const CARD_HEIGHT = 180
 
-export function MediaAppearances({ medias }: { medias: MediaPreview[] }) {
+export default function MediaAppearances({ medias }: { medias: Media[] }) {
     const containerRef = useRef(null)
     const [width, setWidth] = useState(800)
 

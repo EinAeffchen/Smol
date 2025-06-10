@@ -6,6 +6,7 @@ import {
   Avatar,
   Typography,
 } from '@mui/material'
+import { API } from '../config'
 import { Person } from '../types'
 
 const ACCENT = '#FF2E88'
@@ -13,10 +14,9 @@ const BG_CARD = '#2C2C2E'
 const TEXT_SECONDARY = '#BFA2DB'
 
 export default function PersonCard({ person }: { person: Person }) {
-  const API = import.meta.env.VITE_API_BASE_URL ?? ''
   const thumb =
     person.profile_face?.thumbnail_path
-      ? `/thumbnails/${person.profile_face.thumbnail_path}`
+      ? `${API}/thumbnails/${person.profile_face.thumbnail_path}`
       : undefined
 
   return (

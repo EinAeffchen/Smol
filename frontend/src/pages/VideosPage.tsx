@@ -2,15 +2,14 @@ import React, { useCallback } from 'react'
 import MediaCard from '../components/MediaCard'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { MediaPreview } from '../types'
-
-const API = import.meta.env.VITE_API_BASE_URL
+import { API } from '../config'
 
 export default function VideosPage() {
     const pageSize = 20;
     const fetchVideos = useCallback(
         (cursor: string | null, limit: number) =>
             fetch(
-                `${API}/media/videos${cursor ? `?cursor=${cursor}&` : "?"
+                `${API}/api/media/videos${cursor ? `?cursor=${cursor}&` : "?"
                 }limit=${limit}`
             ).then((r) =>
                 r.json() as Promise<CursorResponse<MediaPreview>>

@@ -1,15 +1,19 @@
 import json
 import os
 from datetime import datetime, timedelta
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import and_, delete, or_, text
 from sqlalchemy.orm import selectinload
 from sqlmodel import Session, select
-
-from app.config import READ_ONLY, MEDIA_DIR, MIN_CLIP_SEARCH_SIMILARITY, THUMB_DIR
+from app.config import (
+    READ_ONLY,
+    MEDIA_DIR,
+    MIN_CLIP_SIMILARITY,
+    THUMB_DIR,
+)
 from app.database import get_session, safe_commit
 from app.logger import logger
 from app.models import ExifData, Face, Media, MediaTagLink, Person, Scene, Tag
@@ -229,7 +233,6 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
 def scenes_vtt(
     media_id: int, request: Request, session: Session = Depends(get_session)
 ):
-    API_URL = os.environ.get("API_PUBLIC_URL", f"http://localhost:{os.environ.get('PORT')}")
     scenes = session.exec(
         select(Scene)
         .where(Scene.media_id == media_id)
@@ -248,7 +251,11 @@ def scenes_vtt(
         # pick a tiny epsilon if end_time is missing
         end_time = s.end_time or (s.start_time + 0.1)
         end = format_timestamp(end_time)
-        lines += [f"{start} --> {end}", f"{API_URL}/thumbnails/{s.thumbnail_path}", ""]
+        lines += [
+            f"{start} --> {end}",
+            f"/thumbnails/{s.thumbnail_path}",
+            "",
+        ]
 
     return PlainTextResponse("\n".join(lines), media_type="text/vtt")
 
@@ -278,7 +285,9 @@ def delete_file(session: Session, media_id: int):
 )
 def delete_media_file(media_id: int, session: Session = Depends(get_session)):
     if READ_ONLY:
-        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     delete_file(session, media_id)
 
 
@@ -292,7 +301,9 @@ def delete_media_record(
     session: Session = Depends(get_session),
 ):
     if READ_ONLY:
-        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
@@ -321,23 +332,24 @@ def read_exif(media_id: int, session=Depends(get_session)):
 
 @router.get("/{media_id}/get_similar", response_model=list[MediaPreview])
 def get_similar_media(
-    media_id: int, k: int = 10, session=Depends(get_session)
+    media_id: int, k: int = 8, session=Depends(get_session)
 ):
     media = session.get(Media, media_id)
     if not media or not media.embedding:
         raise HTTPException(404, "Media not found")
-    max_dist = 1.0 - MIN_CLIP_SEARCH_SIMILARITY
+    max_dist = 2 - MIN_CLIP_SIMILARITY
     sql = text(
         """
-      SELECT media_id
+      SELECT media_id, distance
         FROM media_embeddings
        WHERE embedding MATCH :vec
             AND k=:k
             AND distance < :maxd
        ORDER BY distance
     """
-    ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k)
+    ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k+1)
     rows = session.exec(sql).all()
+    logger.info(rows)
     media_ids = [r[0] for r in rows if r[0] != media_id]
 
     if not media_ids:
@@ -368,7 +380,9 @@ def update_geolocation(
     session: Session = Depends(get_session),
 ):
     if READ_ONLY:
-        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     media = session.exec(
         select(Media)
         .options(selectinload(Media.exif))

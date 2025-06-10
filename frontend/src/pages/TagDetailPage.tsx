@@ -9,6 +9,7 @@ import {
 import MediaCard from '../components/MediaCard'
 import PersonCard from '../components/PersonCard'
 import { Tag, Media, Person } from '../types'
+import { API } from '../config'
 
 const BG_SECTION = '#1C1C1E'
 const TEXT_PRIMARY = '#FFF'
@@ -20,7 +21,7 @@ export default function TagDetailPage() {
 
     useEffect(() => {
         if (!id) return
-        fetch(`${import.meta.env.VITE_API_BASE_URL}/tags/${id}`)
+        fetch(`${API}/api/tags/${id}`)
             .then(res => {
                 if (!res.ok) throw new Error('Tag not found')
                 return res.json() as Promise<Tag>

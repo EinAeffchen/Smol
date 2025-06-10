@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import text
 from sqlmodel import Session, select
 
-from app.config import model, tokenizer
+from app.config import model, tokenizer, MIN_CLIP_SEARCH_SIMILARITY
 from app.database import get_session
 from app.logger import logger
 from app.models import Media, Person, Tag
@@ -43,7 +43,7 @@ def search(
     query: str = Query("", description="Free-text or embedding query"),
     session: Session = Depends(get_session),
 ):
-    max_dist = 2
+    max_dist = 2.0 - MIN_CLIP_SEARCH_SIMILARITY
     max_pages = 3
     if category == "media":
         vec = encode_text_query(query)
@@ -64,6 +64,7 @@ def search(
             vec=json.dumps(vec), max_dist=max_dist, k=limit * max_pages
         )
         rows = session.exec(sql).all()  # [(media_id, distance), ...]
+        logger.info(rows)
         media_ids = [r[0] for r in rows[(page - 1) * limit : page * limit]]
 
         # 2) load & order Media

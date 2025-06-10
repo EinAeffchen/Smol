@@ -32,7 +32,6 @@ export function useInfinite<T>(
   }, [cursor, fetchPage, hasMore, limit, loading]);
 
   useEffect(() => {
-    console.log("Triggered reset deps!");
     setItems([]);
     setCursor(null);
     setHasMore(true);

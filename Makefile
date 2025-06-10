@@ -46,4 +46,8 @@ dev:
 	cd frontend && npm run dev
 
 docker-start:
+	mkdir -p ${DATABASE_DIR}
 	docker compose up -d --build
+
+backup:
+	sqlite3 ".backup ${DATABASE_DIR}/smol.db '${HOST_MEDIA_DIR}/db.backup'"

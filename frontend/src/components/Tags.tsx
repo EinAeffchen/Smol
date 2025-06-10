@@ -1,8 +1,7 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import { Media, Tag } from '../types'
-
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API } from '../config'
 
 export interface TagsProps {
     media: Media
@@ -11,7 +10,7 @@ export interface TagsProps {
 
 export function Tags({ media, onUpdate }: Readonly<TagsProps>) {
     const handleRemove = async (tag: Tag) => {
-        await fetch(`${API}/tags/media/${media.id}/${tag.id}`, { method: 'DELETE' })
+        await fetch(`${API}/api/tags/media/${media.id}/${tag.id}`, { method: 'DELETE' })
         onUpdate({
             ...media,
             tags: media.tags.filter(t => t.id !== tag.id),

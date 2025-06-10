@@ -1,4 +1,3 @@
-// components/LazyLoadSection.tsx
 import React, { useState, useRef, useEffect, ReactNode } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 

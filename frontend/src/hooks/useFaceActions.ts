@@ -2,14 +2,13 @@ import { useCallback } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { Person, FaceRead } from "../types";
-
-const API = import.meta.env.VITE_API_BASE_URL!;
+import { API } from "../config";
 
 export function useFaceActions() {
   const navigate = useNavigate();
   /** assign an existing face to a person */
   const assignFace = useCallback(async (faceId: number, personId: number) => {
-    const res = await fetch(`${API}/faces/${faceId}/assign`, {
+    const res = await fetch(`${API}/api/faces/${faceId}/assign`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ person_id: personId }),
@@ -28,12 +27,12 @@ export function useFaceActions() {
         gender?: string;
       }
     ): Promise<Person> => {
-      const res = await fetch(`${API}/faces/${faceId}/create_person`, {
+      const res = await fetch(`${API}/api/faces/${faceId}/create_person`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      console.log("🚀 Payload:", data)
+      console.log("🚀 Payload:", data);
       if (!res.ok) {
         const err = await res.text();
         console.error("❌ createPersonFromFace error:", err);
@@ -47,8 +46,15 @@ export function useFaceActions() {
 
   /** delete a face record */
   const deleteFace = useCallback(async (faceId: number) => {
-    const res = await fetch(`${API}/faces/${faceId}`, {
+    const res = await fetch(`${API}/api/faces/${faceId}`, {
       method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete face");
+  }, []);
+  /** delete a face record */
+  const detachFace = useCallback(async (faceId: number) => {
+    const res = await fetch(`${API}/api/faces/${faceId}/detach`, {
+      method: "POST",
     });
     if (!res.ok) throw new Error("Failed to delete face");
   }, []);
@@ -56,7 +62,7 @@ export function useFaceActions() {
   /** set which detected face is the “profile” for a person */
   const setProfileFace = useCallback(
     async (faceId: number, personId: number) => {
-      const res = await fetch(`${API}/persons/${personId}`, {
+      const res = await fetch(`${API}/api/persons/${personId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ profile_face_id: faceId }),
@@ -71,6 +77,7 @@ export function useFaceActions() {
     assignFace,
     createPersonFromFace,
     deleteFace,
+    detachFace,
     setProfileFace,
   };
 }

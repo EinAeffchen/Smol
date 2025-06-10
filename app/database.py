@@ -2,11 +2,10 @@ import time
 
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, SQLModel, create_engine
-from app.config import DATABASE_URL
+from app.config import DATABASE_URL, SCENE_EMBEDDING_SIZE
 from app.logger import logger
 from sqlalchemy import event, text
 from sqlalchemy.engine.result import ScalarResult
-import sqlite_vec
 
 engine = create_engine(
     DATABASE_URL,
@@ -21,24 +20,16 @@ engine = create_engine(
 def _load_sqlite_extensions(dbapi_conn, connection_record):
     # 1) allow loading
     dbapi_conn.enable_load_extension(True)
-    # 2) let sqlite_vec find & load the right library for us
-    sqlite_vec.load(dbapi_conn)
-    # 3) lock it back down
-    dbapi_conn.enable_load_extension(False)
+    try:
+        # Assuming sqlite_vec is imported elsewhere
+        import sqlite_vec
 
-
-@event.listens_for(engine, "connect")
-def _set_sqlite_pragma(dbapi_conn, connection_record):
-    # enable WAL journal
-    dbapi_conn.execute("PRAGMA journal_mode=WAL;")
-    # reduce how often SQLite flushes to disk (optional)
-    dbapi_conn.execute("PRAGMA synchronous=NORMAL;")
-    # ensure we wait up to `timeout` seconds if the DB is locked
-    dbapi_conn.execute("PRAGMA busy_timeout = 30000;")  # milliseconds
+        sqlite_vec.load(dbapi_conn)
+    finally:
+        dbapi_conn.enable_load_extension(False)
 
 
 def safe_commit(session, retries=5, delay=0.5):
-
     for i in range(retries):
         try:
             session.commit()
@@ -77,7 +68,21 @@ def init_db():
     logger.debug("Setting up db!")
     from app.models import Face, Media, MediaTagLink, Person, Tag, Scene
 
-    SQLModel.metadata.create_all(engine)
+    with engine.connect() as connection:
+        # Get the underlying DBAPI connection
+
+        # --- SET PRAGMAS HERE ---
+        # These will be set once for the database file.
+        logger.debug("Setting database PRAGMAs...")
+        # connection.execute(text("PRAGMA journal_mode=WAL;"))
+        connection.execute(text("PRAGMA synchronous=NORMAL;"))
+        connection.execute(text("PRAGMA busy_timeout = 30000;"))
+        logger.debug("PRAGMAs set.")
+
+        # Create all tables
+        logger.debug("Creating database tables...")
+        SQLModel.metadata.create_all(connection)
+        logger.debug("Database tables created.")
 
 
 def init_vec_index():
@@ -86,11 +91,11 @@ def init_vec_index():
         # 1) virtual table over (media_id, embedding)
         conn.execute(
             text(
-                """
+                f"""
           CREATE VIRTUAL TABLE IF NOT EXISTS media_embeddings
           USING vec0(
             media_id    integer primary key,
-            embedding   float[1024]
+            embedding   float[{SCENE_EMBEDDING_SIZE}]
           );
         """
             )

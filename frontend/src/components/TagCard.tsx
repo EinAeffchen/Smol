@@ -1,14 +1,15 @@
-import React, { useState } from 'react'; // Import useState
+import React, { useState } from 'react'; 
 import { Link as RouterLink } from 'react-router-dom';
 import {
     Card, CardActionArea, CardContent, Typography, Box, AvatarGroup, Avatar,
     IconButton, // For the delete button
-    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button // For confirmation
+    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button 
 } from '@mui/material';
 import MovieIcon from '@mui/icons-material/Movie';
 import PersonIcon from '@mui/icons-material/Person';
-import DeleteIcon from '@mui/icons-material/Delete'; // Delete icon
+import DeleteIcon from '@mui/icons-material/Delete';
 import { Tag } from '../types';
+import { API } from '../config';
 
 const BG_CARD = '#2C2C2E'
 const ACCENT = '#FF2E88'
@@ -18,11 +19,10 @@ const CARD_HEIGHT = 180
 
 export interface TagCardProps {
     tag: Tag;
-    onTagDeleted: (tagId: number) => void; // Callback to notify parent of deletion
+    onTagDeleted: (tagId: number) => void;
 }
 
 export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
-    const API = import.meta.env.VITE_API_BASE_URL ?? ''
     const countMedia = tag.media.length
     const countPeople = tag.persons.length
 
@@ -39,7 +39,7 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
     const handleConfirmDelete = async () => {
         setOpenConfirmDialog(false);
         try {
-            const response = await fetch(`${API}/tags/${tag.id}`, { method: 'DELETE' });
+            const response = await fetch(`${API}/api/tags/${tag.id}`, { method: 'DELETE' });
             if (!response.ok) {
                 const errorData = await response.text();
                 console.error('Failed to delete tag:', errorData);
@@ -98,9 +98,6 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                             height: '100%',
                             width: '100%', // Ensure CardContent takes full width of CardActionArea
                             p: 2,
-                            // Add some padding top if title might go under the delete button
-                            // Or adjust title's margin/padding.
-                            // For now, the button is small and in the corner.
                         }}
                     >
                         {/* Tag Name and Counts */}
@@ -146,7 +143,7 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                             {tag.media.slice(0, 4).map(m => (
                                 <Avatar
                                     key={`m-${m.id}`}
-                                    src={`/thumbnails/${m.id}.jpg`} // Ensure this endpoint works for media
+                                    src={`${API}/thumbnails/${m.id}.jpg`} // Ensure this endpoint works for media
                                     alt={m.filename || 'Media thumbnail'}
                                     variant="rounded"
                                 />
@@ -154,7 +151,7 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                             {tag.persons.slice(0, 4).map(p => p.profile_face?.thumbnail_path && (
                                 <Avatar
                                     key={`p-${p.id}`}
-                                    src={`${API}${p.profile_face.thumbnail_path}`} // Assuming thumbnail_path might be absolute or needs API prepended
+                                    src={`${API}/thumbnails/${p.profile_face.thumbnail_path}`}
                                     alt={p.name || 'Person thumbnail'}
                                     variant="rounded"
                                 />

@@ -6,22 +6,25 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig(({ mode, command }) => {
-  const apiProxyPort = process.env.PORT || "8000";
+  const domain = process.env.DOMAIN || "http://localhost:8000/";
 
-    // ---- START DEBUG LOG ----
-    console.log(`[vite.config.js] Mode: ${mode}`);
-    console.log(`[vite.config.js] process.env.PORT: ${process.env.PORT}`);
-    console.log(`[vite.config.js] apiProxyPort is set to: ${apiProxyPort}`);
+  // ---- START DEBUG LOG ----
+  console.log(`[vite.config.js] Mode: ${mode}`);
+  console.log(`[vite.config.js] Domain is set to: ${domain}`);
   // ---- END DEBUG LOG ----
-  
+  let base: string = "/";
+  if (mode == "production") {
+    base = "/static/";
+  }
+
   return {
-    base: "/static/", // Uncomment and set if your app is served from a sub-path
+    base: base, // Uncomment and set if your app is served from a sub-path
     plugins: [react()],
     server: {
       port: 5173,
       proxy: {
         "/api": {
-          target: `http://localhost:${apiProxyPort}`,
+          target: `${domain}`,
           // changeOrigin: true,
           // rewrite: (path) => path.replace(/^\/api/, ''), // Uncomment if your API doesn't expect the /api prefix
         },

@@ -12,8 +12,7 @@ import PersonCard from '../components/PersonCard'
 import TagCard from '../components/TagCard'
 import { SearchResult } from '../types'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
-
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API } from '../config'
 const ITEMS_PER_PAGE = 30
 
 export default function SearchResultsPage() {
@@ -26,7 +25,7 @@ export default function SearchResultsPage() {
             const params = new URLSearchParams({ category, query })
             params.set('limit', String(limit))
             if (cursor) params.set('cursor', cursor)
-            return fetch(`${API}/search/?${params.toString()}`)
+            return fetch(`${API}/api/search/?${params.toString()}`)
                 .then(res => {
                     if (!res.ok) throw new Error(res.statusText)
                     return res.json() as Promise<CursorResponse<SearchResult>>

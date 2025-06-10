@@ -2,14 +2,13 @@ import React, { useEffect, useState } from 'react'
 import { Box, Typography, Grid } from '@mui/material'
 import { MediaPreview } from '../types'
 import MediaCard from './MediaCard'
-
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API } from '../config'
 
 export default function SimilarContent({ mediaId }: { mediaId: number }) {
     const [similar, setSimilar] = useState<MediaPreview[]>([])
 
     useEffect(() => {
-        fetch(`${API}/media/${mediaId}/get_similar`)
+        fetch(`${API}/api/media/${mediaId}/get_similar`)
             .then(res => {
                 if (!res.ok) throw new Error('Failed to load similar media')
                 return res.json() as Promise<MediaPreview[]>

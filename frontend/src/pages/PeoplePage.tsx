@@ -9,15 +9,16 @@ import {
     Grid,
     CircularProgress,
 } from '@mui/material'
+import { ENABLE_PEOPLE } from '../config'
+import { API } from '../config'
 
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
 const ITEMS_PER_PAGE = 12
 
 export default function PeoplePage() {
     const fetchPeople = useCallback(
         (cursor: string | null, limit: number) =>
             fetch(
-                `${API}/persons/${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
+                `${API}/api/persons/${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
             ).then(res => {
                 if (!res.ok) throw new Error(res.statusText)
                 return res.json() as Promise<CursorResponse<Person>>
@@ -38,6 +39,13 @@ export default function PeoplePage() {
             <Box textAlign="center" py={4}>
                 <CircularProgress color="secondary" />
             </Box>
+        )
+    }
+    if (!ENABLE_PEOPLE) {
+        return (
+            <Typography variant="h5" color="text.primary" gutterBottom>
+                People disabled!
+            </Typography>
         )
     }
 

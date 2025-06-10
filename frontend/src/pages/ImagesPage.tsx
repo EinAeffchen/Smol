@@ -2,8 +2,7 @@ import React, { useCallback } from 'react'
 import MediaCard from '../components/MediaCard'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { MediaPreview } from '../types'
-
-const API = import.meta.env.VITE_API_BASE_URL
+import { API } from '../config'
 
 
 export default function ImagesPage() {
@@ -11,7 +10,7 @@ export default function ImagesPage() {
     const fetchImages = useCallback(
         (cursor: string | null, limit: number) =>
             fetch(
-                `${API}/media/images${cursor ? `?cursor=${cursor}&` : "?"
+                `${API}/api/media/images${cursor ? `?cursor=${cursor}&` : "?"
                 }limit=${limit}`
             ).then((r) =>
                 r.json() as Promise<CursorResponse<MediaPreview>>

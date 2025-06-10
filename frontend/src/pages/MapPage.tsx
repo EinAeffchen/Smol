@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet'
 import { useSearchParams, Link as RouterLink } from 'react-router-dom'
 import { Box } from '@mui/material'
+import { API } from '../config' 
 import type { LatLngExpression } from 'leaflet'
 
 interface MediaLocation {
@@ -11,7 +12,6 @@ interface MediaLocation {
     thumbnail: string
 }
 
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
 function FocusHandler({ locations }: { locations: MediaLocation[] }) {
     const map = useMap()
@@ -35,7 +35,7 @@ export default function MapPage() {
     const [locations, setLocations] = useState<MediaLocation[]>([])
 
     useEffect(() => {
-        fetch(`${API}/media/locations`)
+        fetch(`${API}/api/media/locations`)
             .then(res => res.json())
             .then(setLocations)
             .catch(console.error)
@@ -65,7 +65,7 @@ export default function MapPage() {
                         <Popup>
                             <Box
                                 component={RouterLink}
-                                to={`/media/${loc.id}`}
+                                to={`/medium/${loc.id}`}
                                 sx={{ display: 'block', width: 96, height: 96, textDecoration: 'none' }}
                             >
                                 <Box

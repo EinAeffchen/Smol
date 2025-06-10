@@ -3,15 +3,14 @@ import { Container, Typography, Grid, Box, CircularProgress } from '@mui/materia
 import TagCard from '../components/TagCard'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { Tag } from '../types'
-
-const API = import.meta.env.VITE_API_BASE_URL ?? ''
+import { API } from '../config'
 const ITEMS_PER_PAGE = 20
 
 export default function TagsPage() {
   const fetchTags = useCallback(
     (cursor: string | null, limit: number) =>
       fetch(
-        `${API}/tags/${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
+        `${API}/api/tags/${cursor ? `?cursor=${cursor}&` : '?'}limit=${limit}`
       ).then(res => {
         if (!res.ok) throw new Error(`Failed to fetch tags: ${res.statusText}`);
         return res.json() as Promise<CursorResponse<Tag>>;

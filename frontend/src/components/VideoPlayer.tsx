@@ -3,16 +3,14 @@ import { Box, CircularProgress, Typography } from '@mui/material'
 import 'plyr/dist/plyr.css'
 import Plyr from 'plyr'
 import { Media } from '../types'
-
-// .plyr--fullscreen-active video { max-height: 100vh !important; }
+import { API } from '../config'
 
 export function VideoWithPreview({ media }: { media: Media }) {
-    const API = import.meta.env.VITE_API_BASE_URL ?? ''
     const playerContainerRef = useRef<HTMLDivElement>(null);
     const plyrInstanceRef = useRef<Plyr | null>(null);
 
     const [loading, setLoading] = useState(true)
-    const mediaUrl = `/originals/${media.path}`
+    const mediaUrl = `${API}/originals/${media.path}`
 
     useEffect(() => {
         if (!playerContainerRef.current || !media.path) {
@@ -55,7 +53,7 @@ export function VideoWithPreview({ media }: { media: Media }) {
             controls: ['play', 'progress', 'current-time', 'volume', 'fullscreen'],
             previewThumbnails: {
                 enabled: true,
-                src: `${API}/media/${media.id}/scenes.vtt`
+                src: `${API}/api/media/${media.id}/scenes.vtt`
             },
             fullscreen: {
                 enabled: true,

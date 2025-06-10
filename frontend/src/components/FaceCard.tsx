@@ -1,28 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react'
-import ReactDOM from 'react-dom'; // Import ReactDOM for Portals
+import DeleteIcon from '@mui/icons-material/Delete';
+import LinkOffIcon from '@mui/icons-material/LinkOff';
+import PersonAddIcon from '@mui/icons-material/PersonAdd';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
+import StarIcon from '@mui/icons-material/Star';
 import {
     Avatar,
     Box,
     Button,
     Card,
-    CardContent,
     CardActionArea,
-    Collapse,
+    CardContent,
     IconButton,
     Stack,
     TextField,
     Tooltip,
-    Typography,
-} from '@mui/material'
-import DeleteIcon from '@mui/icons-material/Delete'
-import { Link } from 'react-router-dom'
-import StarIcon from '@mui/icons-material/Star'
-import PersonAddIcon from '@mui/icons-material/PersonAdd'
-import PersonSearchIcon from '@mui/icons-material/PersonSearch'
-import { Face, Person } from '../types'
-import { bool } from 'prop-types'
-import CircularProgress from '@mui/material/CircularProgress'
-import { API, READ_ONLY } from '../config'
+    Typography
+} from '@mui/material';
+import CircularProgress from '@mui/material/CircularProgress';
+import { useEffect, useRef, useState } from 'react';
+import ReactDOM from 'react-dom'; // Import ReactDOM for Portals
+import { Link } from 'react-router-dom';
+import { API, READ_ONLY } from '../config';
+import { Face, Person } from '../types';
 
 export default function FaceCard({
     face,
@@ -31,6 +30,7 @@ export default function FaceCard({
     onAssign,
     onCreate,
     onDelete,
+    onDetach
 }: {
     face: Face
     isProfile: boolean
@@ -38,6 +38,7 @@ export default function FaceCard({
     onAssign: (personId: number) => void
     onCreate: (data: { name?: string; age?: number; gender?: string }) => void
     onDelete: () => void
+    onDetach: () => void
 }) {
     const [mode, setMode] = useState<'none' | 'search' | 'new'>('none')
     const cardRef = useRef<HTMLDivElement>(null); // Ref to the Card element for positioning
@@ -56,7 +57,7 @@ export default function FaceCard({
             setCands([])
             return
         }
-        fetch(`${API}/persons/?name=${encodeURIComponent(query)}`)
+        fetch(`${API}/api/persons/?name=${encodeURIComponent(query)}`)
             .then(r => r.json())
             .then(r => setCands(r.items))
             .catch(console.error)
@@ -206,39 +207,41 @@ export default function FaceCard({
             >
                 {/* ... CardActionArea and hover actions ... */}
                 <Box sx={{ position: 'relative' }}>
-                    <CardActionArea component={Link} to={`/media/${face.media_id}`}>
+                    <CardActionArea component={Link} to={`/medium/${face.media_id}`}>
                         <Avatar
-                            src={`/thumbnails/${face.thumbnail_path}`}
+                            src={`${API}/thumbnails/${face.thumbnail_path}`}
                             variant="rounded"
                             sx={{ width: '100%', height: 124, borderRadius: 2, border: isProfile ? '3px solid #FF2E88' : 'none' }}
                         />
                     </CardActionArea>
-                    <Box
-                        className="hover-actions"
-                        sx={{
-                            position: 'absolute',
-                            top: 4,
-                            left: 4,
-                            right: 4,
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            opacity: 0,
-                            transition: 'opacity 0.3s',
-                        }}
-                    >
-                        <Tooltip title="Delete">
-                            <IconButton size="small" sx={{ bgcolor: 'rgba(0,0,0,0.4)' }} onClick={onDelete}>
-                                <DeleteIcon fontSize="small" sx={{ color: 'red' }} />
-                            </IconButton>
-                        </Tooltip>
-                        {!isProfile && (
-                            <Tooltip title="Set as profile">
-                                <IconButton size="small" sx={{ bgcolor: '#FF2E88' }} onClick={() => onSetProfile(face.id)}>
-                                    <StarIcon fontSize="small" sx={{ color: 'white' }} />
+                    {!READ_ONLY && (
+                        <Box
+                            className="hover-actions"
+                            sx={{
+                                position: 'absolute',
+                                top: 4,
+                                left: 4,
+                                right: 4,
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                opacity: 0,
+                                transition: 'opacity 0.3s',
+                            }}
+                        >
+                            <Tooltip title="Delete">
+                                <IconButton size="small" sx={{ bgcolor: 'rgba(0,0,0,0.4)' }} onClick={onDelete}>
+                                    <DeleteIcon fontSize="small" sx={{ color: 'red' }} />
                                 </IconButton>
                             </Tooltip>
-                        )}
-                    </Box>
+                            {!isProfile && (
+                                <Tooltip title="Set as profile">
+                                    <IconButton size="small" sx={{ bgcolor: '#FF2E88' }} onClick={() => onSetProfile(face.id)}>
+                                        <StarIcon fontSize="small" sx={{ color: 'white' }} />
+                                    </IconButton>
+                                </Tooltip>
+                            )}
+                        </Box>
+                    )}
                 </Box>
 
                 {!READ_ONLY && (
@@ -250,6 +253,11 @@ export default function FaceCard({
                         ) : (
                             <Stack direction="row" spacing={1} justifyContent="center">
                                 {/* ... Assign Existing and Create New Person IconButtons ... */}
+                                <Tooltip title="Detach from person">
+                                    <IconButton size="small" onClick={onDetach}>
+                                        <LinkOffIcon fontSize="small" sx={{ color: 'white' }} />
+                                    </IconButton>
+                                </Tooltip>
                                 <Tooltip title="Assign Existing">
                                     <IconButton size="small" onClick={() => setMode(prev => prev === 'search' ? 'none' : 'search')}>
                                         <PersonSearchIcon fontSize="small" sx={{ color: mode === 'search' ? '#FF2E88' : 'white' }} />

@@ -9,6 +9,7 @@ import {
 } from '@mui/material';
 import { Tag } from '../types'
 import { CursorResponse } from '../hooks/useInfinite'
+import { API } from '../config';
 
 type OwnerType = 'media' | 'persons'
 
@@ -28,11 +29,10 @@ export default function TagAdder({
     const [inputValue, setInputValue] = useState('')
     const [allTags, setAllTags] = useState<Tag[]>([])
     const [loadingAllTags, setLoadingAllTags] = useState(false);
-    const API = import.meta.env.VITE_API_BASE_URL ?? ''
 
     useEffect(() => {
         setLoadingAllTags(true);
-        fetch(`${API}/tags/`)
+        fetch(`${API}/api/tags/`)
             .then(res => {
                 if (!res.ok) {
                     throw new Error(`Failed to fetch tags: ${res.status}`);
@@ -65,7 +65,7 @@ export default function TagAdder({
         if (!tagToAssign) {
             // Tag doesn't exist globally, so create it
             try {
-                const createRes = await fetch(`${API}/tags/`, {
+                const createRes = await fetch(`${API}/api/tags/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: nameToAdd }), // Use the processed name
@@ -85,7 +85,7 @@ export default function TagAdder({
         }
 
         try {
-            const assignRes = await fetch(`${API}/tags/${ownerType}/${ownerId}/${tagToAssign!.id}`, {
+            const assignRes = await fetch(`${API}/api/tags/${ownerType}/${ownerId}/${tagToAssign!.id}`, {
                 method: 'POST',
             });
             if (!assignRes.ok) {
@@ -106,7 +106,7 @@ export default function TagAdder({
         tag => !existingTags.some(existingTag => existingTag.id === tag.id)
     );
     return (
-        <Box display="flex" gap={1} alignItems="center" sx={{ width: '90%' }}>
+        <Box display="flex" gap={1} alignItems="center" sx={{ width: '100%' }}>
             <Autocomplete
                 freeSolo // Allows users to enter text not present in suggestions
                 fullWidth

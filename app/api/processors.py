@@ -124,7 +124,7 @@ def _run_conversion(task_id: str, media_path: str, media_id:int):
         proc.wait()
         # mark complete
         task.processed = 100
-        task.status = "finished"
+        task.status = "completed"
         task.finished_at = datetime.now(timezone.utc)
         media = session.get(Media, media_id)
         new_file = full_path.with_stem(original_stem).with_suffix(".mp4")

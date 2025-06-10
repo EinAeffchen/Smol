@@ -6,11 +6,20 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api import media, person, tasks, face, tags, search
-from app.config import MEDIA_DIR, STATIC_DIR, THUMB_DIR, READ_ONLY
+from app.config import (
+    MEDIA_DIR,
+    STATIC_DIR,
+    THUMB_DIR,
+    READ_ONLY,
+    PORT,
+    DATABASE_URL,
+)
 from app.database import init_db, init_vec_index
 from app.api.processors import router as proc_router
 from app.processor_registry import load_processors
 from fastapi.middleware.cors import CORSMiddleware
+import os
+from app.logger import logger
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -23,6 +32,7 @@ logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
+    logging.info("Running in READ_ONLY mode: %s", READ_ONLY)
     if not READ_ONLY:
         init_db()
         init_vec_index()
@@ -30,11 +40,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(lifespan=lifespan)
+logger.info("MEDIA_DIR: %s", MEDIA_DIR)
+logger.info("DATABASE DIR: %s", DATABASE_URL)
 
+app = FastAPI(lifespan=lifespan)
+origins = [os.environ.get("DOMAIN", ""), "http://localhost:5173"]
+logger.info("ORIGINS: %s", origins)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -1,17 +1,19 @@
 FROM python:3.12-slim
+ARG UID=1000
+ARG GID=1000
 
-RUN useradd -m -s /bin/sh myuser
+RUN groupadd -g ${GID} --non-unique appgroup && \
+    useradd -u ${UID} -g appgroup -s /bin/sh -m appuser
 
 WORKDIR /app
-COPY --chown=myuser:myuser frontend /app/frontend
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    libgl1 \
-    npm \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+ffmpeg \
+libgl1 \
+npm \
+build-essential \
+&& rm -rf /var/lib/apt/lists/* \
+&& apt-get clean
 
 # Set environment variables
 # PYTHONUNBUFFERED: Prevents Python output from being buffered, making logs appear in real-time.
@@ -22,35 +24,38 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # MEDIA_DIR: Application directory for media files (runtime data, should be a volume).
 # STATIC_DIR: Directory where static frontend assets will be served from.
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=true \
-    PIP_DISABLE_PIP_VERSION_CHECK=on \
-    VENV_PATH=/app/venv \
-    PORT=8000 \
-    MEDIA_DIR=/app/media \
-    HF_HOME=/app/media/.smol/models \
-    TORCH_HOME=/app/media/.smol/models \
-    INSIGHTFACE_HOME=/app/media/.smol/models
+PIP_NO_CACHE_DIR=true \
+PIP_DISABLE_PIP_VERSION_CHECK=on \
+VENV_PATH=/app/venv \
+PORT=8000 \
+MEDIA_DIR=/app/media \
+DATABASE_DIR=/app/database
+
+ENV HF_HOME=${MEDIA_DIR}/.smol/models \
+TORCH_HOME=${MEDIA_DIR}/.smol/models \
+INSIGHTFACE_HOME=${MEDIA_DIR}/.smol/models
 
 RUN python3 -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"
 
 
-RUN mkdir -p $MEDIA_DIR && chown myuser:myuser $MEDIA_DIR
-RUN chown -R myuser:myuser $VENV_PATH
+RUN mkdir -p $MEDIA_DIR && chown appuser:appgroup $MEDIA_DIR
+RUN chown -R appuser:appgroup $VENV_PATH
 
 COPY requirements.txt .
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+pip install -r requirements.txt
 
-COPY --chown=myuser:myuser ./app ./app
+COPY --chown=appuser:appgroup frontend /app/frontend
+COPY --chown=appuser:appgroup ./app ./app
+RUN mkdir -p ./database && chown appuser:appgroup ./database
 
-COPY --chown=myuser:myuser entrypoint.sh /entrypoint.sh
+COPY --chown=appuser:appgroup entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Create a non-root user and switch to it for better security
 
 EXPOSE $PORT
-USER myuser
+USER appuser
 
-CMD tail -f /dev/null
-# ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]

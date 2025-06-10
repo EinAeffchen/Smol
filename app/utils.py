@@ -150,7 +150,6 @@ def _split_by_scenes(
     media: Media, scenes: Iterable[TimecodePair]
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
-    logger.warning("Splitting by scenes")
     for i, (start_time, end_time) in tqdm(
         enumerate(scenes), total=len(scenes)
     ):
@@ -186,7 +185,6 @@ def _split_by_scenes(
 
 
 def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
-    logger.warning("Splitting by frames")
     scene_objs = []
     video_path = MEDIA_DIR / media.path
     cap = cv2.VideoCapture(str(video_path))
