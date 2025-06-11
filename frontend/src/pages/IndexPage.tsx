@@ -1,6 +1,6 @@
-import React, { useState, useCallback, Fragment } from 'react';
-// import { useInfinite, CursorResponse } from '../hooks/useInfinite'; // Your hook from Step 1
-import { useInfinite, CursorResponse } from '../hooks/useInfinite2'; // Your hook from Step 1
+import React, { useState, useCallback } from 'react';
+import { useInfinite, CursorResponse } from '../hooks/useInfinite'; // Your hook from Step 1
+// import { useInfinite, CursorResponse } from '../hooks/useInfinite2'; // Your hook from Step 1
 import { MediaIndex } from '../types';
 import MediaCard from '../components/MediaCard';
 import {
@@ -11,10 +11,19 @@ import {
   MenuItem,
   Container,
 } from '@mui/material';
+import Masonry from 'react-masonry-css';
 import ImportExportIcon from '@mui/icons-material/ImportExport';
 import { API } from '../config';
 
 const ITEMS_PER_PAGE = 20;
+
+const breakpointColumnsObj = {
+  default: 5,
+  1600: 4,
+  1200: 3,
+  900: 3,
+  600: 2
+};
 
 export default function IndexPage() {
   const [tags, setTags] = useState<string[]>([]);
@@ -40,49 +49,61 @@ export default function IndexPage() {
   );
 
   // We now get `pages` which is an array of arrays
-  const { pages, hasMore, loading, loaderRef } = useInfinite<MediaIndex>(fetchPage, ITEMS_PER_PAGE, [sortOrder, tags]);
+  const { items, hasMore, loading, loaderRef } = useInfinite<MediaIndex>(fetchPage, ITEMS_PER_PAGE, [sortOrder, tags]);
 
-  const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => { /* ... unchanged ... */ };
-  const handleSortMenuClose = () => { /* ... unchanged ... */ };
-  const handleSortChange = (newSortOrder: 'newest' | 'latest') => { /* ... unchanged ... */ };
+  const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+    setSortMenuAnchorEl(event.currentTarget);
+  };
+  const handleSortMenuClose = () => {
+    setSortMenuAnchorEl(null);
+  };
+  const handleSortChange = (newSortOrder: 'newest' | 'latest') => {
+    // When changing sort, reset the scroll position memory
+    setSortOrder(newSortOrder);
+    handleSortMenuClose();
+  };
 
   return (
-    <Container maxWidth="xl" sx={{ bgcolor: '#1C1C1E', color: '#FFF', minHeight: '100vh', py: 2 }}>
-      <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
-        {/* Sort Menu JSX is unchanged */}
-      </Box>
+    <>
+      <Container maxWidth="xl" sx={{ bgcolor: '#1C1C1E', color: '#FFF', minHeight: '100vh', py: 2 }}>
+        <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
+          <IconButton onClick={handleSortMenuOpen} sx={{ color: '#BFA2DB' }}>
+            <ImportExportIcon />
+          </IconButton>
+          <Menu
+            anchorEl={sortMenuAnchorEl}
+            open={Boolean(sortMenuAnchorEl)}
+            onClose={handleSortMenuClose}
+          >
+            <MenuItem onClick={() => handleSortChange('newest')} selected={sortOrder === 'newest'}>
+              Sort by Created At
+            </MenuItem>
+            <MenuItem onClick={() => handleSortChange('latest')} selected={sortOrder === 'latest'}>
+              Sort by Inserted At
+            </MenuItem>
+          </Menu>
+        </Box>
 
-      {/*
-              This is the implementation of your design. We map over the pages,
-              and each page gets its own, independent masonry container.
-            */}
-      {pages.map((page, pageIndex) => (
-        <Box
-          key={pageIndex}
-          sx={{
-            // Apply the multi-column CSS to each page's container
-            columnCount: { xs: 2, sm: 3, md: 4, lg: 5, xl: 6 },
-            columnGap: (theme) => theme.spacing(2),
-            // This creates the "hard gap" between pages
-            mb: 2,
-          }}
+        <Masonry
+          breakpointCols={breakpointColumnsObj}
+          className="my-masonry-grid"
+          columnClassName="my-masonry-grid_column"
         >
-          {page.map(media => (
-            <Box key={media.id} sx={{ breakInside: 'avoid', mb: 2 }}>
+          {items.map(media => (
+            <div key={media.id}>
               <MediaCard media={media} />
-            </Box>
+            </div>
           ))}
-        </Box>
-      ))}
+        </Masonry>
 
-      {/* Loading / Sentinel */}
-      {loading && (
-        <Box textAlign="center" py={3}>
-          <CircularProgress sx={{ color: '#FF2E88' }} />
-        </Box>
-      )}
-      {/* The ref is on a sentinel Box that becomes visible when there's more to load */}
-      {hasMore && <Box ref={loaderRef} />}
-    </Container>
+        {/* Loading / Sentinel */}
+        {loading && (
+          <Box textAlign="center" py={3}>
+            <CircularProgress sx={{ color: '#FF2E88' }} />
+          </Box>
+        )}
+        {hasMore && <Box ref={loaderRef} />}
+      </Container>
+    </>
   );
 }

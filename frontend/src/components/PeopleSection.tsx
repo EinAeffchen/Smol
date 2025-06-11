@@ -30,6 +30,7 @@ export function PeopleSection({
     onDeleteFace,
     onDetachFace,
 }: PeopleSectionProps) {
+    console.log(persons);
     return (
         <>
             {/* Detected Persons Section */}
@@ -38,7 +39,19 @@ export function PeopleSection({
                     <Typography variant="h6" gutterBottom>Detected Persons</Typography>
                     <Box sx={{ display: 'flex', overflowX: 'auto', gap: 2, py: 1 }}>
                         {persons.map(p => (
-                            <PersonCard key={p.id} person={p} />
+                            // THE FIX: Wrap each card in a Box that defines its width.
+                            // This allows the card's internal `aspectRatio` to calculate the height.
+                            <Box
+                                key={p.id}
+                                sx={{
+                                    // Give each card a fixed width in the scrolling list.
+                                    width: '140px',
+                                    // Prevent the card from shrinking if the container gets crowded.
+                                    flexShrink: 0,
+                                }}
+                            >
+                                <PersonCard person={p} />
+                            </Box>
                         ))}
                     </Box>
                 </Box>
@@ -52,7 +65,7 @@ export function PeopleSection({
                             title="Unassigned Faces"
                             faces={orphans}
                             onAssign={onAssign}
-                            onSetProfile={() => { alert('No profile to set'); }} // Or implement as needed
+                            onSetProfile={() => { alert('No profile to set'); }}
                             onCreate={onCreateFace}
                             onDelete={onDeleteFace}
                             onDetach={onDetachFace}

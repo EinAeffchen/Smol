@@ -1,14 +1,14 @@
 from sqlmodel import SQLModel
 from pydantic import ConfigDict, BaseModel
 from app.models import Media
-from app.schemas.person import PersonRead
+from app.schemas.person import PersonReadSimple
 
 
 class TagRead(SQLModel):
     id: int
     name: str
     media: list[Media]
-    persons: list[PersonRead]
+    persons: list[PersonReadSimple]
 
 
 class TagSimple(SQLModel):

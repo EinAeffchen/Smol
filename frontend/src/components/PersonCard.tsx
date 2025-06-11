@@ -1,65 +1,88 @@
-import React from 'react'
-import { Link as RouterLink } from 'react-router-dom'
+import React from 'react';
+import { Link as RouterLink } from 'react-router-dom';
 import {
-  Card,
-  CardActionArea,
-  Avatar,
+  Box,
   Typography,
-} from '@mui/material'
-import { API } from '../config'
-import { Person } from '../types'
+  useTheme,
+} from '@mui/material';
+import { API } from '../config';
+import { Person } from '../types';
 
-const ACCENT = '#FF2E88'
-const BG_CARD = '#2C2C2E'
-const TEXT_SECONDARY = '#BFA2DB'
+const getInitials = (name = '') => {
+  const parts = name.split(' ');
+  if (parts.length > 1) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+  return name.substring(0, 2).toUpperCase();
+};
 
 export default function PersonCard({ person }: { person: Person }) {
-  const thumb =
-    person.profile_face?.thumbnail_path
-      ? `${API}/thumbnails/${person.profile_face.thumbnail_path}`
-      : undefined
+  const theme = useTheme();
 
+  // THE FIX: URL-encode the filename to handle special characters like spaces and ampersands.
+  const thumbUrl = person.profile_face?.thumbnail_path
+    ? `${API}/thumbnails/${encodeURIComponent(person.profile_face.thumbnail_path)}`
+    : undefined;
+  console.log(person);
   return (
-    <Card
-      elevation={3}
+    <Box
+      component={RouterLink}
+      to={`/person/${person.id}`}
       sx={{
-        bgcolor: BG_CARD,
-        borderRadius: 2,
+        aspectRatio: '3/4',
+        position: 'relative',
+        display: 'block',
         overflow: 'hidden',
-        height: '100%',
+        borderRadius: 3,
+        textDecoration: 'none',
+        color: 'white',
+        transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+        background: thumbUrl
+          ? `url(${thumbUrl})`
+          : 'linear-gradient(135deg, #5F4B8B, #4A3A6A)',
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        '&:hover': {
+          transform: 'scale(1.05)',
+          boxShadow: theme.shadows[10],
+          zIndex: 10,
+        },
       }}
     >
-      <CardActionArea
-        component={RouterLink}
-        to={`/person/${person.id}`}
+      {!thumbUrl && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+          <Typography variant="h4" fontWeight="bold">
+            {getInitials(person.name || 'Unknown')}
+          </Typography>
+        </Box>
+      )}
+
+      <Box
         sx={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          background: 'linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 50%)',
           display: 'flex',
           flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          p: 2,
-          height: '100%',
-          textAlign: 'center',
+          justifyContent: 'flex-end',
+          p: 1.5,
         }}
       >
-        <Avatar
-          src={thumb}
-          sx={{ width: 100, height: 100, mb: 1, border: `2px solid ${ACCENT}` }}
-        />
-        <Typography
-          variant="subtitle1"
-          noWrap
-          sx={{ color: '#FFF', mb: 0.5, width: '100%' }}
-        >
+        <Typography variant="subtitle1" fontWeight="bold" lineHeight={1.2}>
           {person.name || 'Unknown'}
         </Typography>
-        <Typography
-          variant="caption"
-          sx={{ color: TEXT_SECONDARY, mt: 0.5, minHeight: '1em' }}
-        >
-          {person.age != null ? `${person.age} yr${person.age !== 1 ? 's' : ''}` : ''}
+        <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', mt: 0.5 }}>
+          {/* Assuming you meant appearance_count from your JSON */}
+          {person.appearance_count ? `${person.appearance_count} photos` : ''}
         </Typography>
-      </CardActionArea>
-    </Card>
-  )
+      </Box>
+    </Box>
+  );
 }
+
+// NOTE: I also noticed your JSON provides `appearance_count` but the previous code
+// was looking for `face_count`. I've updated the card to use `appearance_count`
+// to correctly display the photo count.

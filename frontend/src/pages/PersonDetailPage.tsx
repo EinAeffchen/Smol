@@ -449,7 +449,7 @@ export default function PersonDetailPage() {
                         <Typography variant="h6" gutterBottom>Similar People</Typography>
                         <Grid container spacing={2}>
                             {similarPersons.map(p => (
-                                <Grid key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2 }}>
+                                <Grid key={p.id} size={{ xs: 6, sm: 6, md: 3, lg: 2 }}>
                                     <SimilarPersonCard {...p} />
                                 </Grid>
                             ))}

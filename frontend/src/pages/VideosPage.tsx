@@ -1,44 +1,102 @@
-import React, { useCallback } from 'react'
-import MediaCard from '../components/MediaCard'
+import React, { useState, useCallback } from 'react'
 import { useInfinite, CursorResponse } from '../hooks/useInfinite'
 import { MediaPreview } from '../types'
-import { API } from '../config'
+import Masonry from 'react-masonry-css';
+import ImportExportIcon from '@mui/icons-material/ImportExport';
+import { API } from '../config';
+import MediaCard from '../components/MediaCard';
+import {
+    Box,
+    CircularProgress,
+    IconButton,
+    Menu,
+    MenuItem,
+    Container,
+} from '@mui/material';
+
+const breakpointColumnsObj = {
+    default: 5,
+    1600: 4,
+    1200: 3,
+    900: 3,
+    600: 2
+};
 
 export default function VideosPage() {
+    const [sortOrder, setSortOrder] = useState<'newest' | 'latest'>('newest');
+    const [sortMenuAnchorEl, setSortMenuAnchorEl] = useState<null | HTMLElement>(null);
+
     const pageSize = 20;
     const fetchVideos = useCallback(
-        (cursor: string | null, limit: number) =>
-            fetch(
-                `${API}/api/media/videos${cursor ? `?cursor=${cursor}&` : "?"
-                }limit=${limit}`
-            ).then((r) =>
-                r.json() as Promise<CursorResponse<MediaPreview>>
-            ),
-        [API]
-    )
-    const { items: videos, setItems: setVideos, hasMore, loading, loaderRef } =
-        useInfinite<MediaPreview>(fetchVideos, pageSize, [])
+        (cursor: string | null, limit: number) => {
+            const params = new URLSearchParams();
+            params.set('limit', limit.toString());
+            params.set('sort', sortOrder);
+            if (cursor) params.set('cursor', cursor);
 
+            return fetch(`${API}/api/media/videos?${params.toString()}`).then(res => {
+                if (!res.ok) throw new Error(res.statusText);
+                // Ensure your API returns { items: [], next_cursor: "..." }
+                return res.json() as Promise<CursorResponse<MediaPreview>>;
+            });
+        },
+        [sortOrder]
+    )
+    const { items, hasMore, loading, loaderRef } =
+        useInfinite<MediaPreview>(fetchVideos, pageSize, [sortOrder])
+    const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+        setSortMenuAnchorEl(event.currentTarget);
+    };
+    const handleSortMenuClose = () => {
+        setSortMenuAnchorEl(null);
+    };
+    const handleSortChange = (newSortOrder: 'newest' | 'latest') => {
+        // When changing sort, reset the scroll position memory
+        setSortOrder(newSortOrder);
+        handleSortMenuClose();
+    };
 
     return (
-        <div className="max-w-screen-lg mx-auto px-4 py-8">
-            <h1 className="text-2xl font-semibold mb-6">Videos</h1>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4">
-                {videos.map(img => <MediaCard key={img.id} media={img} />)}
-            </div>
-            {loading && (
-                <div className="py-4 text-center text-gray-500">
-                    Loading…
-                </div>
-            )}
-            {!loading && hasMore && (
-                <div
-                    ref={loaderRef}
-                    className="py-4 text-center text-gray-500"
+        <>
+            <Container maxWidth="xl" sx={{ bgcolor: '#1C1C1E', color: '#FFF', minHeight: '100vh', py: 2 }}>
+                <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
+                    <IconButton onClick={handleSortMenuOpen} sx={{ color: '#BFA2DB' }}>
+                        <ImportExportIcon />
+                    </IconButton>
+                    <Menu
+                        anchorEl={sortMenuAnchorEl}
+                        open={Boolean(sortMenuAnchorEl)}
+                        onClose={handleSortMenuClose}
+                    >
+                        <MenuItem onClick={() => handleSortChange('newest')} selected={sortOrder === 'newest'}>
+                            Sort by Created At
+                        </MenuItem>
+                        <MenuItem onClick={() => handleSortChange('latest')} selected={sortOrder === 'latest'}>
+                            Sort by Inserted At
+                        </MenuItem>
+                    </Menu>
+                </Box>
+
+                <Masonry
+                    breakpointCols={breakpointColumnsObj}
+                    className="my-masonry-grid"
+                    columnClassName="my-masonry-grid_column"
                 >
-                    Scroll to load more…
-                </div>
-            )}
-        </div>
-    )
+                    {items.map(media => (
+                        <div key={media.id}>
+                            <MediaCard media={media} />
+                        </div>
+                    ))}
+                </Masonry>
+
+                {/* Loading / Sentinel */}
+                {loading && (
+                    <Box textAlign="center" py={3}>
+                        <CircularProgress sx={{ color: '#FF2E88' }} />
+                    </Box>
+                )}
+                {hasMore && <Box ref={loaderRef} />}
+            </Container>
+        </>
+    );
 }

@@ -26,6 +26,7 @@ export interface Person {
   age?: number;
   gender?: string;
   tags: Tag[];
+  appearance_count: number;
   profile_face_id?: number;
   profile_face?: Face;
 }

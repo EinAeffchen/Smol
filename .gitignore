@@ -134,6 +134,6 @@ smol.db
 **/viewer/images
 media
 media2
-frontend/node_modules
 app/models/*.tar
 app/models/*.txt
+node_modules/

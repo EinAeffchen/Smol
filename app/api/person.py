@@ -9,12 +9,15 @@ from fastapi import (
     Query,
     status,
 )
-from sqlalchemy.orm import selectinload, defer
+from sqlalchemy import func, desc
+from sqlalchemy.orm import defer, selectinload
 from sqlmodel import Session, delete, select, text, update
 
+from app.config import READ_ONLY
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
 from app.models import Face, Person, PersonTagLink
+from app.schemas.face import CursorPage as FaceCursorPage
 from app.schemas.person import (
     CursorPage,
     FaceRead,
@@ -24,13 +27,11 @@ from app.schemas.person import (
     PersonUpdate,
     SimilarPerson,
 )
-from app.schemas.face import CursorPage as FaceCursorPage
 from app.utils import (
     get_person_embedding,
-    update_person_embedding,
     refresh_similarities_for_person,
+    update_person_embedding,
 )
-from app.config import READ_ONLY
 
 router = APIRouter()
 
@@ -47,34 +48,42 @@ def list_persons(
     limit: int = 50,
     session: Session = Depends(get_session),
 ):
+    before_count = None
     before_id = None
     if cursor:
-        before_id = int(cursor)
+        count, raw_id = cursor.split("_")
+        before_count = int(count)
+        before_id = int(raw_id)
 
-    q = select(Person).options(
-        selectinload(Person.profile_face)
-    )  # load the FK’d face
+    q = (
+        select(Person, func.count(Face.id).label("appearance_count"))
+        .outerjoin(Person.faces)
+        .group_by(Person.id)
+        .options(selectinload(Person.profile_face))
+    )
     if name:
         q = q.where(Person.name.ilike(f"%{name}%"))
     q = q.limit(limit)
-    q = q.order_by(Person.id.desc())
+    q = q.order_by(desc("appearance_count"), Person.id.desc())
     if before_id:
+        q = q.having(func.count(Face.id) < before_count)
         q = q.where(Person.id < before_id)
 
     people = session.exec(q).all()
     items = [
         PersonRead(
-            **p.model_dump(),
+            **person.model_dump(),
             profile_face=(
-                FaceRead(**p.profile_face.model_dump())
-                if p.profile_face
+                FaceRead(**person.profile_face.model_dump())
+                if person.profile_face
                 else None
             ),
+            appearance_count=appearance_count,
         )
-        for p in people
+        for person, appearance_count in people
     ]
     if len(items) == limit:
-        next_cursor = str(people[-1].id)
+        next_cursor = f"{people[-1][1]}_{people[-1][0].id}"
     else:
         next_cursor = None
     return CursorPage(next_cursor=next_cursor, items=items)

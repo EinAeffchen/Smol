@@ -5,8 +5,8 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import and_, delete, or_, text
-from sqlalchemy.orm import selectinload
+from sqlalchemy import and_, delete, or_, text, func
+from sqlalchemy.orm import selectinload, aliased
 from sqlmodel import Session, select
 from app.config import (
     READ_ONLY,
@@ -16,6 +16,7 @@ from app.config import (
 )
 from app.database import get_session, safe_commit
 from app.logger import logger
+from app.schemas.face import FaceRead
 from app.models import ExifData, Face, Media, MediaTagLink, Person, Scene, Tag
 from app.schemas.media import (
     CursorPage,
@@ -153,6 +154,7 @@ def list_locations(session: Session = Depends(get_session)):
 def list_images(
     limit: int = Query(50, ge=1, le=200),
     session: Session = Depends(get_session),
+    sort: Annotated[str, Query(enum=["newest", "latest"])] = "newest",
     cursor: str | None = Query(
         None,
         description="encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
@@ -162,13 +164,46 @@ def list_images(
         Media.duration.is_(None)
     )  # images have no duration
 
+    if sort == "newest":
+        sort_col = Media.created_at
+        # Type of the value in the cursor for 'newest'
+        parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
+    elif sort == "latest":
+        sort_col = Media.inserted_at
+        # Type of the value in the cursor for 'latest'
+        parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
+    else:
+        # Handle invalid sort parameter, perhaps default or raise error
+        raise ValueError(f"Unsupported sort option: {sort}")
+
+    stmt = stmt.order_by(sort_col.desc(), Media.id.desc())
+
     if cursor:
-        before_id = int(cursor)
-        # keyset predicate
-        stmt = stmt.where(Media.id < before_id)
-    stmt = stmt.order_by(Media.id.desc())
+        try:
+            val_str, id_str = cursor.split("_", 1)
+            prev_cursor_val = parse_val_from_cursor(val_str)
+            prev_cursor_id = int(id_str)
+        except ValueError:
+            logger.warning("Warning: Invalid cursor format: %s", cursor)
+        else:
+            # Apply the cursor-based WHERE clause
+            stmt = stmt.where(
+                or_(
+                    sort_col < prev_cursor_val,
+                    and_(
+                        sort_col == prev_cursor_val, Media.id < prev_cursor_id
+                    ),
+                )
+            )
+
     medias = session.exec(stmt.limit(limit)).all()
-    next_cursor = str(medias[-1].id) if len(medias) == limit else None
+    if len(medias) == limit:
+        last = medias[-1]
+        v = getattr(last, "created_at" if sort == "newest" else "inserted_at")
+        val_token = v.isoformat()
+        next_cursor = f"{val_token}_{last.id}"
+    else:
+        next_cursor = None
     return CursorPage(items=medias, next_cursor=next_cursor)
 
 
@@ -196,31 +231,52 @@ def list_videos(
 
 @router.get("/{media_id}", response_model=MediaDetail)
 def get_media(media_id: int, session: Session = Depends(get_session)):
-    statement = (
-        select(Media)
-        .where(Media.id == media_id)
-        .options(
-            selectinload(Media.tags),
-            selectinload(Media.faces)
-            .selectinload(Face.person)
-            .selectinload(Person.profile_face),
-        )
+    profile_face_alias = aliased(Face)
+
+    appearance_subq = (
+        select(Face.person_id, func.count(Face.id).label("appearance_count"))
+        .where(Face.person_id != None)
+        .group_by(Face.person_id)
+        .subquery()
     )
-    media = session.exec(statement).one_or_none()
-    if not media:
+    statement = (
+        select(
+            Media,
+            Person,
+            appearance_subq.c.appearance_count,
+        )
+        .join(Media.faces)
+        .join(Face.person)
+        .outerjoin(profile_face_alias, Person.profile_face)
+        .join(appearance_subq, appearance_subq.c.person_id == Person.id)
+        .where(Media.id == media_id)
+        .group_by(Media.id, Person.id, appearance_subq.c.appearance_count)
+        .options(selectinload(Media.tags))
+    )
+
+    rows = session.exec(statement).all()
+    if not rows:
         raise HTTPException(404, "Media not found")
 
+    media = rows[0][0]
     seen = set()
     persons: list[PersonRead] = []
     orphans: list[Face] = []
-    for face in media.faces:
-        if not face.person:
-            orphans.append(face)
-        p = face.person
-        if p and p.id not in seen:
-            seen.add(p.id)
-            persons.append(p)
-
+    for _, person, appearance_count in rows:
+        if person.id not in seen:
+            seen.add(person.id)
+            persons.append(
+                PersonRead(
+                    **person.model_dump(),
+                    profile_face=(
+                        FaceRead(**person.profile_face.model_dump())
+                        if person.profile_face
+                        else None
+                    ),
+                    appearance_count=appearance_count,
+                )
+            )
+    orphans = [f for f in media.faces if not f.person]
     # 2) take tags straight off media.tags
     return MediaDetail(media=media, persons=persons, orphans=orphans)
 
@@ -331,9 +387,7 @@ def read_exif(media_id: int, session=Depends(get_session)):
 
 
 @router.get("/{media_id}/get_similar", response_model=list[MediaPreview])
-def get_similar_media(
-    media_id: int, k: int = 8, session=Depends(get_session)
-):
+def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
     media = session.get(Media, media_id)
     if not media or not media.embedding:
         raise HTTPException(404, "Media not found")
@@ -347,7 +401,7 @@ def get_similar_media(
             AND distance < :maxd
        ORDER BY distance
     """
-    ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k+1)
+    ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k + 1)
     rows = session.exec(sql).all()
     logger.info(rows)
     media_ids = [r[0] for r in rows if r[0] != media_id]

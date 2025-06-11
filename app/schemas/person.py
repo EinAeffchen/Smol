@@ -25,6 +25,16 @@ class PersonRead(SQLModel):
     age: int | None
     gender: str | None
     profile_face: FaceRead | None
+    appearance_count: int | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class PersonReadSimple(SQLModel):
+    id: int
+    name: str | None
+    age: int | None
+    gender: str | None
+    profile_face: FaceRead | None
 
     model_config = ConfigDict(from_attributes=True)
 

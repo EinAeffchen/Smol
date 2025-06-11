@@ -147,12 +147,12 @@ export default function MediaDetailPage() {
 
     // Face assignment handlers
     const onAssign = async (faceId: number, personId: number) => {
-        await assignFace(faceId, personId)
+        await faceActions.assignFace(faceId, personId)
         loadDetail()
     }
 
     const onDeleteFace = async (faceId: number) => {
-        await deleteFace(faceId)
+        await faceActions.deleteFace(faceId)
         setDetail({
             ...detail,
             orphans: orphans.filter(f => f.id !== faceId),
@@ -160,7 +160,7 @@ export default function MediaDetailPage() {
     }
 
     const onDetachFace = async (faceId: number) => {
-        await detachFace(faceId)
+        await faceActions.detachFace(faceId)
         setDetail({
             ...detail,
             orphans: orphans.filter(f => f.id !== faceId),
@@ -168,7 +168,7 @@ export default function MediaDetailPage() {
     }
 
     const onCreateFace = async (faceId: number, data: any) => {
-        const p = await createPersonFromFace(faceId, data)
+        const p = await faceActions.createPersonFromFace(faceId, data)
         setDetail({
             ...detail,
             orphans: orphans.filter(f => f.id !== faceId),
@@ -176,12 +176,6 @@ export default function MediaDetailPage() {
         navigate(`/person/${p.id}`)
         return p
     }
-
-    const SectionLoader = ({ height = '200px' }: { height?: string }) => (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height }}>
-            <CircularProgress />
-        </Box>
-    );
 
     return (
         <Container maxWidth="lg" sx={{ pt: 2, pb: 6, bgcolor: '#1C1C1E', color: '#FFF' }}>
