@@ -1,51 +1,49 @@
 import React, { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
-    Card, CardActionArea, CardContent, Typography, Box, AvatarGroup, Avatar,
+    Box,
+    Typography,
     IconButton,
-    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogContentText,
+    DialogTitle,
+    Button,
+    useTheme,
 } from '@mui/material';
 import MovieIcon from '@mui/icons-material/Movie';
 import PersonIcon from '@mui/icons-material/Person';
 import DeleteIcon from '@mui/icons-material/Delete';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { Tag } from '../types';
 import { API } from '../config';
 
-const BG_CARD = '#2C2C2E'
-const ACCENT = '#FF2E88'
-const TEXT_SECONDARY = '#BFA2DB'
-const AVATAR_SIZE = 36
-const CARD_HEIGHT = 180
-
-export interface TagCardProps {
+interface TagCardProps {
     tag: Tag;
     onTagDeleted: (tagId: number) => void;
 }
 
-export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
-    const countMedia = tag.media.length
-    const countPeople = tag.persons.length
-
+export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
+    const theme = useTheme();
+    const [hovered, setHovered] = useState(false);
     const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
     const handleOpenConfirmDialog = (event: React.MouseEvent) => {
-        event.stopPropagation();
         event.preventDefault();
+        event.stopPropagation();
         setOpenConfirmDialog(true);
     };
+
     const handleCloseConfirmDialog = () => {
         setOpenConfirmDialog(false);
     };
+
     const handleConfirmDelete = async () => {
-        setOpenConfirmDialog(false);
+        handleCloseConfirmDialog();
         try {
             const response = await fetch(`${API}/api/tags/${tag.id}`, { method: 'DELETE' });
-            if (!response.ok) {
-                const errorData = await response.text();
-                console.error('Failed to delete tag:', errorData);
-                alert(`Failed to delete tag "${tag.name}". Error: ${response.status}`);
-                return;
-            }
+            if (!response.ok) throw new Error(`Failed to delete tag: ${response.status}`);
             onTagDeleted(tag.id);
         } catch (error) {
             console.error('Error during tag deletion:', error);
@@ -53,134 +51,129 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
         }
     };
 
+    // --- ADDED: Logic to create a mixed list of media and person thumbnails ---
+    const mediaPreviews = tag.media
+        .slice(0, 4)
+        .map(m => ({
+            type: 'media',
+            id: m.id,
+            url: `${API}/thumbnails/${m.id}.jpg`
+        }));
+
+    const personPreviews = tag.persons
+        .filter(p => p.profile_face?.thumbnail_path) // Ensure person has a profile face
+        .slice(0, 4)
+        .map(p => ({
+            type: 'person',
+            id: p.id,
+            url: `${API}/thumbnails/${encodeURIComponent(p.profile_face!.thumbnail_path)}`
+        }));
+
+    // Combine and slice to ensure we have a max of 4 total previews for the collage
+    const previewItems = [...mediaPreviews, ...personPreviews].slice(0, 4);
+
     return (
         <>
-            <Card
-                elevation={3}
+            <Box
+                component={RouterLink}
+                to={`/tag/${tag.id}`}
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
                 sx={{
-                    bgcolor: BG_CARD,
-                    borderRadius: 2,
-                    height: CARD_HEIGHT,
+                    display: 'block',
                     position: 'relative',
                     overflow: 'hidden',
+                    aspectRatio: '1/1',
+                    borderRadius: 3,
+                    textDecoration: 'none',
+                    bgcolor: '#2C2C2E',
+                    transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
+                    '&:hover': {
+                        transform: 'scale(1.05)',
+                        boxShadow: theme.shadows[10],
+                        zIndex: 10,
+                    },
                 }}
             >
-                <IconButton
-                    aria-label={`Delete tag ${tag.name}`}
-                    onClick={handleOpenConfirmDialog}
-                    size="small"
-                    sx={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        zIndex: 2,
-                        color: TEXT_SECONDARY,
-                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
-                        '&:hover': {
-                            color: ACCENT,
-                            backgroundColor: 'rgba(0, 0, 0, 0.3)',
-                        },
-                    }}
-                >
-                    <DeleteIcon fontSize="small" />
-                </IconButton>
-
-                <CardActionArea
-                    component={RouterLink}
-                    to={`/tag/${tag.id}`}
-                    sx={{ height: '100%', display: 'flex' }}
-                >
-                    <CardContent
-                        sx={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'space-between',
-                            height: '100%',
-                            width: '100%',
-                            p: 2,
-                        }}
-                    >
-                        {/* Tag Name and Counts */}
-                        <Box>
-                            <Typography
-                                variant="h6"
+                {/* --- Visual Collage Background (now with mixed content) --- */}
+                {previewItems.length > 0 ? (
+                    <Box sx={{ position: 'absolute', width: '100%', height: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr', gap: '2px' }}>
+                        {/* Map over the unified preview list */}
+                        {previewItems.map((item, index) => (
+                            <Box
+                                key={`${item.type}-${item.id}`}
                                 sx={{
-                                    color: '#FFF',
-                                    mb: 1,
-                                    whiteSpace: 'nowrap',
-                                    overflow: 'hidden',
-                                    textOverflow: 'ellipsis',
-                                    pr: '36px',
+                                    // Make the first item larger if possible
+                                    gridRow: index === 0 && previewItems.length > 2 ? 'span 2' : 'auto',
+                                    gridColumn: index === 0 && previewItems.length === 2 ? 'span 2' : 'auto',
+                                    background: `url(${item.url})`,
+                                    backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
                                 }}
-                            >
-                                {tag.name}
-                            </Typography>
-                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                                <MovieIcon fontSize="small" sx={{ color: ACCENT, mr: 0.5 }} />
-                                <Typography variant="body2" sx={{ color: TEXT_SECONDARY, mr: 2 }}>
-                                    {countMedia}
-                                </Typography>
-                                <PersonIcon fontSize="small" sx={{ color: ACCENT, mr: 0.5 }} />
-                                <Typography variant="body2" sx={{ color: TEXT_SECONDARY }}>
-                                    {countPeople}
-                                </Typography>
-                            </Box>
-                        </Box>
+                            />
+                        ))}
+                    </Box>
+                ) : (
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'linear-gradient(135deg, #5F4B8B, #4A3A6A)' }} />
+                )}
 
-                        {/* Thumbnails */}
-                        <AvatarGroup
-                            max={4}
+                {/* --- Gradient Overlay & Content --- */}
+                <Box sx={{
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    background: 'linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0.5) 100%)',
+                    display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
+                    p: 1.5, color: 'white',
+                }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                        <IconButton
+                            onClick={handleOpenConfirmDialog}
+                            size="small"
                             sx={{
-                                justifyContent: 'flex-start',
-                                '& .MuiAvatar-root': {
-                                    width: AVATAR_SIZE,
-                                    height: AVATAR_SIZE,
-                                    borderRadius: 1,
-                                    border: `1px solid ${BG_CARD}`
-                                },
+                                color: 'rgba(255,255,255,0.7)',
+                                backgroundColor: 'rgba(0,0,0,0.3)',
+                                opacity: hovered ? 1 : 0,
+                                transition: 'opacity 0.2s ease-in-out',
+                                '&:hover': { color: '#FF2E88', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
                             }}
                         >
-                            {tag.media.slice(0, 4).map(m => (
-                                <Avatar
-                                    key={`m-${m.id}`}
-                                    src={`${API}/thumbnails/${m.id}.jpg`}
-                                    alt={m.filename || 'Media thumbnail'}
-                                    variant="rounded"
-                                />
-                            ))}
-                            {tag.persons.slice(0, 4).map(p => p.profile_face?.thumbnail_path && (
-                                <Avatar
-                                    key={`p-${p.id}`}
-                                    src={`${API}/thumbnails/${p.profile_face.thumbnail_path}`}
-                                    alt={p.name || 'Person thumbnail'}
-                                    variant="rounded"
-                                />
-                            ))}
-                        </AvatarGroup>
-                    </CardContent>
-                </CardActionArea>
-            </Card>
+                            <DeleteIcon fontSize="small" />
+                        </IconButton>
+                    </Box>
+                    <Box>
+                        <Typography variant="h6" fontWeight="bold" noWrap>{tag.name}</Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, color: 'rgba(255,255,255,0.7)' }}>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <MovieIcon sx={{ fontSize: '1rem' }} />
+                                <Typography variant="caption">{tag.media.length}</Typography>
+                            </Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <PersonIcon sx={{ fontSize: '1rem' }} />
+                                <Typography variant="caption">{tag.persons.length}</Typography>
+                            </Box>
+                        </Box>
+                    </Box>
+                </Box>
+            </Box>
 
-            {/* Confirmation Dialog */}
+            {/* --- Themed Confirmation Dialog --- */}
             <Dialog
                 open={openConfirmDialog}
                 onClose={handleCloseConfirmDialog}
-                PaperProps={{ sx: { bgcolor: BG_CARD, color: '#FFF' } }}
+                slotProps={{ paper: { sx: { bgcolor: '#2C2C2E', color: '#FFF', borderRadius: 2 } } }}
             >
-                <DialogTitle sx={{ color: ACCENT }}>
-                    {`Delete Tag "${tag.name}"?`}
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <WarningAmberIcon sx={{ color: 'warning.main' }} />
+                    Delete Tag?
                 </DialogTitle>
                 <DialogContent>
-                    <DialogContentText sx={{ color: TEXT_SECONDARY }}>
-                        Are you sure you want to permanently delete this tag? All its associations with media and persons will also be removed. This action cannot be undone.
+                    <DialogContentText sx={{ color: 'text.secondary' }}>
+                        Are you sure you want to permanently delete the tag **"{tag.name}"**? This action cannot be undone.
                     </DialogContentText>
                 </DialogContent>
-                <DialogActions>
-                    <Button onClick={handleCloseConfirmDialog} sx={{ color: '#AAA' }}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleConfirmDelete} sx={{ color: ACCENT }} autoFocus>
-                        Delete
+                <DialogActions sx={{ p: '8px 24px 16px 24px' }}>
+                    <Button onClick={handleCloseConfirmDialog}>Cancel</Button>
+                    <Button onClick={handleConfirmDelete} color="error" variant="contained" autoFocus>
+                        Confirm Delete
                     </Button>
                 </DialogActions>
             </Dialog>

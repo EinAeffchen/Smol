@@ -56,21 +56,21 @@ export default function SearchResultsPage() {
             <Grid container spacing={2}>
                 {category === 'media' &&
                     mediaList.map(m => (
-                        <Grid item key={m.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                        <Grid key={m.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
                             <MediaCard media={m} />
                         </Grid>
                     ))}
 
                 {category === 'person' &&
                     peopleList.map(p => (
-                        <Grid item key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2.4 }}>
+                        <Grid key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2.4 }}>
                             <PersonCard person={p} />
                         </Grid>
                     ))}
 
                 {category === 'tag' &&
                     tagList.map(t => (
-                        <Grid item key={t.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                        <Grid key={t.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
                             <TagCard tag={t} />
                         </Grid>
                     ))}

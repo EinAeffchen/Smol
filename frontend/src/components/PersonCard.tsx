@@ -22,7 +22,6 @@ export default function PersonCard({ person }: { person: Person }) {
   const thumbUrl = person.profile_face?.thumbnail_path
     ? `${API}/thumbnails/${encodeURIComponent(person.profile_face.thumbnail_path)}`
     : undefined;
-  console.log(person);
   return (
     <Box
       component={RouterLink}

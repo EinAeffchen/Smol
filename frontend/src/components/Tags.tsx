@@ -2,26 +2,28 @@ import React from 'react'
 import { Link } from 'react-router-dom'
 import { Media, Tag } from '../types'
 import { API } from '../config'
+import { Person } from '../types'
 
 export interface TagsProps {
-    media: Media
+    media?: Media
+    person?: Person
     onUpdate: (updated: Media) => void
 }
 
-export function Tags({ media, onUpdate }: Readonly<TagsProps>) {
+export function Tags({ media, person, onUpdate }: Readonly<TagsProps>) {
+    const owner = media || person;
     const handleRemove = async (tag: Tag) => {
-        await fetch(`${API}/api/tags/media/${media.id}/${tag.id}`, { method: 'DELETE' })
+        await fetch(`${API}/api/tags/media/${owner.id}/${tag.id}`, { method: 'DELETE' })
         onUpdate({
-            ...media,
-            tags: media.tags.filter(t => t.id !== tag.id),
+            ...owner,
+            tags: owner.tags.filter(t => t.id !== tag.id),
         })
     }
-
     return (
         <section>
             <h2 className="text-xl font-semibold mb-2">Tags</h2>
             <div className="flex flex-wrap gap-2">
-                {(media.tags ?? []).map(tag => (
+                {(owner.tags ?? []).map(tag => (
                     <div
                         key={tag.id}
                         className="flex items-center bg-accent2 text-background px-3 py-1 rounded-full space-x-1"

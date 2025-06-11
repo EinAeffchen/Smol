@@ -17,7 +17,6 @@ import Alert from '@mui/material/Alert'
 import Snackbar from '@mui/material/Snackbar'
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import TagAdder from '../components/TagAdder'
 import { API, READ_ONLY } from '../config'
 import { useFaceActions } from '../hooks/useFaceActions'
 import { CursorResponse } from '../hooks/useInfinite'
@@ -152,15 +151,6 @@ export default function PersonDetailPage() {
 
     useEffect(() => {
         if (id) {
-            // setLoading(true);
-            // setDetail(null);
-            // setDetectedFacesList([]);
-            // setFacesNextCursor(null);
-            // setHasMoreFaces(true);
-            // setLoadingMoreFaces(false);
-            // setSuggestedFaces([]);
-            // setSimilarPersons([]);
-
             const initialLoad = async () => {
                 await Promise.all([
                     loadDetail(),
@@ -293,6 +283,7 @@ export default function PersonDetailPage() {
                 person={person}
                 medias={medias}
                 onTagUpdate={loadDetail}
+                onTagAdded={loadDetail}
                 detectedFacesList={detectedFacesList}
                 hasMoreFaces={hasMoreFaces}
                 loadingMoreFaces={loadingMoreFaces}
@@ -330,40 +321,6 @@ export default function PersonDetailPage() {
                     <Button onClick={deletePerson} color="error" variant="contained">Delete</Button>
                 </DialogActions>
             </Dialog>
-
-            {/* Tags */}
-            <Box mt={4} sx={{ bgcolor: '#2C2C2E', p: 2, borderRadius: 2 }}>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                    <Typography variant="h6">Tags</Typography>
-                    {!READ_ONLY && (
-                        <TagAdder ownerType="persons" ownerId={person.id} existingTags={person.tags ?? []} onTagAdded={() => loadDetail()} />
-                    )}
-                </Box>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                    {(person.tags ?? []).map((tag: Tag) => (
-                        <Chip
-                            key={tag.id}
-                            label={tag.name}
-                            component={Link}
-                            to={`/tag/${tag.id}`}
-                            clickable
-                            onDelete={(e) => {
-                                e.stopPropagation()
-                                e.preventDefault()
-                                fetch(`${API}/api/tags/persons/${person.id}/${tag.id}`, { method: 'DELETE' })
-                                    .then(() => loadDetail())
-                            }}
-                            deleteIcon={
-                                <CancelIcon
-                                    onMouseDown={e => e.stopPropagation()}
-                                />
-                            }
-                            color="secondary"
-                            sx={{ bgcolor: '#FF2E88', color: '#FFF' }}
-                        />
-                    ))}
-                </Stack>
-            </Box>
 
             {/* Merge Dialog */}
             <Dialog open={mergeOpen} onClose={() => setMergeOpen(false)}>

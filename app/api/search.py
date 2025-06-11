@@ -64,7 +64,6 @@ def search(
             vec=json.dumps(vec), max_dist=max_dist, k=limit * max_pages
         )
         rows = session.exec(sql).all()  # [(media_id, distance), ...]
-        logger.info(rows)
         media_ids = [r[0] for r in rows[(page - 1) * limit : page * limit]]
 
         # 2) load & order Media

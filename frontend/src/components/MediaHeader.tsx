@@ -63,17 +63,12 @@ export function MediaHeader({ media, showExif, onToggleExif, onOpenDialog }: Med
                     <MoreVert sx={{ color: 'white' }} />
                 </IconButton>
 
-                <Menu
-                    anchorEl={anchorEl}
-                    open={menuOpen}
-                    onClose={handleMenuClose}
-                >
-                    <MenuItem onClick={handleExifToggle}>
-                        <ListItemIcon><Visibility fontSize="small" /></ListItemIcon>
-                        <ListItemText>{showExif ? 'Hide EXIF' : 'Show EXIF'}</ListItemText>
-                    </MenuItem>
-
-                    {!READ_ONLY && (
+                {!READ_ONLY && (
+                    <Menu
+                        anchorEl={anchorEl}
+                        open={menuOpen}
+                        onClose={handleMenuClose}
+                    >
                         <>
                             <Divider />
                             {(media.duration) && (
@@ -91,8 +86,8 @@ export function MediaHeader({ media, showExif, onToggleExif, onOpenDialog }: Med
                                 <ListItemText>Delete File</ListItemText>
                             </MenuItem>
                         </>
-                    )}
-                </Menu>
+                    </Menu>
+                )}
             </Box>
         </Box >
     );

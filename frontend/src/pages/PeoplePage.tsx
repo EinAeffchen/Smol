@@ -57,7 +57,7 @@ export default function PeoplePage() {
 
             <Grid container spacing={3} alignItems="stretch">
                 {people.map(person => (
-                    <Grid key={person.id} size={{ xs: 6, sm: 4, md: 3, lg: 2, }}>
+                    <Grid key={person.id} size={{ xs: 6, sm: 4, md: 2, lg: 1.5, }}>
                         <PersonCard person={person} />
                     </Grid>
                 ))}

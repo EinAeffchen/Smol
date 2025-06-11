@@ -24,7 +24,6 @@ function ClickHandler({ selected, setTempPos }: { selected: MediaPreview | null;
     useMapEvents({
         click(e) {
             if (selected) {
-                console.log(e);
                 const { lat, lng } = e.latlng
                 setTempPos([lat, lng])
             }
@@ -67,7 +66,7 @@ export default function MapEditorPage() {
         setSearchLoading(true)
         fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchInput)}`)
             .then(res => res.json())
-            .then(data => { console.log('Got nominatim results', data); setSearchResults(data) })
+            .then(data => { setSearchResults(data) })
             .catch(console.error)
             .finally(() => setSearchLoading(false))
     }, [debouncedInput])

@@ -11,15 +11,11 @@ import {
 } from '@mui/material'
 import { ActionDialogs } from '../components/ActionDialogs'
 import { MediaDisplay } from '../components/MediaDisplay'
-import { PeopleSection } from '../components/PeopleSection'
 import { MediaHeader } from '../components/MediaHeader'
-import SimilarContent from '../components/MediaRelatedContent'
 import { useFaceActions } from '../hooks/useFaceActions'
 import { MediaDetail, Task } from '../types'
-import { TagsSection } from '../components/TagsSection'
-import { MediaExif } from '../components/MediaExif'
-import { ENABLE_PEOPLE } from '../config'
 import { API } from '../config'
+import { MediaContentTabs } from '../components/MediaContentTabs'
 
 export default function MediaDetailPage() {
     const { id } = useParams<{ id: string }>()
@@ -29,8 +25,7 @@ export default function MediaDetailPage() {
     const [task, setTask] = useState<Task | null>(null)
     const [dialogType, setDialogType] = useState<'convert' | 'deleteRecord' | 'deleteFile' | null>(null)
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
-    const [showExif, setShowExif] = useState(false)
-    const faceActions = useFaceActions();
+    const [tabValue, setTabValue] = useState(0);
 
     // Load media detail
     const loadDetail = useCallback(async () => {
@@ -46,8 +41,10 @@ export default function MediaDetailPage() {
     }, [id])
     useEffect(() => {
         setDetail(null)
+        setTabValue(0);
         loadDetail()
-    }, [id])
+    }, [id, loadDetail])
+
     useEffect(() => {
         if (!task || task.status === "completed") return
 
@@ -69,9 +66,16 @@ export default function MediaDetailPage() {
         return () => clearInterval(interval)
     }, [task])
 
-    if (!detail) return <Typography p={2}>Loading…</Typography>
+    if (!detail) {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
 
-    const { media, persons, orphans } = detail
+    const { media } = detail
+
 
     // Dialog controls
     const closeDialog = () => setDialogType(null)
@@ -131,66 +135,30 @@ export default function MediaDetailPage() {
         })
     }
 
-    const handleTagUpdateFromChild = (updatedMediaObject: Media) => {
-        setDetail(prevDetailState => {
-            if (!prevDetailState) {
-                // This should ideally not happen if UI elements using this are only rendered when detail exists
-                console.error("Cannot update media: previous detail state is null.");
-                return null;
-            }
-            return {
-                ...prevDetailState, // Preserve other parts of MediaDetail (persons, orphans, etc.)
-                media: updatedMediaObject, // Update only the media property
-            };
-        });
+    const handleToggleExif = () => {
+        setTabValue(3);
     };
-
-    // Face assignment handlers
-    const onAssign = async (faceId: number, personId: number) => {
-        await faceActions.assignFace(faceId, personId)
-        loadDetail()
-    }
-
-    const onDeleteFace = async (faceId: number) => {
-        await faceActions.deleteFace(faceId)
-        setDetail({
-            ...detail,
-            orphans: orphans.filter(f => f.id !== faceId),
-        })
-    }
-
-    const onDetachFace = async (faceId: number) => {
-        await faceActions.detachFace(faceId)
-        setDetail({
-            ...detail,
-            orphans: orphans.filter(f => f.id !== faceId),
-        })
-    }
-
-    const onCreateFace = async (faceId: number, data: any) => {
-        const p = await faceActions.createPersonFromFace(faceId, data)
-        setDetail({
-            ...detail,
-            orphans: orphans.filter(f => f.id !== faceId),
-        })
-        navigate(`/person/${p.id}`)
-        return p
-    }
-
     return (
-        <Container maxWidth="lg" sx={{ pt: 2, pb: 6, bgcolor: '#1C1C1E', color: '#FFF' }}>
+        <Container maxWidth="xl" sx={{ pt: 2, pb: 6 }}>
             <MediaHeader
                 media={media}
-                showExif={showExif}
-                onToggleExif={() => setShowExif(v => !v)}
+                showExif={tabValue === 3} // The button text can reflect if the Details tab is active
+                onToggleExif={handleToggleExif} // CHANGED: This now controls the tabs
                 onOpenDialog={setDialogType}
             />
+            <MediaDisplay media={media} />
             <ActionDialogs
                 dialogType={dialogType}
                 onClose={() => setDialogType(null)}
                 onConfirmConvert={confirmConvert}
                 onConfirmDeleteRecord={confirmDeleteRecord}
                 onConfirmDeleteFile={confirmDeleteFile}
+            />
+            {/* --- Tabbed Content Area --- */}
+            <MediaContentTabs
+                detail={detail}
+                onDetailReload={loadDetail}
+                onTagUpdate={(updatedMedia) => setDetail(d => d ? { ...d, media: updatedMedia } : null)}
             />
             {/* Snackbar */}
             <Snackbar open={snackbar.open} autoHideDuration={3000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
@@ -205,28 +173,6 @@ export default function MediaDetailPage() {
                     <LinearProgress variant="determinate" value={task.processed} sx={{ height: 8, borderRadius: 1 }} />
                 </Box>
             )}
-
-            <MediaDisplay media={media} />
-            <MediaExif show={showExif} mediaId={media.id} />
-
-            {ENABLE_PEOPLE && (
-                <PeopleSection
-                    persons={persons}
-                    orphans={orphans}
-                    onAssign={onAssign}
-                    onCreateFace={onCreateFace}
-                    onDeleteFace={onDeleteFace}
-                    onDetachFace={onDetachFace}
-                />
-            )}
-            <TagsSection
-                media={media}
-                onTagAdded={handleTagAdded}
-                onUpdate={handleTagUpdateFromChild}
-            />
-            <Box mt={4}>
-                <SimilarContent mediaId={media.id} />
-            </Box>
         </Container >
     )
 }

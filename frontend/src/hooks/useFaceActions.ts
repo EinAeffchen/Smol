@@ -32,7 +32,6 @@ export function useFaceActions() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
       });
-      console.log("🚀 Payload:", data);
       if (!res.ok) {
         const err = await res.text();
         console.error("❌ createPersonFromFace error:", err);

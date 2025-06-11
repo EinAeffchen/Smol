@@ -51,7 +51,7 @@ export default function TagDetailPage() {
                 </Typography>
                 <Grid container spacing={2}>
                     {(tag.media ?? []).map((m: Media) => (
-                        <Grid item key={m.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
+                        <Grid key={m.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
                             <MediaCard media={m} />
                         </Grid>
                     ))}
@@ -65,7 +65,7 @@ export default function TagDetailPage() {
                 </Typography>
                 <Grid container spacing={2}>
                     {(tag.persons ?? []).map((p: Person) => (
-                        <Grid item key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2.4 }}>
+                        <Grid key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2.4 }}>
                             <Box component={RouterLink} to={`/person/${p.id}`} sx={{ textDecoration: 'none' }}>
                                 <PersonCard person={p} />
                             </Box>

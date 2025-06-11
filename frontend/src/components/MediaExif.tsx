@@ -1,90 +1,139 @@
-import React, { useState, useEffect } from 'react'
-import { Box, Typography, Link as RouterLink, CircularProgress } from '@mui/material'
-import { Link } from 'react-router-dom'
-import { API } from '../config'
+import React, { useState, useEffect } from 'react';
+import {
+    Box,
+    CircularProgress,
+    Typography,
+    Paper,
+    Grid,
+    Divider,
+    Link as MuiLink,
+} from '@mui/material';
+import { Link } from 'react-router-dom';
 
-const BG_OVERLAY = 'rgba(0, 0, 0, 0.6)'
-const TEXT = '#FFF'
-const ACCENT = '#FF2E88'
+// Icons for a nicer look
+import CameraAltIcon from '@mui/icons-material/CameraAlt';
+import PhotoCameraIcon from '@mui/icons-material/PhotoCamera';
+import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import IsoIcon from '@mui/icons-material/Iso';
+import ShutterSpeedIcon from '@mui/icons-material/ShutterSpeed';
+import ApertureIcon from '@mui/icons-material/DonutLarge';
+import MyLocationIcon from '@mui/icons-material/MyLocation';
+import { API } from '../config';
 
 interface MediaExifProps {
-    show: boolean
-    mediaId: number
+    mediaId: number;
 }
 
-export function MediaExif({ show, mediaId }: MediaExifProps) {
-    const [exif, setExif] = useState<Record<string, any> | null | undefined>(undefined)
+export function MediaExif({ mediaId }: MediaExifProps) {
+    // State: 'loading', 'loaded', or 'error'
+    const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading');
+    const [exif, setExif] = useState<Record<string, any> | null>(null);
 
-    // Reset on mediaId change
     useEffect(() => {
-        setExif(undefined)
-    }, [mediaId])
+        // This effect runs only when the component is first mounted (i.e., when the tab is clicked)
+        let isCancelled = false;
+        setStatus('loading');
 
-    // Fetch EXIF when shown
-    useEffect(() => {
-        if (show && exif === undefined) {
-            fetch(`${API}/api/media/${mediaId}/processors/exif`)
-                .then(res => (res.ok ? res.json() : null))
-                .then(body => setExif(body))
-                .catch(() => setExif(null))
-        }
-    }, [show, mediaId])
+        fetch(`${API}/api/media/${mediaId}/processors/exif`)
+            .then(res => res.ok ? res.json() : Promise.reject('Failed to fetch'))
+            .then(body => {
+                if (!isCancelled) {
+                    setExif(body);
+                    setStatus('loaded');
+                }
+            })
+            .catch(() => {
+                if (!isCancelled) {
+                    setStatus('error');
+                    setExif(null);
+                }
+            });
 
-    if (!show) return null
+        // Cleanup function to prevent state updates on unmounted components
+        return () => {
+            isCancelled = true;
+        };
+    }, [mediaId]); // Re-fetches if the mediaId changes while the tab is open
 
-    // Determine if we have any EXIF properties
-    const hasData =
-        exif &&
-        typeof exif === 'object' &&
-        (
-            exif.timestamp != null ||
-            Object.keys(exif).some(
-                key => ['make', 'model', 'iso', 'exposure_time', 'aperture', 'focal_length', 'lat', 'lon'].includes(key) && exif[key] != null
-            )
+    if (status === 'loading') {
+        return (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '200px' }}>
+                <CircularProgress />
+            </Box>
+        );
+    }
+
+    if (status === 'error' || !exif || Object.keys(exif).length === 0) {
+        return <Typography sx={{ textAlign: 'center', py: 4 }}>No EXIF data available.</Typography>;
+    }
+
+    // Helper to render each EXIF data point with an icon
+    const ExifDataPoint = ({ icon, label, value }: { icon: React.ReactNode, label: string, value: React.ReactNode }) => {
+        if (!value) return null;
+        return (
+            <Grid size={{ xs: 12, sm: 6, md: 4 }} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                <Box sx={{ color: 'text.secondary' }}>{icon}</Box>
+                <Box>
+                    <Typography variant="body2" color="text.secondary">{label}</Typography>
+                    <Typography variant="body1" fontWeight="500">{value}</Typography>
+                </Box>
+            </Grid>
         )
-
+    };
 
     return (
-        <Box
-            sx={{
-                position: 'relative', inset: 0,
-                bgcolor: BG_OVERLAY,
-                color: TEXT,
-                p: 2,
-                overflowY: 'auto',
-                zIndex: 10,
-            }}
-        >
-            {exif === undefined ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                    <CircularProgress color="secondary" />
-                </Box>
-            ) : hasData ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                    {exif.make && (
-                        <Typography><strong>Camera:</strong> {exif.make} {exif.model}</Typography>
-                    )}
-                    {exif.timestamp && (
-                        <Typography><strong>Shot:</strong> {new Date(exif.timestamp).toLocaleString()}</Typography>
-                    )}
-                    {exif.iso && <Typography><strong>ISO:</strong> {exif.iso}</Typography>}
-                    {exif.exposure_time && <Typography><strong>Shutter:</strong> {exif.exposure_time}s</Typography>}
-                    {exif.aperture && <Typography><strong>Aperture:</strong> {exif.aperture}</Typography>}
-                    {exif.focal_length && <Typography><strong>Focal:</strong> {exif.focal_length} mm</Typography>}
-
-                    {exif.lat != null && exif.lon != null && (
-                        <RouterLink
-                            component={Link}
-                            to={`/map?focus=${mediaId}`}
-                            sx={{ mt: 2, color: ACCENT, '&:hover': { textDecoration: 'underline' } }}
-                        >
-                            View on map 📍
-                        </RouterLink>
-                    )}
-                </Box>
-            ) : (
-                <Typography>No EXIF data available.</Typography>
+        <Paper variant="outlined" sx={{ p: 3, backgroundColor: 'action.hover' }}>
+            <Grid container spacing={3}>
+                <ExifDataPoint
+                    icon={<CameraAltIcon />}
+                    label="Camera"
+                    value={exif.make && `${exif.make} ${exif.model || ''}`}
+                />
+                <ExifDataPoint
+                    icon={<AccessTimeIcon />}
+                    label="Shot"
+                    value={exif.timestamp && new Date(exif.timestamp).toLocaleString()}
+                />
+                <ExifDataPoint
+                    icon={<ApertureIcon />}
+                    label="Aperture"
+                    value={exif.aperture}
+                />
+                <ExifDataPoint
+                    icon={<ShutterSpeedIcon />}
+                    label="Shutter Speed"
+                    value={exif.exposure_time && `${exif.exposure_time}s`}
+                />
+                <ExifDataPoint
+                    icon={<IsoIcon />}
+                    label="ISO"
+                    value={exif.iso}
+                />
+                <ExifDataPoint
+                    icon={<PhotoCameraIcon />}
+                    label="Focal Length"
+                    value={exif.focal_length && `${exif.focal_length}mm`}
+                />
+            </Grid>
+            {exif.lat != null && exif.lon != null && (
+                <>
+                    <Divider sx={{ my: 3 }} />
+                    <MuiLink
+                        component={Link}
+                        to={`/map?focus=${mediaId}`}
+                        sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 1,
+                            textDecoration: 'none',
+                            color: 'primary.main',
+                            fontWeight: 500
+                        }}
+                    >
+                        <MyLocationIcon /> View on map
+                    </MuiLink>
+                </>
             )}
-        </Box>
-    )
+        </Paper>
+    );
 }

@@ -34,11 +34,9 @@ export default function TagsPage() {
 
 
   const handleTagDeleted = useCallback((deletedTagId: number) => {
-    console.log('[TagsPage] handleTagDeleted triggered for tag ID:', deletedTagId);
     setTags(currentTags => {
       const tagsBeforeFilter = currentTags.length;
       const newTags = currentTags.filter(tag => tag.id !== deletedTagId);
-      console.log(`[TagsPage] Tags before filter: ${tagsBeforeFilter}, After filter: ${newTags.length}`);
       return newTags;
     });
   }, [setTags]);

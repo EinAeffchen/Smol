@@ -214,6 +214,7 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
             "thumbnail_path": person.profile_face.thumbnail_path,
         }
         dict_person["tags"] = person.tags
+        dict_person["appearance_count"] = len(seen)
     return {
         "person": dict_person,
         "medias": medias,

@@ -7,7 +7,7 @@ interface DetectedFacesProps {
     faces: FaceRead[];
     profileFaceId?: number;
     title: string;
-    onSetProfile: (faceId: number) => void;
+    onSetProfile?: (faceId: number) => void;
     onAssign: (faceId: number, personId: number) => void;
     onCreate: (faceId: number, data: any) => Promise<Person>; 
     onDelete: (faceId: number) => void;

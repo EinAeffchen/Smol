@@ -29,7 +29,6 @@ export function PeopleSection({
     onDeleteFace,
     onDetachFace,
 }: PeopleSectionProps) {
-    console.log(persons);
     return (
         <>
             {persons.length > 0 && (

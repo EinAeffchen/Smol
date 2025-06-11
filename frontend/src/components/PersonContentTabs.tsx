@@ -5,7 +5,7 @@ import { Media, Person, Tag, FaceRead, SimilarPerson } from '../types';
 
 import MediaAppearances from './MediaAppearances';
 import SimilarPersonCard from './SimilarPersonCard';
-
+import { TagsSection } from './TagsSection';
 const DetectedFaces = React.lazy(() => import('./DetectedFaces'));
 
 interface TabPanelProps {
@@ -30,6 +30,7 @@ interface PersonContentTabsProps {
     detectedFacesList: FaceRead[];
     hasMoreFaces: boolean;
     loadingMoreFaces: boolean;
+    onTagAdded: (tag: any) => void;
     loadMoreDetectedFaces: () => void;
     handleProfileAssignmentWrapper: (faceId: number, personId: number) => void;
     handleAssignWrapper: (faceId: number, personId: number) => void;
@@ -64,9 +65,9 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
             <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
                 <Tabs value={tabValue} onChange={handleTabChange} aria-label="Person content tabs" variant="scrollable" scrollButtons="auto">
                     <Tab label={`Media Appearances (${props.medias.length})`} />
-                    <Tab label="Face Analysis" />
+                    <Tab label="Faces" />
                     <Tab label="Similar People" />
-                    {props.person.tags.length > 0 && <Tab label="Tags" />}
+                    <Tab label="Tags" />
                 </Tabs>
             </Box>
 
@@ -110,7 +111,7 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
                 {props.similarPersons.length > 0 ? (
                     <Grid container spacing={2}>
                         {props.similarPersons.map(p => (
-                            <Grid item key={p.id} size={{ xs: 6, sm: 4, md: 2 }} >
+                            <Grid key={p.id} size={{ xs: 6, sm: 3, md: 2 }} >
                                 <SimilarPersonCard {...p} />
                             </Grid>
                         ))}
@@ -121,8 +122,11 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
             </TabPanel>
 
             <TabPanel value={tabValue} index={3}>
-                <Typography>Tags section placeholder</Typography>
-                {/* Update to use Tags */}
+                <TagsSection
+                    person={props.person}
+                    onTagAdded={props.onTagAdded}
+                    onUpdate={props.onTagUpdate}
+                />
             </TabPanel>
         </Box >
     );

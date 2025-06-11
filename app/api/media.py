@@ -245,10 +245,10 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
             Person,
             appearance_subq.c.appearance_count,
         )
-        .join(Media.faces)
-        .join(Face.person)
+        .outerjoin(Media.faces)
+        .outerjoin(Face.person)
         .outerjoin(profile_face_alias, Person.profile_face)
-        .join(appearance_subq, appearance_subq.c.person_id == Person.id)
+        .outerjoin(appearance_subq, appearance_subq.c.person_id == Person.id)
         .where(Media.id == media_id)
         .group_by(Media.id, Person.id, appearance_subq.c.appearance_count)
         .options(selectinload(Media.tags))
@@ -263,7 +263,7 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
     persons: list[PersonRead] = []
     orphans: list[Face] = []
     for _, person, appearance_count in rows:
-        if person.id not in seen:
+        if person and person.id not in seen:
             seen.add(person.id)
             persons.append(
                 PersonRead(
@@ -403,7 +403,6 @@ def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
     """
     ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k + 1)
     rows = session.exec(sql).all()
-    logger.info(rows)
     media_ids = [r[0] for r in rows if r[0] != media_id]
 
     if not media_ids:
