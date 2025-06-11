@@ -40,7 +40,6 @@ export default function SearchResultsPage() {
     const peopleList = useMemo(() => pages.flatMap(p => p.persons), [pages])
     const tagList = useMemo(() => pages.flatMap(p => p.tags), [pages])
 
-    // Determine title
     const title =
         category === 'media'
             ? 'Media Results'

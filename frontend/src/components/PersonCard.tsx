@@ -19,7 +19,6 @@ const getInitials = (name = '') => {
 export default function PersonCard({ person }: { person: Person }) {
   const theme = useTheme();
 
-  // THE FIX: URL-encode the filename to handle special characters like spaces and ampersands.
   const thumbUrl = person.profile_face?.thumbnail_path
     ? `${API}/thumbnails/${encodeURIComponent(person.profile_face.thumbnail_path)}`
     : undefined;
@@ -75,14 +74,9 @@ export default function PersonCard({ person }: { person: Person }) {
           {person.name || 'Unknown'}
         </Typography>
         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', mt: 0.5 }}>
-          {/* Assuming you meant appearance_count from your JSON */}
           {person.appearance_count ? `${person.appearance_count} photos` : ''}
         </Typography>
       </Box>
     </Box>
   );
 }
-
-// NOTE: I also noticed your JSON provides `appearance_count` but the previous code
-// was looking for `face_count`. I've updated the card to use `appearance_count`
-// to correctly display the photo count.

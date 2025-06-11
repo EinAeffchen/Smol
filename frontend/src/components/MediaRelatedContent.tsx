@@ -26,21 +26,16 @@ export default function SimilarContent({ mediaId }: { mediaId: number }) {
                 Similar Content
             </Typography>
 
-            {/*
-              CHANGED: Replaced the <Grid> component with a <Box> using
-              the pure CSS Multi-column Masonry layout for a consistent look.
-            */}
             <Box
                 sx={{
-                    columnCount: { xs: 2, sm: 2, md: 3 }, // Responsive column count, adjusted for this section
-                    columnGap: (theme) => theme.spacing(2), // Horizontal gap between columns
+                    columnCount: { xs: 2, sm: 2, md: 3 },
+                    columnGap: (theme) => theme.spacing(2),
                 }}
             >
                 {similar.map(item => (
-                    // This wrapper Box is essential for the column layout to work correctly
                     <Box key={item.id} sx={{
-                        breakInside: 'avoid', // Prevents a card from splitting across columns
-                        mb: 2,               // Vertical gap between cards in the same column
+                        breakInside: 'avoid',
+                        mb: 2,
                     }}>
                         <MediaCard media={item} />
                     </Box>

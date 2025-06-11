@@ -50,17 +50,15 @@ export function MediaHeader({ media, showExif, onToggleExif, onOpenDialog }: Med
                 <Typography
                     variant="h4"
                     component="h1"
-                    noWrap // This is key: prevents the text from wrapping to a second line
+                    noWrap
                     sx={{
                         fontSize: 'clamp(1.25rem, 4vw, 1.75rem)',
-                        // textOverflow: 'ellipsis' is applied by 'noWrap'
                     }}
                 >
                     {media.filename}
                 </Typography>
             </Box>
             <Box>
-                {/* The "More" icon is now the single point of entry for all actions */}
                 <IconButton onClick={handleMenuClick}>
                     <MoreVert sx={{ color: 'white' }} />
                 </IconButton>
@@ -70,15 +68,12 @@ export function MediaHeader({ media, showExif, onToggleExif, onOpenDialog }: Med
                     open={menuOpen}
                     onClose={handleMenuClose}
                 >
-                    {/* Item 1: Show/Hide EXIF (always visible) */}
                     <MenuItem onClick={handleExifToggle}>
                         <ListItemIcon><Visibility fontSize="small" /></ListItemIcon>
                         <ListItemText>{showExif ? 'Hide EXIF' : 'Show EXIF'}</ListItemText>
                     </MenuItem>
 
-                    {/* The following items are only rendered if the app is NOT in read-only mode */}
                     {!READ_ONLY && (
-                        /* Use a Fragment to return multiple items from a conditional block */
                         <>
                             <Divider />
                             {(media.duration) && (

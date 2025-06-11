@@ -4,7 +4,6 @@ import { Card, CardActionArea, CardMedia, Box, Typography, useTheme } from '@mui
 import { Media } from '../types';
 import { API } from '../config';
 
-// Import the specific icons we need
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 

@@ -18,7 +18,7 @@ import {
 } from '@mui/material';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useEffect, useRef, useState } from 'react';
-import ReactDOM from 'react-dom'; // Import ReactDOM for Portals
+import ReactDOM from 'react-dom';
 import { Link } from 'react-router-dom';
 import { API, READ_ONLY } from '../config';
 import { Face, Person } from '../types';
@@ -41,7 +41,7 @@ export default function FaceCard({
     onDetach: () => void
 }) {
     const [mode, setMode] = useState<'none' | 'search' | 'new'>('none')
-    const cardRef = useRef<HTMLDivElement>(null); // Ref to the Card element for positioning
+    const cardRef = useRef<HTMLDivElement>(null);
     const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
     const overlayOpen = mode !== 'none'
     const [query, setQuery] = useState('')
@@ -67,30 +67,29 @@ export default function FaceCard({
         if (mode !== 'none' && cardRef.current) {
             const rect = cardRef.current.getBoundingClientRect();
             setDropdownPosition({
-                top: rect.bottom + window.scrollY, // Position below the card
+                top: rect.bottom + window.scrollY,
                 left: rect.left + window.scrollX,
                 width: rect.width,
             });
         } else {
             setDropdownPosition(null);
         }
-    }, [mode]); // Recalculate when mode changes or cardRef is available
+    }, [mode]);
 
-    // Extracted Dropdown Content
     const renderDropdownContent = () => {
         if (!dropdownPosition) return null;
 
         const commonBoxSx = {
-            position: 'absolute' as 'absolute', // Ensure TS knows it's a valid CSS position
+            position: 'absolute' as 'absolute',
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
             width: `${dropdownPosition.width}px`,
-            bgcolor: '#2C2C2E', // Or your theme background
+            bgcolor: '#2C2C2E',
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
             borderRadius: 1,
             p: 1,
-            zIndex: (theme: any) => theme.zIndex.modal + 1, // Ensure it's above other content
-            color: '#FFF', // Ensure text is visible
+            zIndex: (theme: any) => theme.zIndex.modal + 1,
+            color: '#FFF',
         };
 
         if (mode === 'search') {
@@ -99,14 +98,13 @@ export default function FaceCard({
                     <TextField
                         size="small"
                         fullWidth
-                        autoFocus // Good for usability
+                        autoFocus
                         placeholder="Search…"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
                         sx={{ mb: 1, input: { color: '#FFF' }, '& .MuiOutlinedInput-root': { fieldset: { borderColor: 'rgba(255,255,255,0.23)' }, '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.5)' }, '&.Mui-focused fieldset': { borderColor: (theme: any) => theme.palette.primary.main } } }}
                     />
-                    <Box sx={{ maxHeight: 150, overflowY: 'auto' }}> {/* Increased maxHeight */}
-                        {/* ... cands mapping ... */}
+                    <Box sx={{ maxHeight: 150, overflowY: 'auto' }}>
                         {cands.length > 0 ? (
                             cands.map(p => (
                                 <Box
@@ -142,16 +140,16 @@ export default function FaceCard({
                         <TextField
                             key={field}
                             name={field}
-                            placeholder={field.charAt(0).toUpperCase() + field.slice(1)} // Capitalize placeholder
+                            placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
                             size="small"
                             fullWidth
-                            autoFocus={field === 'name'} // Autofocus the first field
+                            autoFocus={field === 'name'}
                             value={(form as any)[field]}
                             onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
                             sx={{ mb: 1, input: { color: '#FFF' }, '& .MuiOutlinedInput-root': { fieldset: { borderColor: 'rgba(255,255,255,0.23)' }, '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.5)' }, '&.Mui-focused fieldset': { borderColor: (theme: any) => theme.palette.primary.main } } }}
                         />
                     ))}
-                    <Button /* ... create & assign button ... */
+                    <Button
                         size="small" fullWidth onClick={createAssign} variant="contained"
                         disabled={creating} sx={{ bgcolor: '#FF2E88', mt: 1, '&:hover': { bgcolor: '#E02070' } }}
                     >
@@ -192,20 +190,18 @@ export default function FaceCard({
 
 
     return (
-        <> {/* Use React.Fragment to allow Portal as a sibling potentially */}
+        <>
             <Card
-                ref={cardRef} // Assign ref to the Card
+                ref={cardRef}
                 sx={{
                     width: 130,
                     bgcolor: '#2C2C2E',
                     color: '#FFF',
                     position: 'relative',
-                    // zIndex for sibling card stacking is okay, but won't help with overflow:hidden parent
                     zIndex: mode !== 'none' ? (theme) => theme.zIndex.tooltip : 'auto',
                     '&:hover .hover-actions': { opacity: 1 },
                 }}
             >
-                {/* ... CardActionArea and hover actions ... */}
                 <Box sx={{ position: 'relative' }}>
                     <CardActionArea component={Link} to={`/medium/${face.media_id}`}>
                         <Avatar
@@ -245,14 +241,13 @@ export default function FaceCard({
                 </Box>
 
                 {!READ_ONLY && (
-                    <CardContent sx={{ px: 1, py: 1, textAlign: 'center' /* Center content */ }}>
+                    <CardContent sx={{ px: 1, py: 1, textAlign: 'center' }}>
                         {face.person ? (
                             <Typography variant="caption" color="#BFA2DB" display="block">
                                 Assigned
                             </Typography>
                         ) : (
                             <Stack direction="row" spacing={1} justifyContent="center">
-                                {/* ... Assign Existing and Create New Person IconButtons ... */}
                                 <Tooltip title="Detach from person">
                                     <IconButton size="small" onClick={onDetach}>
                                         <LinkOffIcon fontSize="small" sx={{ color: 'white' }} />
@@ -273,13 +268,11 @@ export default function FaceCard({
                     </CardContent>
                 )}
 
-                {/* The Collapse sections are now removed from here */}
             </Card>
 
-            {/* Render the dropdown content via a Portal */}
             {mode !== 'none' && dropdownPosition && ReactDOM.createPortal(
                 renderDropdownContent(),
-                document.body // Or a dedicated portal root element
+                document.body
             )}
         </>
     );

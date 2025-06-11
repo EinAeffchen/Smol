@@ -30,7 +30,6 @@ function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () 
       anchor="right"
       open={open}
       onClose={onClose}
-      // Using slotProps for MUI v7+
       slotProps={{
         paper: { sx: { backgroundColor: '#1C1C1E', color: '#FFF', width: 280 } }
       }}
@@ -52,8 +51,6 @@ function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () 
         ))}
       </List>
 
-      {/* The ControlPanelModal is now rendered directly in the main view,
-                conditionally and with a separator. */}
       {!READ_ONLY && (
         <>
           <Divider sx={{ borderColor: 'grey.800' }} />
@@ -71,10 +68,8 @@ function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () 
 
 
 export function Header() {
-  // This state is ONLY for the desktop control panel drawer
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
 
-  // These states are for the mobile drawer and search view
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
 
@@ -87,7 +82,7 @@ export function Header() {
     ['Videos', '/videos'],
     ['Tags', '/tags'],
     ['People', '/people'],
-    ['Unassigned Faces', '/orphanfaces'], // This is the one to conditionally hide
+    ['Unassigned Faces', '/orphanfaces'],
     ['Map', '/map'],
     ['Geotagger', '/maptagger'],
   ];
@@ -104,7 +99,7 @@ export function Header() {
     const trimmed = q.trim();
     if (!trimmed) return;
     navigate(`/searchresults?` + new URLSearchParams({ category, query: trimmed }).toString());
-    setIsSearchVisible(false); // Hide search bar after submission
+    setIsSearchVisible(false);
     setQ('');
   }
 
@@ -182,7 +177,6 @@ export function Header() {
         navItems={visibleNavItems}
       />
 
-      {/* This Drawer is ONLY for the desktop Settings button */}
       <Drawer
         anchor="right"
         open={isControlPanelOpen}

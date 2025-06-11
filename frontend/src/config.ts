@@ -1,6 +1,5 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
 
-// You might want to add a warning if it's not set during development
 if (!API_BASE_URL && import.meta.env.DEV) {
   console.warn(
     "Warning: VITE_API_BASE_URL is not set in your .env file. API calls might fail."
@@ -8,14 +7,14 @@ if (!API_BASE_URL && import.meta.env.DEV) {
 }
 
 const readOnlyEnvVar: string | undefined = import.meta.env.VITE_API_READ_ONLY;
-let IS_READ_ONLY: boolean = false; // Default to false if not set or if value isn't 'true'
+let IS_READ_ONLY: boolean = false; 
 if (readOnlyEnvVar) {
   const lowerCaseValue = readOnlyEnvVar.toLowerCase();
   IS_READ_ONLY = lowerCaseValue === "true";
 }
 const enablePeopleEnvVar: string | undefined = import.meta.env
   .VITE_API_ENABLE_PEOPLE;
-let PEOPLE_ARE_ENABLED: boolean = false; // Default to false if not set or if value isn't 'true'
+let PEOPLE_ARE_ENABLED: boolean = false; 
 if (enablePeopleEnvVar) {
   const lowerCaseValue = enablePeopleEnvVar.toLowerCase();
   PEOPLE_ARE_ENABLED = lowerCaseValue === "true";

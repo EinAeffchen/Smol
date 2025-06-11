@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Paper } from '@mui/material';
-import { VideoWithPreview } from './VideoPlayer'; // Assuming this path is correct
+import { VideoWithPreview } from './VideoPlayer';
 import { Media } from '../types';
 import { API } from '../config';
 
@@ -22,9 +22,9 @@ export function MediaDisplay({ media }: MediaDisplayProps) {
                         sx={{
                             width: '100%',
                             height: 'auto',
-                            maxHeight: '80vh', // Prevent image from being too tall
+                            maxHeight: '80vh', 
                             objectFit: 'contain',
-                            display: 'block' // Fixes bottom space issue
+                            display: 'block' 
                         }}
                     />
                 )}

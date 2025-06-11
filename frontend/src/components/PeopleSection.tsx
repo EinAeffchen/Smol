@@ -4,7 +4,6 @@ import { MediaDetail, Person, Face } from '../types';
 import PersonCard from './PersonCard';
 import { READ_ONLY } from '../config';
 
-// Lazy load DetectedFaces as before
 const DetectedFaces = React.lazy(() => import('./DetectedFaces'));
 
 interface PeopleSectionProps {
@@ -33,20 +32,15 @@ export function PeopleSection({
     console.log(persons);
     return (
         <>
-            {/* Detected Persons Section */}
             {persons.length > 0 && (
                 <Box mb={4}>
                     <Typography variant="h6" gutterBottom>Detected Persons</Typography>
                     <Box sx={{ display: 'flex', overflowX: 'auto', gap: 2, py: 1 }}>
                         {persons.map(p => (
-                            // THE FIX: Wrap each card in a Box that defines its width.
-                            // This allows the card's internal `aspectRatio` to calculate the height.
                             <Box
                                 key={p.id}
                                 sx={{
-                                    // Give each card a fixed width in the scrolling list.
                                     width: '140px',
-                                    // Prevent the card from shrinking if the container gets crowded.
                                     flexShrink: 0,
                                 }}
                             >

@@ -19,9 +19,9 @@ export function PersonEditForm({ initialPersonData, onSave, saving }) {
     }, [initialPersonData]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | { name?: string; value: unknown }>) => {
-        const target = e.target as HTMLInputElement; // Type assertion for typical input/select
+        const target = e.target as HTMLInputElement;
         const { name, value } = target;
-        const type = target.type; // Get type from the target itself
+        const type = target.type;
 
         setForm(prevForm => ({
             ...prevForm,
@@ -37,14 +37,13 @@ export function PersonEditForm({ initialPersonData, onSave, saving }) {
     return (
         <Box component="form" onSubmit={handleSubmit} sx={{ flex: 1 }}>
             <Grid container spacing={2} alignItems="flex-end">
-                {/* Your Grid syntax is correct */}
                 <Grid size={{ xs: 12, md: 3 }}>
                     <TextField
                         fullWidth
                         label="Name"
                         name="name"
                         value={form.name}
-                        onChange={handleChange} // Use generic handler
+                        onChange={handleChange}
                     />
                 </Grid>
                 <Grid size={{ xs: 12, md: 3 }}>
@@ -54,12 +53,12 @@ export function PersonEditForm({ initialPersonData, onSave, saving }) {
                         name="age"
                         type="number"
                         value={form.age}
-                        onChange={handleChange} // Use generic handler
+                        onChange={handleChange}
                         slotProps={{
                             inputLabel: {
                                 shrink: form.age !== '' && form.age !== undefined && form.age !== null && form.age.toString().length > 0
                             }
-                        }} // Conditional shrink
+                        }}
                     />
                 </Grid>
                 <Grid size={{ xs: 12, md: 3 }}>
@@ -68,7 +67,7 @@ export function PersonEditForm({ initialPersonData, onSave, saving }) {
                         <Select
                             name="gender"
                             value={form.gender}
-                            onChange={handleChange as any} // Use generic handler
+                            onChange={handleChange as any}
                             label="Gender"
                         >
                             <MenuItem value="">— select —</MenuItem>

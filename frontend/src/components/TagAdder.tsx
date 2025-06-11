@@ -44,7 +44,7 @@ export default function TagAdder({
             })
             .catch(error => {
                 console.error("Failed to load all tags:", error);
-                setAllTags([]); // Set to empty or handle error appropriately
+                setAllTags([]); 
             }).finally(() => {
                 setLoadingAllTags(false);
             });
@@ -56,28 +56,26 @@ export default function TagAdder({
 
         if (existingTags.some(t => t.name.toLowerCase() === nameToAdd)) {
             console.log(`Tag "${nameToAdd}" is already assigned.`);
-            setInputValue(''); // Clear input
+            setInputValue(''); 
             return;
         }
 
         let tagToAssign: Tag | undefined = allTags.find(t => t.name.toLowerCase() === nameToAdd);
 
         if (!tagToAssign) {
-            // Tag doesn't exist globally, so create it
             try {
                 const createRes = await fetch(`${API}/api/tags/`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: nameToAdd }), // Use the processed name
+                    body: JSON.stringify({ name: nameToAdd }), 
                 });
                 if (!createRes.ok) {
                     const errorText = await createRes.text();
                     console.error('Failed to create tag:', errorText);
-                    // Potentially show a user-facing error
                     return;
                 }
                 tagToAssign = await createRes.json();
-                setAllTags(prevTags => [...prevTags, tagToAssign!]); // Add to local cache of all tags
+                setAllTags(prevTags => [...prevTags, tagToAssign!]);
             } catch (error) {
                 console.error('Error creating tag:', error);
                 return;
@@ -91,11 +89,10 @@ export default function TagAdder({
             if (!assignRes.ok) {
                 const errorText = await assignRes.text();
                 console.error('Failed to assign tag:', errorText);
-                // Potentially show a user-facing error
                 return;
             }
             onTagAdded(tagToAssign!);
-            setInputValue(''); // Clear input after successful addition
+            setInputValue('');
         } catch (error) {
             console.error('Error assigning tag:', error);
         }
@@ -108,7 +105,7 @@ export default function TagAdder({
     return (
         <Box display="flex" gap={1} alignItems="center" sx={{ width: '100%' }}>
             <Autocomplete
-                freeSolo // Allows users to enter text not present in suggestions
+                freeSolo
                 fullWidth
                 inputValue={inputValue}
                 onInputChange={(event, newInputValue, reason) => {
@@ -123,7 +120,6 @@ export default function TagAdder({
                 }}
                 options={suggestionOptions}
                 getOptionLabel={(option) => {
-                    // Material-UI Autocomplete might pass a string if freeSolo is used and the input doesn't match an option
                     if (typeof option === 'string') {
                         return option;
                     }
@@ -151,7 +147,7 @@ export default function TagAdder({
                         }}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') {
-                                e.preventDefault(); // Prevent form submission if it's in a form
+                                e.preventDefault();
                                 if (inputValue.trim()) {
                                     handleAddTag();
                                 }

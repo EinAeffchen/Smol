@@ -1,6 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { useInfinite, CursorResponse } from '../hooks/useInfinite'; // Your hook from Step 1
-// import { useInfinite, CursorResponse } from '../hooks/useInfinite2'; // Your hook from Step 1
+import { useInfinite, CursorResponse } from '../hooks/useInfinite';
 import { MediaIndex } from '../types';
 import MediaCard from '../components/MediaCard';
 import {

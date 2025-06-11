@@ -18,27 +18,19 @@ export default defineConfig(({ mode, command }) => {
   }
 
   return {
-    base: base, // Uncomment and set if your app is served from a sub-path
+    base: base,
     plugins: [react()],
     server: {
       port: 5173,
       proxy: {
         "/api": {
           target: `${domain}`,
-          // changeOrigin: true,
-          // rewrite: (path) => path.replace(/^\/api/, ''), // Uncomment if your API doesn't expect the /api prefix
         },
       },
     },
-    // optimizeDeps: {
-    //   include: ["prop-types"],
-    // },
     build: {
       minify: true,
     },
-    // define: {
-    //   "process.env.NODE_ENV": JSON.stringify(mode),
-    // },
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "src"),

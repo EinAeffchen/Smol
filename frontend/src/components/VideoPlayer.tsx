@@ -28,14 +28,12 @@ export function VideoWithPreview({ media }: { media: Media }) {
             }
             plyrInstanceRef.current = null;
         }
-        if (playerContainerRef.current) { // Defensive check
-            playerContainerRef.current.innerHTML = ''; // Clear any leftover video tags
+        if (playerContainerRef.current) {
+            playerContainerRef.current.innerHTML = '';
         }
 
-        // wipe previous children completely (in case React reused container)
         playerContainerRef.current.innerHTML = ''
 
-        // Create video element manually
         const video = document.createElement('video')
         video.src = mediaUrl
         video.setAttribute('controls', 'true')
@@ -70,31 +68,25 @@ export function VideoWithPreview({ media }: { media: Media }) {
         player.on('error', (event) => {
             console.error('Plyr error:', event);
             setLoading(false);
-            // Consider setUseFallback(true) here if the error is critical
         });
 
         player.on('enterfullscreen', () => {
             console.log('Plyr event: enterfullscreen triggered.');
             if (player && player.elements && player.elements.container) {
-                // Log immediately
                 console.log('IMMEDIATE Player container classes:', player.elements.container.className);
 
-                // Log after a micro-task delay
                 setTimeout(() => {
                     if (plyrInstanceRef.current && plyrInstanceRef.current.elements && plyrInstanceRef.current.elements.container) { // Re-check instance
                         console.log('DELAYED Player container classes:', plyrInstanceRef.current.elements.container.className);
                     }
                 }, 0);
             }
-            // Your manual class addition (keep this as it's a reliable workaround)
             playerContainerRef.current?.classList.add('custom-fullscreen-active');
         });
 
         player.on('exitfullscreen', () => {
             console.log('Plyr event: exitfullscreen triggered.');
-            // Your manual class removal
             playerContainerRef.current?.classList.remove('custom-fullscreen-active');
-            // You can add a delayed log here too if you want to check Plyr's class removal
             setTimeout(() => {
                 if (plyrInstanceRef.current && plyrInstanceRef.current.elements && plyrInstanceRef.current.elements.container) {
                     console.log('DELAYED Player container classes on exit:', plyrInstanceRef.current.elements.container.className);
@@ -111,14 +103,12 @@ export function VideoWithPreview({ media }: { media: Media }) {
                 }
                 plyrInstanceRef.current = null;
             }
-            // Ensure custom class is removed on component unmount/media change
             if (playerContainerRef.current) {
                 playerContainerRef.current.classList.remove('custom-fullscreen-active');
             }
         };
     }, [mediaUrl, API, media.id]);
 
-    // No media
     if (!media.path) {
         return <Typography color="text.secondary">No video available</Typography>
     }
@@ -127,8 +117,8 @@ export function VideoWithPreview({ media }: { media: Media }) {
         <Box
             sx={{
                 width: '100%',
-                height: '100%', // This Box should fill the ParentPaper from MediaDetailPage
-                position: 'relative', // For the loading indicator
+                height: '100%',
+                position: 'relative',
             }}
         >
             {loading && (
@@ -141,7 +131,7 @@ export function VideoWithPreview({ media }: { media: Media }) {
                         justifyContent: 'center',
                         bgcolor: 'rgba(0,0,0,0.4)',
                         zIndex: 1,
-                        borderRadius: 'inherit', // Match parent's rounding
+                        borderRadius: 'inherit',
                     }}
                 >
                     <CircularProgress color="secondary" />

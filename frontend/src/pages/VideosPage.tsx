@@ -36,7 +36,6 @@ export default function VideosPage() {
 
             return fetch(`${API}/api/media/videos?${params.toString()}`).then(res => {
                 if (!res.ok) throw new Error(res.statusText);
-                // Ensure your API returns { items: [], next_cursor: "..." }
                 return res.json() as Promise<CursorResponse<MediaPreview>>;
             });
         },

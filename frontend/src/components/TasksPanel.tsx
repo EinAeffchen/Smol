@@ -86,7 +86,6 @@ export default function TaskManager() {
                     {tasks.map(t => {
                         const pct = t.total > 0 ? Math.round((t.processed / t.total) * 100) : (t.status === 'finished' ? 100 : 0);
                         return (
-                            // CHANGED: Redesigned task item for a cleaner look
                             <Box key={t.id}>
                                 <Box display="flex" justifyContent="space-between" alignItems="center">
                                     <Typography variant="body2" fontWeight="bold">
@@ -104,7 +103,7 @@ export default function TaskManager() {
                                         borderRadius: 3,
                                         mt: 0.5,
                                         bgcolor: 'grey.800',
-                                        '& .MuiLinearProgress-bar': { bgcolor: '#5F4B8B' }, // Using the calmer purple
+                                        '& .MuiLinearProgress-bar': { bgcolor: '#5F4B8B' },
                                     }}
                                 />
                                 {t.status === 'running' && (
@@ -120,7 +119,6 @@ export default function TaskManager() {
 
             <Divider sx={{ my: 2 }} />
 
-            {/* CHANGED: Action buttons are now a clean list */}
             <List>
                 <ListItem disablePadding>
                     <ListItemButton onClick={() => startTask('scan')} disabled={isTaskRunning('scan')}>

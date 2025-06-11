@@ -1,9 +1,9 @@
-import React, { useState } from 'react'; 
+import React, { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
     Card, CardActionArea, CardContent, Typography, Box, AvatarGroup, Avatar,
-    IconButton, // For the delete button
-    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button 
+    IconButton,
+    Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button
 } from '@mui/material';
 import MovieIcon from '@mui/icons-material/Movie';
 import PersonIcon from '@mui/icons-material/Person';
@@ -29,7 +29,7 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
     const [openConfirmDialog, setOpenConfirmDialog] = useState(false);
 
     const handleOpenConfirmDialog = (event: React.MouseEvent) => {
-        event.stopPropagation(); // Prevent the CardActionArea's link navigation
+        event.stopPropagation();
         event.preventDefault();
         setOpenConfirmDialog(true);
     };
@@ -43,13 +43,13 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
             if (!response.ok) {
                 const errorData = await response.text();
                 console.error('Failed to delete tag:', errorData);
-                alert(`Failed to delete tag "${tag.name}". Error: ${response.status}`); // Basic error feedback
+                alert(`Failed to delete tag "${tag.name}". Error: ${response.status}`);
                 return;
             }
-            onTagDeleted(tag.id); // Notify parent component
+            onTagDeleted(tag.id);
         } catch (error) {
             console.error('Error during tag deletion:', error);
-            alert(`An error occurred while deleting tag "${tag.name}".`); // Basic error feedback
+            alert(`An error occurred while deleting tag "${tag.name}".`);
         }
     };
 
@@ -61,8 +61,8 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                     bgcolor: BG_CARD,
                     borderRadius: 2,
                     height: CARD_HEIGHT,
-                    position: 'relative', // Needed for absolute positioning of the delete button
-                    overflow: 'hidden',   // Keep hidden, button will be inside
+                    position: 'relative',
+                    overflow: 'hidden',
                 }}
             >
                 <IconButton
@@ -73,11 +73,11 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                         position: 'absolute',
                         top: 8,
                         right: 8,
-                        zIndex: 2, // Ensure it's above other content
-                        color: TEXT_SECONDARY, // Initial subtle color
-                        backgroundColor: 'rgba(0, 0, 0, 0.2)', // Optional: slight background for visibility
+                        zIndex: 2,
+                        color: TEXT_SECONDARY,
+                        backgroundColor: 'rgba(0, 0, 0, 0.2)',
                         '&:hover': {
-                            color: ACCENT, // Brighter color on hover
+                            color: ACCENT,
                             backgroundColor: 'rgba(0, 0, 0, 0.3)',
                         },
                     }}
@@ -88,7 +88,7 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                 <CardActionArea
                     component={RouterLink}
                     to={`/tag/${tag.id}`}
-                    sx={{ height: '100%', display: 'flex' }} // Ensure CardActionArea itself is flex for content alignment
+                    sx={{ height: '100%', display: 'flex' }}
                 >
                     <CardContent
                         sx={{
@@ -96,7 +96,7 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                             flexDirection: 'column',
                             justifyContent: 'space-between',
                             height: '100%',
-                            width: '100%', // Ensure CardContent takes full width of CardActionArea
+                            width: '100%',
                             p: 2,
                         }}
                     >
@@ -110,7 +110,7 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                                     whiteSpace: 'nowrap',
                                     overflow: 'hidden',
                                     textOverflow: 'ellipsis',
-                                    pr: '36px', // Add padding to the right of title to avoid overlap with delete icon
+                                    pr: '36px',
                                 }}
                             >
                                 {tag.name}
@@ -131,19 +131,19 @@ export default function TagCard({ tag, onTagDeleted }: { tag: TagCardProps }) {
                         <AvatarGroup
                             max={4}
                             sx={{
-                                justifyContent: 'flex-start', // Align avatars to the start
+                                justifyContent: 'flex-start',
                                 '& .MuiAvatar-root': {
                                     width: AVATAR_SIZE,
                                     height: AVATAR_SIZE,
-                                    borderRadius: 1, // Square-ish avatars
-                                    border: `1px solid ${BG_CARD}` // To distinguish overlapping avatars slightly
+                                    borderRadius: 1,
+                                    border: `1px solid ${BG_CARD}`
                                 },
                             }}
                         >
                             {tag.media.slice(0, 4).map(m => (
                                 <Avatar
                                     key={`m-${m.id}`}
-                                    src={`${API}/thumbnails/${m.id}.jpg`} // Ensure this endpoint works for media
+                                    src={`${API}/thumbnails/${m.id}.jpg`}
                                     alt={m.filename || 'Media thumbnail'}
                                     variant="rounded"
                                 />
