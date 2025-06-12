@@ -127,12 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-docker-compose.yml
 *.Zone.Identifier
 
 smol.db
 .venv
 **/viewer/images
-**smol/local_media
-
-Makefile
+media
+media2
+app/models/*.tar
+app/models/*.txt
+node_modules/

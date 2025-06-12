@@ -1,0 +1,24 @@
+@import "leaflet/dist/leaflet.css";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.custom-fullscreen-active video {
+  max-height: 100vh !important; /* Or max-height: none !important; */
+}
+
+.my-masonry-grid {
+  display: -webkit-box; 
+  display: -ms-flexbox; 
+  display: flex;
+  width: auto;
+}
+.my-masonry-grid_column {
+  padding-left: 16px; 
+  background-clip: padding-box;
+}
+
+
+.my-masonry-grid_column > div {
+  margin-bottom: 16px;
+}

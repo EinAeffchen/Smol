@@ -1,0 +1,13 @@
+services:
+  smol:
+    build: .
+    image: smol
+    container_name: smol
+    user: "${UID}:${GID}"
+    ports:
+      - "${PORT}:${PORT}" # Or your preferred host port
+    volumes:
+      - ${HOST_MEDIA_DIR}:/app/media
+      - ${HOST_DATABASE_DIR}:/app/database
+    env_file: .env
+    restart: unless-stopped

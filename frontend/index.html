@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+
+  <!-- Apple Touch Icon (iOS home-screen bookmark) -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+  <!-- 32×32 PNG favicon -->
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+
+  <!-- 16×16 PNG favicon -->
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+
+  <!-- Standard ICO favicon (fallback for older browsers) -->
+  <link rel="shortcut icon" href="/favicon.ico" />
+
+  <!-- Android Chrome icons (used in PWA manifests, progressive web apps) -->
+  <!--
+      Typically these go into your web app manifest, but it’s harmless
+      to include them here as well if you want direct linking.
+    -->
+  <link rel="icon" type="image/png" sizes="192x192" href="/android-chrome-192x192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/android-chrome-512x512.png" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SMOL Platform</title>
+</head>
+
+<body class="bg-background text-text font-sans">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
+</html>
