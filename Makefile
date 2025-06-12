@@ -14,10 +14,6 @@ ifneq ($(strip $(wildcard $(ENV_FILE))),)
 endif
 
 
-ifndef MEDIA_DIR
-  $(error MEDIA_DIR is not set)
-endif
-
 VENV         ?= $(MEDIA_DIR)/.smol/venv
 PIP          := $(VENV)/bin/pip
 PYTHON       := $(VENV)/bin/python
@@ -35,6 +31,9 @@ up:
 	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port $(PORT)
 
 build: install
+	ifndef MEDIA_DIR
+	$(error MEDIA_DIR is not set)
+	endif
 	cd frontend && npm install && npm run build
 	mkdir -p "${MEDIA_DIR}/.smol/static"
 	cp -r frontend/dist/* "${MEDIA_DIR}/.smol/static"
@@ -46,8 +45,8 @@ dev:
 	cd frontend && npm run dev
 
 docker-start:
-	mkdir -p ${DATABASE_DIR}
+	mkdir -p ${HOST_DATABASE_DIR}
 	docker compose up -d --build
 
 backup:
-	sqlite3 ".backup ${DATABASE_DIR}/smol.db '${HOST_MEDIA_DIR}/db.backup'"
+	sqlite3 ".backup ${HOST_DATABASE_DIR}/smol.db '${HOST_MEDIA_DIR}/db.backup'"

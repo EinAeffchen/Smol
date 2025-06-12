@@ -1,139 +1,122 @@
-# Smol Media Platform
-![logo](frontend/public/logo.png)
-[![Python](https://img.shields.io/badge/Python-%3E%3D3.10-blue)](https://python.org)
-[![FastAPI](https://img.shields.io/badge/FastAPI-%5E0.95-lightgrey)](https://fastapi.tiangolo.com)
-[![React](https://img.shields.io/badge/React-%5E18.0-61DAFB)](https://reactjs.org)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+<div align="center">
+  <img src="frontend/public/logo.png" alt="logo" width="200"/>
+</div>
 
-A **self‑contained**, **volume‑mounted** media server with face detection, recognition, tagging, and metadata processors—built with **FastAPI**, **SQLite**, and **React**.
+# Smart Media Organizing Library
 
+This project is a powerful, self-contained media management system designed to run as a standalone service. It brings advanced, AI-powered features like face recognition, multi-lingual full-text search, and similarity tracking directly to your personal photo and video collection, all without relying on external databases or APIs.
 
-## 🚀 Features
+---
 
-- **Automatic Ingestion**  
-  Scan a mounted media folder (`./media`), detect new images/videos, extract basic metadata (size, duration, resolution), and generate thumbnails.
+## Key Features
 
-- **Face Detection & Recognition**  
-  Extract up to N faces per video/image, compute embeddings, assign faces to “persons”, merge duplicates, and suggest similar people.
+-   **Face Recognition & Person Tracking**
+    -   Automatically detects faces in photos and videos.
+    -   Groups faces belonging to the same person, allowing you to name and organize them.
+    -   Tracks people across your entire media library to find all content they appear in.
 
-- **Tagging & Search**  
-  Tag media and persons, query by name, age, tags, or custom processor output.
+    <br>
+    <!-- Screenshot for Face Recognition -->
+    <br>
 
-- **Extensible Processor System**  
-  Drop new Python “processors” in `app/processors/` (e.g. EXIF, OCR, speech‑to‑text). Each processor writes its own tables and exposes results via a generic API and UI panel.
+-   **Multi-Lingual Full-Text Search**
+    -   Supports multiple languages, allowing you to find media by what they depict, moods, etc
 
-- **Single‑Process Deployment**  
-  Serve static React assets and API from one FastAPI + Uvicorn instance—no Docker, no extra web server.
+    <br>
+    <!-- Screenshot for Full-Text Search -->
+    <br>
 
-- **Responsive Front‑End**  
-  Built with React, Vite, Tailwind CSS. Auto‑fitting grids for media, faces, and similar‑people panels.
+-   **Content-Based Similarity Search**
+    -   Finds visually similar photos and videos, making it easy to discover related content or duplicates.
 
+    <br>
+    <!-- Screenshot for Similar Content -->
+    <br>
 
-## 📦 Tech Stack
+-   **Interactive Map & Geotagging**
+    -   Displays all geotagged photos on an interactive world map.
+    -   Includes a dedicated API endpoint to add or update GPS coordinates for your media.
 
-- **Backend**: Python 3.10+, FastAPI, SQLModel (SQLAlchemy), SQLite  
-- **Media**: FFmpeg, OpenCV, DeepFace  
-- **Frontend**: React, TypeScript, Vite, Tailwind CSS  
-- **Processing Plugins**: Python modules under `app/processors/`  
+    <br>
+    <!-- Screenshot for Map View -->
+    <br>
 
+-   **Advanced Media Processing**
+    -   **Built-in Video Converter:** Convert videos into a web-compatible format for seamless playback with one click.
+    -   **EXIF Processor:** Reads and displays detailed metadata (camera model, shutter speed, ISO, etc.) from your photos.
 
+-   **Flexible Organization**
+    -   **Free Tagging System:** Add any number of custom tags to your photos and videos for flexible organization.
+    -   **Infinite Scroll:** A modern, infinite-scrolling library view for effortlessly browsing thousands of media files.
+    -   **Read-Only Mode:** A special mode for secure, online presentation of your library without allowing changes.
+    -   **Enable/Disable people** Only want to present your photos and videos without focusing on the people? No problem simply deactivate the recognition via env (ENABLE_PEOPLE=false)
 
-## ⚙️ Installation & Setup
+---
 
+## Getting Started
 
-### Prerequisites
+This application can be run directly on your machine or as a Docker container.
 
-* Install [npm](https://docs.npmjs.com/cli/v9/configuring-npm/install?v=trues)
-* Install [ffmpeg](https://ffmpeg.org/download.html)
-* at least 7 GB of storage in the target directory for AI models, etc.
+### Without Docker (Directly on Host)
 
-### setup
+This method is ideal for a dedicated machine or standard development.
 
-1. Clone the repo
-    ```sh
-    git clone [git@github.com:EinAeffchen/Smol.git](https://github.com/EinAeffchen/Smol.git)
-    cd smol-media-platform
+1.  **Create Environment File:**
+    Copy the template environment file to create your own local configuration.
+    ```bash
+    cp template.env .env
     ```
 
-2. Prepare your media volume
-Mount (or create) a folder for your images/videos, e.g.:
-    ```sh
-    mkdir -p ~/smol_media/media/
-    export MEDIA_DIR=~/smol_media/media
+2.  **Configure Media Directory:**
+    Open the newly created `.env` file and set the `MEDIA_DIR` variable to the absolute path of your photo and video library.
+    ```env
+    # Example:
+    MEDIA_DIR=/path/to/your/photos
     ```
 
-3. Build & copy frontend assets
-    ```sh
+3.  **Build the Application:**
+    This command will install dependencies and compile the necessary components.
+    ```bash
     make build
     ```
 
-4. Run the server
-    ```sh
+4.  **Run the Application:**
+    Once the build is complete, start the server.
+    ```bash
     make up
-    ````
-    The API & frontend are both served from http://localhost:8000/.
+    ```
 
-## Usage
-### Initial Scan
+Your media manager should now be running and be accssible at **[http://localhost:8000](http://localhost:8000)**.
 
-Open the UI in your browser, click in the upper right on the Menu and 
-1. Start the initial scan with `Scan Folder`. 
-2. Start processing the detected media with `Process Media`
-3. Create Person clusters based on the extracted face embeddings with `Cluster Persons`
+### With Docker (Recommended for Portability)
 
-### Web UI
+This is the easiest and most reliable way to run the application, as it includes all dependencies in a self-contained environment.
 
-    Browse newest / most‑viewed media, people, and tags.
+1.  **Create Environment File:**
+    Just like the non-Docker setup, copy the template to create your local `.env` file.
+    ```bash
+    cp template.env .env
+    ```
 
-    Search by name, age, tags, or processor outputs.
+2.  **Configure Host Directories:**
+    Open the `.env` file and make the following adjustments:
+    -   Ensure `MEDIA_DIR` is **commented out**.
+    -   Set `HOST_MEDIA_DIR` to the absolute path of your media library on your host machine.
+    -   Set `HOST_DATABASE_DIR` to a path on your host machine where you want the application's database and index files to be stored persistently.
 
-    Person Detail: edit profile, merge duplicates, view face carousel, similar‑people suggestions.
+    ```env
+    # Example:
+    HOST_MEDIA_DIR=/home/user/Pictures
+    HOST_DATABASE_DIR=/home/user/media_app_data
+    ```
 
-    Media Detail: hover‑play videos, view image preview, see detected faces, EXIF, OCR, or any processor results via the “Processor Outputs” panel.
+3.  **Start the Container:**
+    This command will build the Docker image (if it doesn't exist) and start the container.
+    ```bash
+    make docker-start
+    ```
 
-    Tagging: add/remove tags on media & persons.
+4.  **Access the Application:**
+    Your media manager will be available in your browser at Your media manager should now be running and be accssible at **[http://localhost:8000](http://localhost:8000)**
 
-📈 Extending with Processors
 
-To add a new media processor:
-
-    Create app/processors/your_processor.py
-
-    Implement a subclass of MediaProcessor (see base.py):
-
-    class MyProcessor(MediaProcessor):
-        name = "my_processor"
-        def process(self, media, session):
-            …  # insert your tables, enrich rows
-        def get_results(self, media_id, session):
-            …  # optional JSON for front‑end
-
-    Adjust the [app/models.py](app/models.py) database models as needed.
-
-    Restart the server - your new processor runs on each `Process Media` call, and its results are available with api under `/api/media/{media_id}/processors/{processor_name}`.
-
-🔗 API Reference
-
-    POST /api/scan
-    Enqueue a new scan of media/originals/.
-
-    GET /api/media
-    List & filter media by tags, persons, etc.
-
-    GET /api/media/{id}
-    Get media detail (thumbnails, faces, tags, processor‑results).
-
-    GET /api/persons, GET /api/persons/{id}, PATCH /api/persons/{id}, DELETE /api/persons/{id}
-    CRUD & merge persons.
-
-    GET /api/media/{id}/processors
-    List all processor names.
-
-    GET /api/media/{id}/processors/{name}
-    Fetch JSON output for a given processor.
-
-For more check your local [http://localhost:8000/docs](http://localhost:8000/docs)
-
-📄 License
-
-This project is licensed under the MIT License. See LICENSE for details.
