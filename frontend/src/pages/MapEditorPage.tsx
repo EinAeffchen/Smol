@@ -122,8 +122,8 @@ export default function MapEditorPage() {
                     '& .MuiDrawer-paper': {
                         width: 300,
                         boxSizing: 'border-box',
-                        bgcolor: '#1C1C1E',
-                        color: '#FFF',
+                        bgcolor: 'background.default',
+                        color: 'text.primary',
                         p: 2,
                     },
                 }}
@@ -222,7 +222,7 @@ export default function MapEditorPage() {
                     <DialogActions>
                         <Button
                             onClick={() => setConfirmOpen(false)}
-                            sx={{ color: '#FFF' }}
+                            sx={{ color: 'text.primary' }}
                         >
                             Cancel
                         </Button>
@@ -230,8 +230,8 @@ export default function MapEditorPage() {
                             variant="contained"
                             onClick={saveGeo}
                             sx={{
-                                bgcolor: '#5F4B8B',
-                                '&:hover': { bgcolor: '#4A3A6A' },
+                                bgcolor: 'primary.main',
+                                '&:hover': { bgcolor: 'primary.dark' },
                                 ml: 1
                             }}
                         >

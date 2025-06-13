@@ -50,7 +50,7 @@ export default function PeoplePage() {
     }
 
     return (
-        <Container maxWidth={false} sx={{ pt: 4, pb: 6, bgcolor: '#1C1C1E', px: 4 }}>
+        <Container maxWidth={false} sx={{ pt: 4, pb: 6, bgcolor: 'background.default', px: 4 }}>
             <Typography variant="h5" color="text.primary" gutterBottom>
                 People
             </Typography>

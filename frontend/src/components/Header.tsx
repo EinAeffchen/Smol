@@ -14,15 +14,34 @@ import {
   ListItemButton,
   ListItemText,
   Divider,
-  Typography
+  Typography,
+  styled
 } from '@mui/material';
 import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SettingsIcon from '@mui/icons-material/Settings';
 import TaskManager from '../components/TasksPanel'
-
+import ThemeToggleButton from './ThemeToggleButton';
+import { useThemeContext } from '../ThemeContext';
 import { API, READ_ONLY, ENABLE_PEOPLE } from '../config';
+
+const StyledNavLink = styled(NavLink)(({ theme }) => ({
+  color: theme.palette.text.primary,
+  textDecoration: 'none',
+  fontWeight: 500,
+  padding: theme.spacing(1, 1),
+  borderRadius: theme.shape.borderRadius,
+  transition: 'color 0.2s ease-in-out, background-color 0.2s ease-in-out',
+
+  '&:hover': {
+    backgroundColor: theme.palette.action.hover,
+  },
+
+  '&.active': {
+    color: theme.palette.accent.main,
+  },
+}));
 
 function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () => void; navItems: [string, string][] }) {
   return (
@@ -31,7 +50,7 @@ function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () 
       open={open}
       onClose={onClose}
       slotProps={{
-        paper: { sx: { backgroundColor: '#1C1C1E', color: '#FFF', width: 280 } }
+        paper: { sx: { backgroundColor: 'background.default', color: 'text.primary', width: 280 } }
       }}
     >
       <Box sx={{ p: 1, display: 'flex', alignItems: 'center' }}>
@@ -39,7 +58,7 @@ function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () 
           <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ height: 40 }} />
         </Link>
       </Box>
-      <Divider sx={{ borderColor: 'grey.800' }} />
+      <Divider sx={{ borderColor: 'divider' }} />
 
       <List>
         {navItems.map(([label, to]) => (
@@ -50,19 +69,24 @@ function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () 
           </ListItem>
         ))}
       </List>
+      <ListItem disablePadding>
+        <ThemeToggleButton />
+      </ListItem>
 
-      {!READ_ONLY && (
-        <>
-          <Divider sx={{ borderColor: 'grey.800' }} />
-          <Box sx={{ p: 2 }}>
-            <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-              Control Panel
-            </Typography>
-            <TaskManager />
-          </Box>
-        </>
-      )}
-    </Drawer>
+      {
+        !READ_ONLY && (
+          <>
+            <Divider sx={{ borderColor: 'divider' }} />
+            <Box sx={{ p: 2 }}>
+              <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                Control Panel
+              </Typography>
+              <TaskManager />
+            </Box>
+          </>
+        )
+      }
+    </Drawer >
   );
 }
 
@@ -106,8 +130,8 @@ export function Header() {
   const renderDefaultHeader = () => (
     <>
       <Link to="/">
-        <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ height: 48, display: { xs: 'none', sm: 'block' } }} />
-        <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ height: 40, display: { xs: 'block', sm: 'none' } }} />
+        <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ width: 78, display: { xs: 'none', sm: 'block' } }} />
+        <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ width: 78, display: { xs: 'block', sm: 'none' } }} />
       </Link>
 
       <Box component="form" onSubmit={onSearchSubmit} sx={{ display: { xs: 'none', md: 'flex' }, flexGrow: 1, ml: 4 }}>
@@ -124,20 +148,21 @@ export function Header() {
 
       <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 2 }}>
         {visibleNavItems.map(([label, to]) => (
-          <NavLink key={to} to={to} style={({ isActive }) => ({ color: isActive ? '#FF2E88' : '#BFA2DB', textDecoration: 'none', fontWeight: 500 })}>
+          <StyledNavLink key={to} to={to}>
             {label}
-          </NavLink>
+          </StyledNavLink>
         ))}
       </Box>
 
-      <IconButton sx={{ color: '#BFA2DB', display: { xs: 'flex', md: 'none' } }} onClick={() => setIsSearchVisible(true)}>
+      <IconButton sx={{ color: 'primary', display: { xs: 'flex', md: 'none' } }} onClick={() => setIsSearchVisible(true)}>
         <SearchIcon />
       </IconButton>
-      <IconButton sx={{ color: '#BFA2DB', display: { xs: 'flex', md: 'none' } }} onClick={() => setIsDrawerOpen(true)}>
+      <IconButton sx={{ color: 'primary', display: { xs: 'flex', md: 'none' } }} onClick={() => setIsDrawerOpen(true)}>
         <MenuIcon />
       </IconButton>
+      <ThemeToggleButton />
       {!READ_ONLY && (
-        <IconButton onClick={() => setIsControlPanelOpen(true)} sx={{ color: '#BFA2DB', display: { xs: 'none', md: 'inline-flex' } }} title="Open Control Panel">
+        <IconButton onClick={() => setIsControlPanelOpen(true)} sx={{ color: 'primary', display: { xs: 'none', md: 'inline-flex' } }} title="Open Control Panel">
           <SettingsIcon />
         </IconButton>
       )}
@@ -147,7 +172,7 @@ export function Header() {
 
   const renderSearchHeader = () => (
     <>
-      <IconButton sx={{ color: '#BFA2DB' }} onClick={() => setIsSearchVisible(false)}>
+      <IconButton sx={{ color: 'primary' }} onClick={() => setIsSearchVisible(false)}>
         <ArrowBackIcon />
       </IconButton>
       <Box component="form" onSubmit={onSearchSubmit} sx={{ display: 'flex', flexGrow: 1, mx: 1 }}>
@@ -165,7 +190,7 @@ export function Header() {
 
   return (
     <>
-      <AppBar position="sticky" sx={{ backgroundColor: '#1C1C1E', borderBottom: '1px solid #333' }}>
+      <AppBar position="sticky" sx={{ backgroundColor: 'background.default', borderBottom: '1px solid #333' }}>
         <Toolbar sx={{ gap: 2 }}>
           {isSearchVisible ? renderSearchHeader() : renderDefaultHeader()}
         </Toolbar>
@@ -182,7 +207,7 @@ export function Header() {
         open={isControlPanelOpen}
         onClose={() => setIsControlPanelOpen(false)}
         slotProps={{
-          paper: { sx: { backgroundColor: '#1C1C1E', color: '#FFF', width: 280 } }
+          paper: { sx: { backgroundColor: 'background.default', color: 'text.primary', width: 280 } }
         }}
       >
         {!READ_ONLY && (

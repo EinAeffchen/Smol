@@ -1,27 +1,53 @@
-import { createTheme } from "@mui/material/styles";
+import {
+  ThemeProvider as MuiThemeProvider,
+  createTheme,
+} from "@mui/material";
+import { ThemeContext } from "@emotion/react";
 
-export const theme = createTheme({
-  palette: {
-    mode: "dark",
-    primary: {
-      main: "#5F4B8B", // Deep Violet
+export const getTheme = (mode: ThemeMode) =>
+  createTheme({
+    palette: {
+      mode,
+      ...(mode === "light"
+        ? {
+            // Light Mode Palette
+            primary: { main: "#3f51b5" },
+            background: { default: "#f5f5f5", paper: "#ffffff" },
+            text: { primary: "#212121" },
+            // Your custom colors
+            accent: { main: "#ff4081" },
+          }
+        : {
+            // Dark Mode Palette
+            primary: { main: "#90caf9" },
+            background: { default: "#212025", paper: "#2c2b30" },
+            text: { primary: "#F8F8F8" },
+            // Your custom colors (from tailwind.config.js)
+            accent: { main: "#FF007F" },
+          }),
     },
-    secondary: {
-      main: "#FF2E88", // Electric Pink
+    // This component setting applies the CSS variables to the root element
+    components: {
+      MuiCssBaseline: {
+        styleOverrides: (theme) => ({
+          body: {
+            // --tw-bg-background is the CSS variable for Tailwind's `bg-background`
+            "--tw-bg-background": theme.palette.background.default,
+            "--tw-text-text": theme.palette.text.primary,
+            "--tw-color-accent": theme.palette.accent.main,
+            // Add other variables as needed
+          },
+        }),
+      },
     },
-    background: {
-      default: "#1C1C1E",
-      paper: "#2C2C2E",
-    },
-    text: {
-      primary: "#FFFFFF",
-      secondary: "#BFA2DB",
-    },
-  },
-  shape: {
-    borderRadius: 12,
-  },
-  typography: {
-    fontFamily: "Inter, sans-serif",
-  },
-});
+  });
+
+// Define a new type for the custom 'accent' color
+declare module "@mui/material/styles" {
+  interface Palette {
+    accent: Palette["primary"];
+  }
+  interface PaletteOptions {
+    accent?: PaletteOptions["primary"];
+  }
+}

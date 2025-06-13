@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Card, CardActionArea, CardMedia, Box, Typography, useTheme } from '@mui/material';
 import { Media } from '../types';
 import { API } from '../config';
-
+import { useLocation } from 'react-router-dom';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 
@@ -15,14 +15,18 @@ function formatDuration(d?: number): string {
   return `${m}:${s}`;
 }
 
-export default function MediaCard({ media }: { media: Media }) {
+interface MediaCardProps {
+  media: Media;
+  sortOrder?: 'newest' | 'latest';
+}
+
+export default function MediaCard({ media, sortOrder = 'newest' }: MediaCardProps) {
   const theme = useTheme();
   const isVideo = typeof media.duration === 'number';
   const mediaUrl = `${API}/originals/${media.path}`;
   const thumbUrl = `${API}/thumbnails/${media.id}.jpg`;
 
   const [hovered, setHovered] = useState(false);
-
   return (
     <Card
       elevation={0}
@@ -41,6 +45,11 @@ export default function MediaCard({ media }: { media: Media }) {
       <CardActionArea
         component={Link}
         to={`/medium/${media.id}`}
+        state={{
+          viewContext: {
+            sort: sortOrder
+          }
+        }}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >
@@ -99,7 +108,7 @@ export default function MediaCard({ media }: { media: Media }) {
         >
           <Box sx={{
             display: 'flex',
-            justifyContent: 'flex-end', 
+            justifyContent: 'flex-end',
             flexDirection: 'column',
             height: '100%',
           }}>

@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import {
     Container,
     Box,
@@ -8,24 +8,36 @@ import {
     Snackbar,
     LinearProgress,
     Alert,
+    IconButton,
+    useTheme,
+    useMediaQuery,
 } from '@mui/material'
+import { ArrowBackIosNew, ArrowForwardIos } from '@mui/icons-material';
 import { ActionDialogs } from '../components/ActionDialogs'
 import { MediaDisplay } from '../components/MediaDisplay'
 import { MediaHeader } from '../components/MediaHeader'
-import { useFaceActions } from '../hooks/useFaceActions'
-import { MediaDetail, Task } from '../types'
+import { Media, MediaDetail, Task } from '../types'
 import { API } from '../config'
 import { MediaContentTabs } from '../components/MediaContentTabs'
 
 export default function MediaDetailPage() {
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
+    const location = useLocation();
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
     const [detail, setDetail] = useState<MediaDetail | null>(null)
     const [task, setTask] = useState<Task | null>(null)
     const [dialogType, setDialogType] = useState<'convert' | 'deleteRecord' | 'deleteFile' | null>(null)
     const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({ open: false, message: '', severity: 'success' })
     const [tabValue, setTabValue] = useState(0);
+
+    const [neighbors, setNeighbors] = useState<{ previousId: string | null, nextId: string | null }>({ previousId: null, nextId: null });
+    const [touchStartX, setTouchStartX] = useState<number | null>(null);
+
+    const viewContext = useMemo(() => location.state?.viewContext || { sort: 'newest' }, [location.state]);
+    const queryParams = new URLSearchParams(viewContext).toString();
 
     // Load media detail
     const loadDetail = useCallback(async () => {
@@ -39,6 +51,19 @@ export default function MediaDetailPage() {
             setSnackbar({ open: true, message: 'Failed to load media', severity: 'error' })
         }
     }, [id])
+
+    useEffect(() => {
+        if (!id) return;
+        fetch(`${API}/api/media/${id}/neighbors?${queryParams}`)
+            .then(res => (res.ok ? res.json() : null))
+            .then(data => {
+                if (data) {
+                    setNeighbors({ previousId: data.previous_id, nextId: data.next_id });
+                }
+            })
+            .catch(err => console.error("Failed to fetch neighbors:", err));
+    }, [id, viewContext]);
+
     useEffect(() => {
         setDetail(null)
         setTabValue(0);
@@ -65,6 +90,42 @@ export default function MediaDetailPage() {
 
         return () => clearInterval(interval)
     }, [task])
+
+    const handleNavigate = useCallback((direction: 'prev' | 'next') => {
+        const targetId = direction === 'prev' ? neighbors.previousId : neighbors.nextId;
+        if (targetId) {
+            navigate(`/medium/${targetId}/?${queryParams}`, {
+                state: { viewContext },
+                replace: true
+            });
+        }
+    }, [navigate, neighbors, viewContext]);
+
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft') handleNavigate('prev');
+            if (e.key === 'ArrowRight') handleNavigate('next');
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [handleNavigate]);
+
+    const handleTouchStart = (e: React.TouchEvent) => {
+        setTouchStartX(e.targetTouches[0].clientX);
+    };
+    const handleTouchEnd = (e: React.TouchEvent) => {
+        const touchEndX = e.changedTouches[0].clientX;
+        if (touchStartX === null) return;
+        const distance = touchStartX - touchEndX;
+        const minSwipeDistance = 50;
+
+        if (distance > minSwipeDistance) {
+            handleNavigate('next');
+        } else if (distance < -minSwipeDistance) {
+            handleNavigate('prev');
+        }
+        setTouchStartX(null);
+    };
 
     if (!detail) {
         return (
@@ -124,17 +185,6 @@ export default function MediaDetailPage() {
         }
     }
 
-    // Tag added handler
-    const handleTagAdded = (tag: any) => {
-        setDetail({
-            ...detail,
-            media: {
-                ...media,
-                tags: [...(media.tags ?? []), tag],
-            },
-        })
-    }
-
     const handleToggleExif = () => {
         setTabValue(3);
     };
@@ -146,7 +196,33 @@ export default function MediaDetailPage() {
                 onToggleExif={handleToggleExif} // CHANGED: This now controls the tabs
                 onOpenDialog={setDialogType}
             />
-            <MediaDisplay media={media} />
+            <Box sx={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                {!isMobile && (
+                    <IconButton
+                        onClick={() => handleNavigate('prev')}
+                        disabled={!neighbors.previousId}
+                        sx={{ position: 'absolute', left: -60, zIndex: 1, '&.Mui-disabled': { opacity: 0.2 } }}
+                    >
+                        <ArrowBackIosNew fontSize="large" />
+                    </IconButton>
+                )}
+                <Box
+                    onTouchStart={handleTouchStart}
+                    onTouchEnd={handleTouchEnd}
+                    sx={{ width: '100%' }}
+                >
+                    <MediaDisplay media={media} />
+                </Box>
+                {!isMobile && (
+                    <IconButton
+                        onClick={() => handleNavigate('next')}
+                        disabled={!neighbors.nextId}
+                        sx={{ position: 'absolute', right: -60, zIndex: 1, '&.Mui-disabled': { opacity: 0.2 } }}
+                    >
+                        <ArrowForwardIos fontSize="large" />
+                    </IconButton>
+                )}
+            </Box>
             <ActionDialogs
                 dialogType={dialogType}
                 onClose={() => setDialogType(null)}

@@ -86,7 +86,7 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
                     aspectRatio: '1/1',
                     borderRadius: 3,
                     textDecoration: 'none',
-                    bgcolor: '#2C2C2E',
+                    bgcolor: 'background.paper',
                     transition: 'transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out',
                     '&:hover': {
                         transform: 'scale(1.05)',
@@ -114,7 +114,7 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
                         ))}
                     </Box>
                 ) : (
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'linear-gradient(135deg, #5F4B8B, #4A3A6A)' }} />
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', background: 'linear-gradient(135deg, primary.main, primary.dark)' }} />
                 )}
 
                 {/* --- Gradient Overlay & Content --- */}
@@ -133,7 +133,7 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
                                 backgroundColor: 'rgba(0,0,0,0.3)',
                                 opacity: hovered ? 1 : 0,
                                 transition: 'opacity 0.2s ease-in-out',
-                                '&:hover': { color: '#FF2E88', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
+                                '&:hover': { color: 'accent.main', backgroundColor: 'rgba(0, 0, 0, 0.5)' },
                             }}
                         >
                             <DeleteIcon fontSize="small" />
@@ -159,7 +159,7 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
             <Dialog
                 open={openConfirmDialog}
                 onClose={handleCloseConfirmDialog}
-                slotProps={{ paper: { sx: { bgcolor: '#2C2C2E', color: '#FFF', borderRadius: 2 } } }}
+                slotProps={{ paper: { sx: { bgcolor: 'background.paper', color: 'text.primary', borderRadius: 2 } } }}
             >
                 <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <WarningAmberIcon sx={{ color: 'warning.main' }} />

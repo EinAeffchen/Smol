@@ -78,7 +78,7 @@ export default function OrphanFacesPage() {
     }
 
     return (
-        <Container maxWidth={false} sx={{ pt: 4, pb: 7, bgcolor: '#1C1C1E' }}>
+        <Container maxWidth={false} sx={{ pt: 4, pb: 7, bgcolor: 'background.default' }}>
             <Typography variant="h4" color="text.primary" gutterBottom>
                 Unassigned Faces
             </Typography>

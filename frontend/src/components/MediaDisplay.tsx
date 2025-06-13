@@ -11,7 +11,7 @@ interface MediaDisplayProps {
 export function MediaDisplay({ media }: MediaDisplayProps) {
     return (
         <Box display="flex" justifyContent="center" mb={2}>
-            <Paper elevation={4} sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden', borderRadius: 2, bgcolor: '#000' }}>
+            <Paper elevation={4} sx={{ width: '100%', maxWidth: '100%', overflow: 'hidden', borderRadius: 2, bgcolor: 'background.paper' }}>
                 {media.duration ? (
                     <VideoWithPreview key={media.id} media={media} />
                 ) : (

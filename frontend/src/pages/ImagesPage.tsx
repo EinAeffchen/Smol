@@ -57,9 +57,9 @@ export default function ImagesPage() {
     };
     return (
         <>
-            <Container maxWidth="xl" sx={{ bgcolor: '#1C1C1E', color: '#FFF', minHeight: '100vh', py: 2 }}>
+            <Container maxWidth="xl" sx={{ bgcolor: 'background.default', color: 'text.primary', minHeight: '100vh', py: 2 }}>
                 <Box display="flex" justifyContent="flex-end" alignItems="center" mb={2}>
-                    <IconButton onClick={handleSortMenuOpen} sx={{ color: '#BFA2DB' }}>
+                    <IconButton onClick={handleSortMenuOpen} sx={{ color: 'primary' }}>
                         <ImportExportIcon />
                     </IconButton>
                     <Menu
@@ -91,7 +91,7 @@ export default function ImagesPage() {
                 {/* Loading / Sentinel */}
                 {loading && (
                     <Box textAlign="center" py={3}>
-                        <CircularProgress sx={{ color: '#FF2E88' }} />
+                        <CircularProgress sx={{ color: 'accent.main' }} />
                     </Box>
                 )}
                 {hasMore && <Box ref={loaderRef} />}

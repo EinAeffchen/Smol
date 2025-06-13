@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { Media, Tag } from '../types'
 import { API } from '../config'
 import { Person } from '../types'
-
+import { Chip, Box, Typography } from '@mui/material';
 export interface TagsProps {
     media?: Media
     person?: Person
@@ -12,32 +12,49 @@ export interface TagsProps {
 
 export function Tags({ media, person, onUpdate }: Readonly<TagsProps>) {
     const owner = media || person;
-    const handleRemove = async (tag: Tag) => {
-        await fetch(`${API}/api/tags/media/${owner.id}/${tag.id}`, { method: 'DELETE' })
+    if (!owner) {
+        return null;
+    }
+
+    const handleRemove = async (tagToRemove: Tag) => {
+        await fetch(`${API}/api/tags/media/${owner.id}/${tagToRemove.id}`, { method: 'DELETE' })
         onUpdate({
             ...owner,
             tags: owner.tags.filter(t => t.id !== tag.id),
         })
     }
     return (
-        <section>
-            <h2 className="text-xl font-semibold mb-2">Tags</h2>
-            <div className="flex flex-wrap gap-2">
+        <Box component="section" sx={{ mt: 2 }}>
+            <Typography variant="h6" component="h2" sx={{ mb: 1, fontWeight: '600' }}>
+                Tags
+            </Typography>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
                 {(owner.tags ?? []).map(tag => (
-                    <div
+                    <Chip
                         key={tag.id}
-                        className="flex items-center bg-accent2 text-background px-3 py-1 rounded-full space-x-1"
-                    >
-                        <Link to={`/tag/${tag.id}`}>{tag.name}</Link>
-                        <button
-                            onClick={() => handleRemove(tag)}
-                            className="font-bold"
-                        >
-                            ×
-                        </button>
-                    </div>
+                        label={tag.name}
+                        // This makes the whole chip a clickable link
+                        component={Link}
+                        to={`/tag/${tag.id}`}
+                        clickable
+                        // The onDelete prop adds a delete icon and handles the click
+                        onDelete={() => handleRemove(tag)}
+                        // Use the theme's accent color for a consistent look
+                        sx={{
+                            color: 'accent.dark',
+                            fontWeight: 500,
+                            borderColor: 'accent.dark',
+                            '& .MuiChip-deleteIcon': {
+                                color: 'accent.dark',
+                                '&:hover': {
+                                    color: 'accent.dark' // A darker shade on hover
+                                }
+                            }
+                        }}
+                        variant="outlined"
+                    />
                 ))}
-            </div>
-        </section>
-    )
+            </Box>
+        </Box>
+    );
 }

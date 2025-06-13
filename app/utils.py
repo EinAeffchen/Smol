@@ -215,7 +215,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
         thumb_file = THUMB_DIR / thumb_name
         (
             ffmpeg.input(str(video_path), ss=start_sec)
-            .filter("scale", 480, -1)
+            .filter("scale", 360, -1)
             .output(str(thumb_file), vframes=1)
             .run(quiet=True, overwrite_output=True)
         )

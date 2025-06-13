@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import and_, delete, or_, text, func
+from sqlalchemy import and_, delete, or_, text, func, tuple_
 from sqlalchemy.orm import selectinload, aliased
 from sqlmodel import Session, select
 from app.config import (
@@ -26,6 +26,7 @@ from app.schemas.media import (
     MediaPreview,
     MediaRead,
     SceneRead,
+    MediaNeighbors,
 )
 from app.schemas.person import PersonRead
 from app.utils import (
@@ -227,6 +228,42 @@ def list_videos(
     results = session.exec(stmt.limit(limit)).all()
     next_cursor = str(results[-1].id) if len(results) == limit else None
     return CursorPage(items=results, next_cursor=next_cursor)
+
+
+@router.get("/{media_id}/neighbors", response_model=MediaNeighbors)
+def get_neighbors(
+    media_id: int,
+    session: Session = Depends(get_session),
+    sort: Annotated[str, Query(enum=["newest", "latest"])] = "newest",
+):
+    if sort == "newest":
+        sort_col = Media.created_at
+        sort_col_name = "created_at"
+    elif sort == "latest":
+        sort_col = Media.inserted_at
+        sort_col_name = "inserted_at"
+    else:
+        raise ValueError(f"Unsupported sort option: {sort}")
+
+    original = session.get(Media, media_id)
+    if not original:
+        raise HTTPException(404, "Media not found")
+
+    original_sort_value = getattr(original, sort_col_name)
+    q = select(Media).order_by(sort_col.desc(), Media.id.desc())
+
+    previous_query = q.where(
+        tuple_(sort_col, Media.id) > (original_sort_value, original.id)
+    ).limit(1)
+    next_query = q.where(
+        tuple_(sort_col, Media.id) < (original_sort_value, original.id)
+    ).limit(1)
+    prev_row = session.exec(previous_query).first()
+    next_row = session.exec(next_query).first()
+    return MediaNeighbors(
+        next_id=next_row.id if next_row else None,
+        previous_id=prev_row.id if prev_row else None,
+    )
 
 
 @router.get("/{media_id}", response_model=MediaDetail)

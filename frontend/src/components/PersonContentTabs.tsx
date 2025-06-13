@@ -1,6 +1,6 @@
 
 import React, { Suspense, useState, useEffect } from 'react';
-import { Box, Tabs, Tab, CircularProgress, Typography, Grid } from '@mui/material';
+import { Box, Tabs, Tab, CircularProgress, Typography, Grid, Button } from '@mui/material';
 import { Media, Person, Tag, FaceRead, SimilarPerson } from '../types';
 
 import MediaAppearances from './MediaAppearances';
@@ -40,6 +40,7 @@ interface PersonContentTabsProps {
     suggestedFaces: FaceRead[];
     similarPersons: SimilarPerson[];
     onTagUpdate: () => void;
+    onRefreshSuggestions: () => void;
 }
 
 
@@ -78,6 +79,16 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
             </TabPanel>
 
             <TabPanel value={tabValue} index={1}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                    <Typography variant="h6">Suggestions</Typography>
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={props.onRefreshSuggestions}
+                    >
+                        Refresh Suggestions
+                    </Button>
+                </Box>
                 <Suspense fallback={<CircularProgress />}>
                     <DetectedFaces
                         title="All Detected Faces"

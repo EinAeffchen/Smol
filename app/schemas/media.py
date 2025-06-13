@@ -62,6 +62,9 @@ class MediaDetail(SQLModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class MediaNeighbors(SQLModel):
+    next_id: int|None
+    previous_id: int|None
 
 class GeoUpdate(SQLModel):
     latitude: float

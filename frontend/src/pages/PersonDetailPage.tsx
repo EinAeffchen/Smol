@@ -1,8 +1,6 @@
-import CancelIcon from '@mui/icons-material/Cancel'
 import {
     Box,
     Button,
-    Chip,
     CircularProgress,
     Container,
     Dialog,
@@ -37,7 +35,7 @@ export default function PersonDetailPage() {
     const [detectedFacesList, setDetectedFacesList] = useState<FaceRead[]>([]);
     const [facesNextCursor, setFacesNextCursor] = useState<string | null>(null);
     const [loadingMoreFaces, setLoadingMoreFaces] = useState<boolean>(false);
-    const [hasMoreFaces, setHasMoreFaces] = useState<boolean>(true); // Assume more initially
+    const [hasMoreFaces, setHasMoreFaces] = useState<boolean>(true);
 
 
     const [mergeOpen, setMergeOpen] = useState(false)
@@ -59,18 +57,18 @@ export default function PersonDetailPage() {
         try {
             const res = await fetch(`${API}/api/persons/${id}`);
             if (!res.ok) throw new Error('Failed to fetch person details');
-            const personData: PersonDetail = await res.json(); // Assuming this no longer sends bulk faces
+            const personData: PersonDetail = await res.json();
             setDetail(personData);
             setForm({
                 name: personData.person.name ?? '',
-                age: personData.person.age?.toString() ?? '', // Ensure age is string for form
+                age: personData.person.age?.toString() ?? '',
                 gender: personData.person.gender ?? '',
             });
         } catch (err) {
             console.error("Error in loadDetail:", err);
             setDetail(null);
         }
-    }, [id, API]);
+    }, [id]);
 
     const fetchFacesPage = useCallback(async (personId: string, cursor: string | null, limit: number = 20): Promise<CursorResponse<FaceRead> | null> => {
         let url = `${API}/api/persons/${personId}/faces?limit=${limit}`;
@@ -86,15 +84,15 @@ export default function PersonDetailPage() {
             console.error(`Error fetching faces for person ${personId}:`, error);
             return null;
         }
-    }, [API]);
+    }, []);
 
 
     const loadInitialDetectedFaces = useCallback(async (personId: string) => {
         if (!personId) return;
-        setLoadingMoreFaces(true); // Use this for initial load as well
+        setLoadingMoreFaces(true);
         setDetectedFacesList([]);
         setFacesNextCursor(null);
-        setHasMoreFaces(true); // Reset assumption
+        setHasMoreFaces(true);
 
         const pageData = await fetchFacesPage(personId, null);
         if (pageData) {
@@ -116,7 +114,7 @@ export default function PersonDetailPage() {
             setFacesNextCursor(pageData.next_cursor);
             setHasMoreFaces(!!pageData.next_cursor && pageData.items.length > 0);
         } else {
-            setHasMoreFaces(false); // No more items or error
+            setHasMoreFaces(false);
         }
         setLoadingMoreFaces(false);
     }, [id, facesNextCursor, loadingMoreFaces, hasMoreFaces, fetchFacesPage]);
@@ -152,9 +150,12 @@ export default function PersonDetailPage() {
     useEffect(() => {
         if (id) {
             const initialLoad = async () => {
+                setLoading(true);
                 await Promise.all([
                     loadDetail(),
                     loadInitialDetectedFaces(id),
+                    loadSuggestedFaces(), // Call this on initial load
+                    loadSimilar(), // Also call this on initial load
                 ]);
                 setLoading(false);
             };
@@ -163,17 +164,16 @@ export default function PersonDetailPage() {
             setLoading(false);
             setDetail(null);
         }
-    }, [id, loadDetail, loadInitialDetectedFaces]);
+    }, [id, loadDetail, loadInitialDetectedFaces, loadSuggestedFaces, loadSimilar]);
 
     const handleAssignWrapper = async (faceId: number, assignedToPersonId: number) => {
         await assignFace(faceId, assignedToPersonId);
-        if (detail && assignedToPersonId !== detail.person.id) {
-            setDetectedFacesList(prev => prev.filter(f => f.id !== faceId));
-        } else if (detail && assignedToPersonId === detail.person.id) {
-            if (id) loadInitialDetectedFaces(id);
+        // After assigning, refresh suggestions and faces
+        if (id) {
+            loadInitialDetectedFaces(id);
+            loadSuggestedFaces();
+            loadDetail();
         }
-        loadDetail();
-        loadSuggestedFaces();
     };
 
     const handleDeleteWrapper = async (faceId: number) => {
@@ -204,8 +204,8 @@ export default function PersonDetailPage() {
     };
 
     async function deletePerson() {
-        if (!id) return
-        const res = await fetch(`${API}/api/persons/${person.id}`, { method: 'DELETE' })
+        if (!id || !detail) return
+        const res = await fetch(`${API}/api/persons/${detail.person.id}`, { method: 'DELETE' })
         if (res.ok) {
             showMessage('Person deleted', 'success')
             navigate('/', { replace: true })
@@ -296,6 +296,8 @@ export default function PersonDetailPage() {
                 onLoadSimilar={loadSimilar}
                 suggestedFaces={suggestedFaces}
                 similarPersons={similarPersons}
+                // Pass the refresh function to the tabs component
+                onRefreshSuggestions={loadSuggestedFaces}
             />
 
             {/* Snackbar */}
@@ -338,7 +340,7 @@ export default function PersonDetailPage() {
                             <Box
                                 key={c.id}
                                 onClick={() => doMerge(c.id)}
-                                sx={{ p: 1, bgcolor: '#2C2C2E', borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: '#3C3C3E' } }}
+                                sx={{ p: 1, bgcolor: 'background.paper', borderRadius: 1, cursor: 'pointer', '&:hover': { bgcolor: 'primary.dark' } }}
                             >
                                 <Typography>{c.name ?? 'Unknown'}</Typography>
                             </Box>

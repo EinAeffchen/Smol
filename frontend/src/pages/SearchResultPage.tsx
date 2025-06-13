@@ -48,8 +48,8 @@ export default function SearchResultsPage() {
                 : 'Tag Results'
 
     return (
-        <Container maxWidth="lg" sx={{ pt: 4, pb: 6, bgcolor: '#1C1C1E' }}>
-            <Typography variant="h4" gutterBottom sx={{ color: '#FF2E88' }}>
+        <Container maxWidth="lg" sx={{ pt: 4, pb: 6, bgcolor: 'background.default' }}>
+            <Typography variant="h4" gutterBottom sx={{ color: 'accent.main' }}>
                 {title}
             </Typography>
 
@@ -83,7 +83,7 @@ export default function SearchResultsPage() {
             )}
 
             {!loading && hasMore && (
-                <Box ref={loaderRef} textAlign="center" py={2} sx={{ color: '#BFA2DB' }}>
+                <Box ref={loaderRef} textAlign="center" py={2} sx={{ color: 'primary' }}>
                     Scroll to load more…
                 </Box>
             )}

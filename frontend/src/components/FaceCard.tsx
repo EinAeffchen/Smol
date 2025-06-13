@@ -14,7 +14,8 @@ import {
     Stack,
     TextField,
     Tooltip,
-    Typography
+    Typography,
+    useTheme // Import useTheme to access theme properties
 } from '@mui/material';
 import CircularProgress from '@mui/material/CircularProgress';
 import { useEffect, useRef, useState } from 'react';
@@ -40,28 +41,29 @@ export default function FaceCard({
     onDelete: () => void
     onDetach: () => void
 }) {
-    const [mode, setMode] = useState<'none' | 'search' | 'new'>('none')
+    const [mode, setMode] = useState<'none' | 'search' | 'new'>('none');
     const cardRef = useRef<HTMLDivElement>(null);
     const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number; width: number } | null>(null);
-    const overlayOpen = mode !== 'none'
-    const [query, setQuery] = useState('')
-    const [creating, setCreating] = useState(false)
+    const overlayOpen = mode !== 'none';
+    const [query, setQuery] = useState('');
+    const [creating, setCreating] = useState(false);
+    const theme = useTheme(); // Get access to the theme object
 
-    const [cands, setCands] = useState<Person[]>([])
-    const [assigningId, setAssigningId] = useState<number | null>(null)
+    const [cands, setCands] = useState<Person[]>([]);
+    const [assigningId, setAssigningId] = useState<number | null>(null);
 
-    const [form, setForm] = useState({ name: '', age: '', gender: '' })
+    const [form, setForm] = useState({ name: '', age: '', gender: '' });
 
     useEffect(() => {
         if (mode !== 'search' || !query.trim()) {
-            setCands([])
-            return
+            setCands([]);
+            return;
         }
         fetch(`${API}/api/persons/?name=${encodeURIComponent(query)}`)
             .then(r => r.json())
             .then(r => setCands(r.items))
-            .catch(console.error)
-    }, [mode, query])
+            .catch(console.error);
+    }, [mode, query]);
 
     useEffect(() => {
         if (mode !== 'none' && cardRef.current) {
@@ -84,12 +86,12 @@ export default function FaceCard({
             top: `${dropdownPosition.top}px`,
             left: `${dropdownPosition.left}px`,
             width: `${dropdownPosition.width}px`,
-            bgcolor: '#2C2C2E',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-            borderRadius: 1,
+            bgcolor: 'background.paper',
+            boxShadow: theme.shadows[8], // Use theme's shadow
+            borderRadius: 2,
             p: 1,
-            zIndex: (theme: any) => theme.zIndex.modal + 1,
-            color: '#FFF',
+            zIndex: theme.zIndex.modal + 1,
+            color: 'text.primary',
         };
 
         if (mode === 'search') {
@@ -102,7 +104,15 @@ export default function FaceCard({
                         placeholder="Search…"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
-                        sx={{ mb: 1, input: { color: '#FFF' }, '& .MuiOutlinedInput-root': { fieldset: { borderColor: 'rgba(255,255,255,0.23)' }, '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.5)' }, '&.Mui-focused fieldset': { borderColor: (theme: any) => theme.palette.primary.main } } }}
+                        // Replaced hardcoded TextField styles with theme values
+                        sx={{
+                            mb: 1,
+                            '& .MuiOutlinedInput-root': {
+                                fieldset: { borderColor: 'divider' },
+                                '&:hover fieldset': { borderColor: 'text.secondary' },
+                                '&.Mui-focused fieldset': { borderColor: 'primary.main' }
+                            }
+                        }}
                     />
                     <Box sx={{ maxHeight: 150, overflowY: 'auto' }}>
                         {cands.length > 0 ? (
@@ -114,17 +124,18 @@ export default function FaceCard({
                                         px: 1, py: 0.5, display: 'flex', alignItems: 'center',
                                         cursor: assigningId ? 'not-allowed' : 'pointer',
                                         opacity: assigningId && assigningId !== p.id ? 0.5 : 1,
-                                        '&:hover': { bgcolor: assigningId ? 'inherit' : '#444' },
+                                        '&:hover': { bgcolor: assigningId ? 'inherit' : 'action.hover' },
+                                        borderRadius: 1,
                                     }}
                                 >
                                     {p.name || 'Unknown'}
                                     {assigningId === p.id && (
-                                        <CircularProgress size={14} sx={{ ml: 1 }} />
+                                        <CircularProgress size={14} sx={{ ml: 1 }} color="primary" />
                                     )}
                                 </Box>
                             ))
                         ) : (
-                            <Typography variant="caption" color="gray">
+                            <Typography variant="caption" color="text.secondary">
                                 {query.trim() ? 'No matches' : 'Type to search'}
                             </Typography>
                         )}
@@ -146,14 +157,21 @@ export default function FaceCard({
                             autoFocus={field === 'name'}
                             value={(form as any)[field]}
                             onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                            sx={{ mb: 1, input: { color: '#FFF' }, '& .MuiOutlinedInput-root': { fieldset: { borderColor: 'rgba(255,255,255,0.23)' }, '&:hover fieldset': { borderColor: 'rgba(255,255,255,0.5)' }, '&.Mui-focused fieldset': { borderColor: (theme: any) => theme.palette.primary.main } } }}
+                            sx={{
+                                mb: 1,
+                                '& .MuiOutlinedInput-root': {
+                                    fieldset: { borderColor: 'divider' },
+                                    '&:hover fieldset': { borderColor: 'text.secondary' },
+                                    '&.Mui-focused fieldset': { borderColor: 'primary.main' }
+                                }
+                            }}
                         />
                     ))}
                     <Button
                         size="small" fullWidth onClick={createAssign} variant="contained"
-                        disabled={creating} sx={{ bgcolor: '#FF2E88', mt: 1, '&:hover': { bgcolor: '#E02070' } }}
+                        disabled={creating} color="secondary" sx={{ mt: 1, color: 'white' }}
                     >
-                        {creating ? <CircularProgress size={18} sx={{ color: 'white' }} /> : 'Create & Assign'}
+                        {creating ? <CircularProgress size={18} color="inherit" /> : 'Create & Assign'}
                     </Button>
                 </Box>
             );
@@ -162,32 +180,28 @@ export default function FaceCard({
     };
 
     async function assignTo(pid: number) {
-        if (assigningId !== null) return
-
-        setAssigningId(pid)
+        if (assigningId !== null) return;
+        setAssigningId(pid);
         try {
-            await onAssign(pid)
+            await onAssign(pid);
         } finally {
-            setAssigningId(null)
+            setAssigningId(null);
         }
     }
 
     async function createAssign() {
-        if (creating) return
-        setCreating(true)
-
-        const payload: any = {}
-        if (form.name) payload.name = form.name
-        if (form.age) payload.age = Number(form.age)
-        if (form.gender) payload.gender = form.gender
-
+        if (creating) return;
+        setCreating(true);
+        const payload: any = {};
+        if (form.name) payload.name = form.name;
+        if (form.age) payload.age = Number(form.age);
+        if (form.gender) payload.gender = form.gender;
         try {
-            await onCreate(payload)
+            await onCreate(payload);
         } finally {
-            setCreating(false)
+            setCreating(false);
         }
     }
-
 
     return (
         <>
@@ -195,10 +209,10 @@ export default function FaceCard({
                 ref={cardRef}
                 sx={{
                     width: 130,
-                    bgcolor: '#2C2C2E',
-                    color: '#FFF',
+                    bgcolor: 'background.paper',
+                    color: 'text.primary',
                     position: 'relative',
-                    zIndex: mode !== 'none' ? (theme) => theme.zIndex.tooltip : 'auto',
+                    zIndex: mode !== 'none' ? (theme) => theme.zIndex.modal : 'auto',
                     '&:hover .hover-actions': { opacity: 1 },
                 }}
             >
@@ -207,7 +221,7 @@ export default function FaceCard({
                         <Avatar
                             src={`${API}/thumbnails/${face.thumbnail_path}`}
                             variant="rounded"
-                            sx={{ width: '100%', height: 124, borderRadius: 2, border: isProfile ? '3px solid #FF2E88' : 'none' }}
+                            sx={{ width: '100%', height: 124, border: isProfile ? '3px solid' : 'none', borderColor: 'accent.main' }}
                         />
                     </CardActionArea>
                     {!READ_ONLY && (
@@ -225,14 +239,14 @@ export default function FaceCard({
                             }}
                         >
                             <Tooltip title="Delete">
-                                <IconButton size="small" sx={{ bgcolor: 'rgba(0,0,0,0.4)' }} onClick={onDelete}>
-                                    <DeleteIcon fontSize="small" sx={{ color: 'red' }} />
+                                <IconButton size="small" sx={{ bgcolor: 'rgba(0,0,0,0.4)', '&:hover': { bgcolor: 'rgba(0,0,0,0.6)' } }} onClick={onDelete}>
+                                    <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
                                 </IconButton>
                             </Tooltip>
                             {!isProfile && (
                                 <Tooltip title="Set as profile">
-                                    <IconButton size="small" sx={{ bgcolor: '#FF2E88' }} onClick={() => onSetProfile(face.id)}>
-                                        <StarIcon fontSize="small" sx={{ color: 'white' }} />
+                                    <IconButton size="small" sx={{ bgcolor: 'accent.main', '&:hover': { bgcolor: 'accent.dark' } }} onClick={() => onSetProfile(face.id)}>
+                                        <StarIcon fontSize="small" sx={{ color: 'primary.contrastText' }} />
                                     </IconButton>
                                 </Tooltip>
                             )}
@@ -243,31 +257,30 @@ export default function FaceCard({
                 {!READ_ONLY && (
                     <CardContent sx={{ px: 1, py: 1, textAlign: 'center' }}>
                         {face.person ? (
-                            <Typography variant="caption" color="#BFA2DB" display="block">
+                            <Typography variant="caption" color="primary" display="block">
                                 Assigned
                             </Typography>
                         ) : (
                             <Stack direction="row" spacing={1} justifyContent="center">
                                 <Tooltip title="Detach from person">
                                     <IconButton size="small" onClick={onDetach}>
-                                        <LinkOffIcon fontSize="small" sx={{ color: 'white' }} />
+                                        <LinkOffIcon fontSize="small" sx={{ color: 'text.secondary' }} />
                                     </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Assign Existing">
                                     <IconButton size="small" onClick={() => setMode(prev => prev === 'search' ? 'none' : 'search')}>
-                                        <PersonSearchIcon fontSize="small" sx={{ color: mode === 'search' ? '#FF2E88' : 'white' }} />
+                                        <PersonSearchIcon fontSize="small" sx={{ color: mode === 'search' ? 'accent.main' : 'text.secondary' }} />
                                     </IconButton>
                                 </Tooltip>
                                 <Tooltip title="Create New Person">
                                     <IconButton size="small" onClick={() => setMode(prev => prev === 'new' ? 'none' : 'new')}>
-                                        <PersonAddIcon fontSize="small" sx={{ color: mode === 'new' ? '#FF2E88' : 'white' }} />
+                                        <PersonAddIcon fontSize="small" sx={{ color: mode === 'new' ? 'accent.main' : 'text.secondary' }} />
                                     </IconButton>
                                 </Tooltip>
                             </Stack>
                         )}
                     </CardContent>
                 )}
-
             </Card>
 
             {mode !== 'none' && dropdownPosition && ReactDOM.createPortal(

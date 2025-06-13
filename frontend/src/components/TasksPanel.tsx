@@ -102,8 +102,8 @@ export default function TaskManager() {
                                         height: 6,
                                         borderRadius: 3,
                                         mt: 0.5,
-                                        bgcolor: 'grey.800',
-                                        '& .MuiLinearProgress-bar': { bgcolor: '#5F4B8B' },
+                                        bgcolor: 'divider',
+                                        '& .MuiLinearProgress-bar': { bgcolor: 'primary.main' },
                                     }}
                                 />
                                 {t.status === 'running' && (

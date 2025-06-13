@@ -11,9 +11,9 @@ import PersonCard from '../components/PersonCard'
 import { Tag, Media, Person } from '../types'
 import { API } from '../config'
 
-const BG_SECTION = '#1C1C1E'
-const TEXT_PRIMARY = '#FFF'
-const ACCENT = '#FF2E88'
+const BG_SECTION = 'background.default'
+const TEXT_PRIMARY = 'text.primary'
+const ACCENT = 'accent.main'
 
 export default function TagDetailPage() {
     const { id } = useParams<{ id: string }>()
