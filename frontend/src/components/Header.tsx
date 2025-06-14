@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, NavLink, useNavigate } from 'react-router-dom';
+import { NavLink as RouterNavLink, useNavigate, Link } from 'react-router-dom';
 import {
   AppBar,
   Box,
@@ -21,29 +21,28 @@ import MenuIcon from '@mui/icons-material/Menu';
 import SearchIcon from '@mui/icons-material/Search';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import SettingsIcon from '@mui/icons-material/Settings';
-import TaskManager from '../components/TasksPanel'
-import ThemeToggleButton from './ThemeToggleButton';
-import { useThemeContext } from '../ThemeContext';
+import TaskManager from '../components/TasksPanel';
+import ThemeToggleButton from '../components/ThemeToggleButton';
 import { API, READ_ONLY, ENABLE_PEOPLE } from '../config';
 
-const StyledNavLink = styled(NavLink)(({ theme }) => ({
+const StyledNavLink = styled(RouterNavLink)(({ theme }) => ({
   color: theme.palette.text.primary,
   textDecoration: 'none',
   fontWeight: 500,
-  padding: theme.spacing(1, 1),
+  padding: theme.spacing(1, 2),
   borderRadius: theme.shape.borderRadius,
   transition: 'color 0.2s ease-in-out, background-color 0.2s ease-in-out',
 
   '&:hover': {
     backgroundColor: theme.palette.action.hover,
   },
-
   '&.active': {
     color: theme.palette.accent.main,
   },
 }));
 
 function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () => void; navItems: [string, string][] }) {
+  // Removed theme context logic as it's no longer needed here
   return (
     <Drawer
       anchor="right"
@@ -58,45 +57,38 @@ function MobileDrawer({ open, onClose, navItems }: { open: boolean; onClose: () 
           <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ height: 40 }} />
         </Link>
       </Box>
-      <Divider sx={{ borderColor: 'divider' }} />
+      <Divider />
 
       <List>
         {navItems.map(([label, to]) => (
           <ListItem key={to} disablePadding>
-            <ListItemButton component={NavLink} to={to} onClick={onClose}>
+            <ListItemButton component={RouterNavLink} to={to} onClick={onClose}>
               <ListItemText primary={label} />
             </ListItemButton>
           </ListItem>
         ))}
+        {/* The theme toggle has been removed from the drawer */}
       </List>
-      <ListItem disablePadding>
-        <ThemeToggleButton />
-      </ListItem>
 
-      {
-        !READ_ONLY && (
-          <>
-            <Divider sx={{ borderColor: 'divider' }} />
-            <Box sx={{ p: 2 }}>
-              <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-                Control Panel
-              </Typography>
-              <TaskManager />
-            </Box>
-          </>
-        )
-      }
-    </Drawer >
+      {!READ_ONLY && (
+        <>
+          <Divider />
+          <Box sx={{ p: 2 }}>
+            <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+              Control Panel
+            </Typography>
+            <TaskManager />
+          </Box>
+        </>
+      )}
+    </Drawer>
   );
 }
 
-
 export function Header() {
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
-
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
-
   const [q, setQ] = useState('');
   const [category, setCategory] = useState<'media' | 'person' | 'tag'>('media');
   const navigate = useNavigate();
@@ -106,7 +98,7 @@ export function Header() {
     ['Videos', '/videos'],
     ['Tags', '/tags'],
     ['People', '/people'],
-    ['Unassigned Faces', '/orphanfaces'],
+    ['Faces', '/orphanfaces'],
     ['Map', '/map'],
     ['Geotagger', '/maptagger'],
   ];
@@ -116,7 +108,6 @@ export function Header() {
   let visibleNavItems = allNavItems.filter(
     ([, path]) => !(READ_ONLY && pathsToExcludeInReadOnly.includes(path)) && !(!ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path))
   );
-
 
   function onSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,67 +121,72 @@ export function Header() {
   const renderDefaultHeader = () => (
     <>
       <Link to="/">
-        <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ width: 78, display: { xs: 'none', sm: 'block' } }} />
-        <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ width: 78, display: { xs: 'block', sm: 'none' } }} />
+        <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ height: 48, display: { xs: 'none', sm: 'block' }, mr: 2 }} />
+        <Box component="img" src={`${API}/static/logo.png`} alt="SMOL logo" sx={{ height: 40, display: { xs: 'block', sm: 'none' } }} />
       </Link>
 
-      <Box component="form" onSubmit={onSearchSubmit} sx={{ display: { xs: 'none', md: 'flex' }, flexGrow: 1, ml: 4 }}>
-        <Select value={category} onChange={(e) => setCategory(e.target.value as any)} >
+      <Box component="form" onSubmit={onSearchSubmit} sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', flexGrow: 1, maxWidth: 600 }}>
+        <Select variant="outlined" size="small" value={category} onChange={(e) => setCategory(e.target.value as any)} >
           <MenuItem value="media">Media</MenuItem>
           <MenuItem value="person">People</MenuItem>
           <MenuItem value="tag">Tags</MenuItem>
         </Select>
-        <TextField value={q} onChange={(e) => setQ(e.target.value)} />
+        <TextField variant="outlined" size="small" fullWidth value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search..." />
         <button type="submit" style={{ display: 'none' }} />
       </Box>
 
-      <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
+      {/* This Box pushes everything after it to the right */}
+      <Box sx={{ flexGrow: 1 }} />
 
-      <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 2 }}>
+      {/* Desktop Navigation & Actions */}
+      <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5 }}>
         {visibleNavItems.map(([label, to]) => (
           <StyledNavLink key={to} to={to}>
             {label}
           </StyledNavLink>
         ))}
+        <ThemeToggleButton />
+        {!READ_ONLY && (
+          <IconButton onClick={() => setIsControlPanelOpen(true)} color="primary" title="Open Control Panel">
+            <SettingsIcon />
+          </IconButton>
+        )}
       </Box>
 
-      <IconButton sx={{ color: 'primary', display: { xs: 'flex', md: 'none' } }} onClick={() => setIsSearchVisible(true)}>
-        <SearchIcon />
-      </IconButton>
-      <IconButton sx={{ color: 'primary', display: { xs: 'flex', md: 'none' } }} onClick={() => setIsDrawerOpen(true)}>
-        <MenuIcon />
-      </IconButton>
-      <ThemeToggleButton />
-      {!READ_ONLY && (
-        <IconButton onClick={() => setIsControlPanelOpen(true)} sx={{ color: 'primary', display: { xs: 'none', md: 'inline-flex' } }} title="Open Control Panel">
-          <SettingsIcon />
+      {/* Mobile Actions */}
+      <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center' }}>
+        <IconButton color="primary" onClick={() => setIsSearchVisible(true)}>
+          <SearchIcon />
         </IconButton>
-      )}
+        {/* Theme toggle is now here on mobile */}
+        <ThemeToggleButton />
+        <IconButton color="primary" onClick={() => setIsDrawerOpen(true)}>
+          <MenuIcon />
+        </IconButton>
+      </Box>
     </>
   );
 
-
   const renderSearchHeader = () => (
     <>
-      <IconButton sx={{ color: 'primary' }} onClick={() => setIsSearchVisible(false)}>
+      <IconButton color="primary" onClick={() => setIsSearchVisible(false)}>
         <ArrowBackIcon />
       </IconButton>
-      <Box component="form" onSubmit={onSearchSubmit} sx={{ display: 'flex', flexGrow: 1, mx: 1 }}>
-        <Select value={category} onChange={(e) => setCategory(e.target.value as any)} >
+      <Box component="form" onSubmit={onSearchSubmit} sx={{ display: 'flex', flexGrow: 1, alignItems: 'center' }}>
+        <Select variant="outlined" size="small" value={category} onChange={(e) => setCategory(e.target.value as any)} >
           <MenuItem value="media">Media</MenuItem>
           <MenuItem value="person">People</MenuItem>
           <MenuItem value="tag">Tags</MenuItem>
         </Select>
-        <TextField value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" autoFocus fullWidth />
+        <TextField variant="outlined" size="small" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" autoFocus fullWidth />
         <button type="submit" style={{ display: 'none' }} />
       </Box>
     </>
   );
 
-
   return (
     <>
-      <AppBar position="sticky" sx={{ backgroundColor: 'background.default', borderBottom: '1px solid #333' }}>
+      <AppBar position="sticky" sx={{ backgroundColor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar sx={{ gap: 2 }}>
           {isSearchVisible ? renderSearchHeader() : renderDefaultHeader()}
         </Toolbar>

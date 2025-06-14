@@ -1,245 +1,367 @@
-import React, { useState, useEffect } from 'react'
-import { MapContainer, TileLayer, CircleMarker, useMap, useMapEvents } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import {
-    Box,
-    Drawer,
-    Typography,
-    List,
-    ListItem,
-    Dialog,
-    DialogTitle,
-    DialogContent,
-    DialogActions,
-    ListItemButton,
-    TextField,
-    Autocomplete,
-    Button,
-    CircularProgress,
-} from '@mui/material'
-import { MediaPreview } from '../types'
-import { API } from '../config'
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMapEvents,
+  useMap,
+} from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import {
+  Box,
+  Drawer,
+  Typography,
+  List,
+  ListItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  ListItemButton,
+  TextField,
+  Autocomplete,
+  Button,
+  Paper,
+  useTheme,
+  IconButton,
+  Snackbar,
+  Alert,
+  CircularProgress,
+} from "@mui/material";
+import { MediaPreview } from "../types";
+import { API } from "../config";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import CancelIcon from "@mui/icons-material/Cancel";
+import L from "leaflet";
 
-function ClickHandler({ selected, setTempPos }: { selected: MediaPreview | null; setTempPos: (pos: [number, number]) => void }) {
-    useMapEvents({
-        click(e) {
-            if (selected) {
-                const { lat, lng } = e.latlng
-                setTempPos([lat, lng])
-            }
-        }
-    })
-    return null
+function MapClickHandler({
+  selected,
+  onMapClick,
+}: {
+  selected: MediaPreview | null;
+  onMapClick: (latlng: typeof L.LatLng) => void;
+}) {
+  useMapEvents({
+    click(e: any) {
+      if (selected) {
+        onMapClick(e.latlng);
+      }
+    },
+  });
+  return null;
+}
+
+function FitBounds({ bounds }: { bounds: any | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (bounds) {
+      map.flyToBounds(bounds, { padding: [50, 50] });
+    }
+  }, [bounds, map]);
+  return null;
 }
 
 export default function MapEditorPage() {
-    const [orphans, setOrphans] = useState<MediaPreview[]>([])
-    const [selected, setSelected] = useState<MediaPreview | null>(null)
-    const [tempPos, setTempPos] = useState<[number, number] | null>(null)
-    const [saving, setSaving] = useState(false)
-    const [bounds, setBounds] = useState<[[number, number], [number, number]] | null>(null)
-    const [confirmOpen, setConfirmOpen] = useState(false)
+  // Core State
+  const [orphans, setOrphans] = useState<MediaPreview[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<MediaPreview | null>(null);
+  const [newPosition, setNewPosition] = useState<typeof L.LatLng | null>(null);
+  const [saving, setSaving] = useState(false);
 
+  // Search State
+  const [searchInput, setSearchInput] = useState("");
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
 
-    const [searchInput, setSearchInput] = useState('')
-    const [debouncedInput, setDebouncedInput] = useState<string>('')
-    const [searchResults, setSearchResults] = useState<any[]>([])
-    const [searchLoading, setSearchLoading] = useState(false)
+  // Map State
+  const [mapBounds, setMapBounds] = useState<any | null>(null);
 
-    useEffect(() => {
-        fetch(`${API}/api/media/missing_geo`)
-            .then(res => res.json())
-            .then(setOrphans)
-            .catch(console.error)
-    }, [])
+  // UI State
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: "success" | "error";
+  }>({ open: false, message: "", severity: "success" });
+  const theme = useTheme();
 
-    useEffect(() => {
-        const handler = setTimeout(() => setDebouncedInput(searchInput), 1000)
-        return () => clearTimeout(handler)
-    }, [searchInput])
+  useEffect(() => {
+    fetch(`${API}/api/media/missing_geo`)
+      .then((res) => res.json())
+      .then(setOrphans)
+      .catch(console.error);
+  }, []);
 
-    useEffect(() => {
-        if (debouncedInput.length < 1) {
-            setSearchResults([])
-            return
+  // Debounced search for locations using Nominatim API
+  useEffect(() => {
+    if (searchInput.length < 3) {
+      setSearchResults([]);
+      return;
+    }
+    const handler = setTimeout(() => {
+      setSearchLoading(true);
+      fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
+          searchInput
+        )}`
+      )
+        .then((res) => res.json())
+        .then((data) => setSearchResults(data))
+        .catch(console.error)
+        .finally(() => setSearchLoading(false));
+    }, 500);
+    return () => clearTimeout(handler);
+  }, [searchInput]);
+
+  const handleSelectMedia = (media: MediaPreview) => {
+    setSelectedMedia(media);
+    setNewPosition(null);
+  };
+
+  const handleMapClick = (latlng: typeof L.LatLng) => {
+    setNewPosition(latlng);
+  };
+
+  const saveGeo = async () => {
+    if (!selectedMedia || !newPosition) return;
+    setSaving(true);
+    try {
+      const res = await fetch(
+        `${API}/api/media/${selectedMedia.id}/geolocation`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            latitude: newPosition.lat,
+            longitude: newPosition.lng,
+          }),
         }
-        setSearchLoading(true)
-        fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchInput)}`)
-            .then(res => res.json())
-            .then(data => { setSearchResults(data) })
-            .catch(console.error)
-            .finally(() => setSearchLoading(false))
-    }, [debouncedInput])
-
-    // Fits map bounds to given bounding coordinates
-    function FitBounds({ bounds }: { bounds: [[number, number], [number, number]] | null }) {
-        const map = useMap()
-        useEffect(() => {
-            if (bounds) {
-                map.flyToBounds(bounds, { animate: true })
-            }
-        }, [bounds, map])
-        return null
+      );
+      if (!res.ok) throw new Error("Save failed");
+      setOrphans((prev) => prev.filter((m) => m.id !== selectedMedia.id));
+      setSnackbar({
+        open: true,
+        message: "Location saved!",
+        severity: "success",
+      });
+      setSelectedMedia(null);
+      setNewPosition(null);
+    } catch (err) {
+      setSnackbar({
+        open: true,
+        message: "Failed to save location",
+        severity: "error",
+      });
+    } finally {
+      setSaving(false);
     }
+  };
 
-    const saveGeo = async () => {
-        if (!selected || !tempPos) return
-        setSaving(true)
-        try {
-            const [latitude, longitude] = tempPos
-            const res = await fetch(`${API}/api/media/${selected.id}/geolocation`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ latitude, longitude }),
-            })
-            if (!res.ok) throw new Error()
-            setOrphans(prev => prev.filter(m => m.id !== selected.id))
-            setSelected(null)
-            setTempPos(null)
-            setConfirmOpen(false)
-        } catch (err) {
-            console.error('Failed to save location', err)
-        } finally {
-            setSaving(false)
-        }
+  const handleCancel = () => {
+    setNewPosition(null);
+  };
+
+  const handleSearchSelect = (value: any) => {
+    if (!value) return;
+    const lat = parseFloat(value.lat);
+    const lon = parseFloat(value.lon);
+    if (value.boundingbox) {
+      const [south, north, west, east] = (value.boundingbox as string[]).map(
+        parseFloat
+      );
+      setMapBounds([
+        [south, west],
+        [north, east],
+      ]);
+    } else {
+      setMapBounds([
+        [lat - 0.1, lon - 0.1],
+        [lat + 0.1, lon + 0.1],
+      ]);
     }
-    const handleMapClick = (pos: [number, number]) => {
-        setTempPos(pos)
-        setConfirmOpen(true)
-    }
+  };
 
-
-
-    return (
-        <Box sx={{ display: 'flex', height: '100vh' }}>
-            <Drawer
-                variant="permanent"
-                anchor="left"
-                open
+  return (
+    <Box
+      sx={{
+        display: "flex",
+        height: "calc(100vh - 64px)",
+        width: "100%",
+        position: "relative",
+      }}
+    >
+      <Paper
+        elevation={4}
+        sx={{
+          position: "absolute",
+          top: 16,
+          left: 16,
+          width: { xs: "calc(100% - 32px)", sm: 320 },
+          height: "calc(100% - 32px)",
+          zIndex: 1000,
+          display: "flex",
+          flexDirection: "column",
+          p: 2,
+          bgcolor: "background.default",
+        }}
+      >
+        <Typography variant="h6" gutterBottom>
+          Un-located Media
+        </Typography>
+        <Autocomplete
+          sx={{ mb: 2 }}
+          options={searchResults}
+          getOptionLabel={(opt) => opt.display_name || ""}
+          onInputChange={(_, v) => setSearchInput(v)}
+          filterOptions={(x) => x}
+          noOptionsText={
+            searchInput.length < 3 ? "Type to search..." : "No results"
+          }
+          loading={searchLoading}
+          onChange={(_, value) => handleSearchSelect(value)}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Search for a location"
+              variant="outlined"
+              size="small"
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {searchLoading ? (
+                      <CircularProgress color="inherit" size={20} />
+                    ) : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
+        />
+        <Box sx={{ overflowY: "auto", flexGrow: 1 }}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(120px, 1fr))",
+              gap: 1,
+            }}
+          >
+            {orphans.map((m) => (
+              <Box
+                key={m.id}
+                component="img"
+                src={`${API}/thumbnails/${m.id}.jpg`}
+                alt=""
+                onClick={() => handleSelectMedia(m)}
                 sx={{
-                    width: 300,
-                    flexShrink: 0,
-                    '& .MuiDrawer-paper': {
-                        width: 300,
-                        boxSizing: 'border-box',
-                        bgcolor: 'background.default',
-                        color: 'text.primary',
-                        p: 2,
-                    },
+                  width: "100%",
+                  height: "auto",
+                  aspectRatio: "1 / 1",
+                  objectFit: "cover",
+                  borderRadius: 2,
+                  cursor: "pointer",
+                  border:
+                    selectedMedia?.id === m.id
+                      ? `3px solid ${theme.palette.primary.main}`
+                      : "3px solid transparent",
+                  transition: "border 0.2s ease",
+                  "&:hover": {
+                    border: `3px solid ${theme.palette.primary.light}`,
+                  },
                 }}
-            >
-                <Typography variant="h6" gutterBottom>
-                    Un-located Media
-                </Typography>
-                <Autocomplete
-                    sx={{
-                        mb: 2,
-                        position: 'sticky',
-                        top: 0,
-                        bgcolor: 'background.paper',
-                        zIndex: 10,
-                    }}
-                    options={searchResults}
-                    getOptionLabel={opt => (opt as any).display_name}
-                    inputValue={searchInput}
-                    onInputChange={(_, v) => setSearchInput(v)}
-                    filterOptions={options => options}
-                    noOptionsText={searchLoading ? 'Loading...' : 'No results'}
-                    loading={searchLoading}
-                    onChange={(_, value) => {
-                        if (value) {
-                            const lat = parseFloat(value.lat)
-                            const lon = parseFloat(value.lon)
-                            setTempPos([lat, lon])
-                            if (value.boundingbox) {
-                                const [south, north, west, east] = (value.boundingbox as string[]).map(parseFloat)
-                                setBounds([[south, west], [north, east]])
-                            }
-                            setSelected(null)
-                        }
-                    }}
-                    renderInput={params => (
-                        <TextField
-                            {...params}
-                            label="Search location"
-                            size="small"
-                            variant="outlined"
-                            slotProps={{
-                                input: {
-                                    ...params.InputProps,
-                                    endAdornment: (
-                                        <>
-                                            {searchLoading && <CircularProgress size={16} />}
-                                            {params.InputProps.endAdornment}
-                                        </>
-                                    ),
-                                }
-                            }}
-
-                        />
-                    )}
-                />
-                <List>
-                    {orphans.map(m => (
-                        <ListItem key={m.id} disablePadding>
-                            <ListItemButton
-                                selected={selected?.id === m.id}
-                                onClick={() => {
-                                    setSelected(m)
-                                    setTempPos(null)
-                                }}
-                            >
-                                <Box
-                                    component="img"
-                                    src={`${API}/thumbnails/${m.id}.jpg`}
-                                    alt=""
-                                    sx={{
-                                        width: '100%',
-                                        maxHeight: "100",
-                                        objectFit: 'contain',
-                                        borderRadius: 1,
-                                    }}
-                                />
-                            </ListItemButton>
-                        </ListItem>
-                    ))}
-                </List>
-            </Drawer>
-            <Box sx={{ flex: 1, position: 'relative' }}>
-                <MapContainer center={[0, 0]} zoom={2} style={{ height: '100%', width: '100%' }}>
-                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                    <ClickHandler selected={selected} setTempPos={handleMapClick} />
-                    <FitBounds bounds={bounds} />
-                    {selected && tempPos && (
-                        <CircleMarker center={tempPos} radius={8} pathOptions={{ color: 'deepskyblue' }} />
-                    )}
-                </MapContainer>
-                <Dialog open={confirmOpen} onClose={() => setConfirmOpen(false)}>
-                    <DialogTitle>Confirm Marker Placement</DialogTitle>
-                    <DialogContent>
-                        <Typography>Place marker at latitude {tempPos?.[0].toFixed(4)}, longitude {tempPos?.[1].toFixed(4)}?</Typography>
-                    </DialogContent>
-                    <DialogActions>
-                        <Button
-                            onClick={() => setConfirmOpen(false)}
-                            sx={{ color: 'text.primary' }}
-                        >
-                            Cancel
-                        </Button>
-                        <Button
-                            variant="contained"
-                            onClick={saveGeo}
-                            sx={{
-                                bgcolor: 'primary.main',
-                                '&:hover': { bgcolor: 'primary.dark' },
-                                ml: 1
-                            }}
-                        >
-                            Confirm
-                        </Button>
-                    </DialogActions>
-                </Dialog>
-            </Box>
+              />
+            ))}
+          </Box>
         </Box>
-    )
+      </Paper>
+
+      <Box sx={{ flex: 1, height: "100%", width: "100%" }}>
+        <MapContainer
+          center={[20, 0]}
+          zoom={2}
+          style={{
+            height: "100%",
+            width: "100%",
+            backgroundColor: theme.palette.background.default,
+          }}
+        >
+          <TileLayer
+            url={
+              theme.palette.mode === "dark"
+                ? "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                : "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            }
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          />
+          <MapClickHandler
+            selected={selectedMedia}
+            onMapClick={handleMapClick}
+          />
+          <FitBounds bounds={mapBounds} />
+
+          {selectedMedia && newPosition && (
+            <Marker position={newPosition}>
+              <Popup>
+                <Box sx={{ textAlign: "center" }}>
+                  <Typography variant="body2" gutterBottom>
+                    Set location for this photo?
+                  </Typography>
+                  <Box
+                    component="img"
+                    src={`${API}/thumbnails/${selectedMedia.id}.jpg`}
+                    sx={{
+                      width: 100,
+                      height: 100,
+                      objectFit: "cover",
+                      borderRadius: 1,
+                      mb: 1,
+                    }}
+                  />
+                  <Box>
+                    <IconButton
+                      size="small"
+                      onClick={handleCancel}
+                      color="error"
+                      title="Cancel"
+                    >
+                      <CancelIcon />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      onClick={saveGeo}
+                      color="primary"
+                      disabled={saving}
+                      title="Confirm"
+                    >
+                      {saving ? (
+                        <CircularProgress size={20} />
+                      ) : (
+                        <CheckCircleIcon />
+                      )}
+                    </IconButton>
+                  </Box>
+                </Box>
+              </Popup>
+            </Marker>
+          )}
+        </MapContainer>
+      </Box>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: "100%" }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
+    </Box>
+  );
 }
