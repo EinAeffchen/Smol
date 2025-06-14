@@ -52,6 +52,13 @@ if READ_ONLY.lower() == "true":
     READ_ONLY = True
 else:
     READ_ONLY = False
+AUTO_SCAN = os.environ.get("AUTO_SCAN", "False")
+if AUTO_SCAN.lower() == "true":
+    AUTO_SCAN = True
+else:
+    AUTO_SCAN = False
+
+AUTO_SCAN_TIMEFRAME = int(os.environ.get("AUTO_SCAN_TIMEFRAME", 15))
 
 # ------- AI Settings -------------
 # Image embedding and text search model

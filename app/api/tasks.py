@@ -1,4 +1,3 @@
-import asyncio
 import json
 import os
 from collections import defaultdict
@@ -9,10 +8,10 @@ import hdbscan
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import func, or_
-from sqlmodel import Session, delete, func, select, text, update
+from sqlalchemy import or_
+from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
-
+from collections.abc import Callable
 from app.api.media import delete_media_record
 from app.config import (
     FACE_MATCH_COSINE_THRESHOLD,
@@ -20,6 +19,8 @@ from app.config import (
     MEDIA_DIR,
     PERSON_MIN_FACE_COUNT,
     READ_ONLY,
+    AUTO_SCAN,
+    ENABLE_PEOPLE,
     VIDEO_SUFFIXES,
 )
 from app.database import engine, get_session, safe_commit
@@ -33,10 +34,50 @@ from app.utils import (
     process_file,
     split_video,
 )
+from typing import Literal
 
 router = APIRouter()
 
 # ─── 1) PROCESS MEDIA ─────────────────────────────────────────────────────────
+
+
+def create_and_run_task(
+    session: Session,
+    background_tasks: BackgroundTasks,
+    task_type: Literal["scan", "process_media", "cluster_persons"],
+    task: Callable,
+):
+    """
+    Creates a scan task in the database and adds the actual scan
+    to the background tasks queue.
+    """
+    if READ_ONLY:
+        raise HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
+
+    # Check if a scan is already running to prevent overlap
+    existing_task = session.exec(
+        select(ProcessingTask).where(
+            ProcessingTask.task_type == task_type,
+            ProcessingTask.status == "running",
+        )
+    ).first()
+
+    if existing_task:
+        logger.info("Scan task is already running. Skipping new scan.")
+        # Return the existing task instead of creating a new one
+        return existing_task
+
+    # Create a new task. The total will be updated later inside the task itself.
+    task = ProcessingTask(task_type=task_type, total=0, processed=0)
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+
+    # Enqueue the background runner
+    background_tasks.add_task(task, task.id)
+    return task
 
 
 @router.post(
@@ -45,45 +86,57 @@ router = APIRouter()
     summary="Detect faces and compute embeddings for all unprocessed media",
 )
 async def start_media_processing(
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
-        return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
-        )
-    # count all media that still need processing
-    total = session.exec(
-        select(func.count())
-        .select_from(Media)
-        .where(
-            or_(
-                Media.faces_extracted.is_(False),
-                Media.ran_auto_tagging.is_(False),
-                Media.embeddings_created.is_(False),
-            )
-        )
-    ).one()
-    logger.error("Processing %s", total)
-    task = ProcessingTask(
-        task_type="process_media",
-        total=int(total),
-    )
-    session.add(task)
-    safe_commit(session)
-    session.refresh(task)
     logger.info("Starting processing!")
-
-    loop = asyncio.get_running_loop()
-    loop.create_task(
-        # asyncio.to_thread is Python 3.9+ shorthand for "run this sync fn in a thread"
-        asyncio.to_thread(_run_media_processing, task.id)
+    return create_and_run_task(
+        session=session,
+        background_tasks=background_tasks,
+        task_type="process_media",
+        task=_run_media_processing,
     )
-    return task
+
+
+def _run_scan_and_chain(task_id: str):
+    _run_scan(task_id)
+
+    logger.info("Scan task finished, starting media processing task.")
+    with Session(engine) as new_session:
+        next_task = ProcessingTask(
+            task_type="process_media", total=0, processed=0
+        )
+        new_session.add(next_task)
+        new_session.commit()
+        new_session.refresh(next_task)
+
+        # Call the next worker in the chain
+        _run_media_processing_and_chain(next_task.id)
+
+
+def _run_media_processing_and_chain(task_id: str):
+    _run_media_processing(task_id)
+
+    logger.info("Media processing finished.")
+    if ENABLE_PEOPLE:
+        logger.info("Starting Person Clustering...")
+        with Session(engine) as new_session:
+            next_task = ProcessingTask(
+                task_type="cluster_persons", total=0, processed=0
+            )
+            new_session.add(next_task)
+            new_session.commit()
+            new_session.refresh(next_task)
+
+            run_person_clustering(next_task.id)  # Call the final worker
+    logger.info("Task chain completed")
 
 
 def _run_media_processing(task_id: str):
     session = Session(engine)
     task = session.get(ProcessingTask, task_id)
+    if not task:
+        raise ValueError("Task with id %s not found!", task_id)
     task.status = "running"
     task.started_at = datetime.now(timezone.utc)
 
@@ -109,8 +162,10 @@ def _run_media_processing(task_id: str):
 
     for media in medias:
         logger.info("Processing: %s", media.filename)
-        # allow cancellation
+        # refresh task status to check for cancellation
         task = session.get(ProcessingTask, task_id)
+        assert task
+
         if task.status == "cancelled":
             break
         full_path = MEDIA_DIR / media.path
@@ -186,16 +241,12 @@ def start_person_clustering(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
-        return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
-        )
-    task = ProcessingTask(task_type="cluster_persons")
-    session.add(task)
-    safe_commit(session)
-    session.refresh(task)
-
-    background_tasks.add_task(run_person_clustering, task.id)
+    task = create_and_run_task(
+        session,
+        background_tasks,
+        "cluster_persons",
+        task=run_person_clustering,
+    )
     return task
 
 
@@ -461,22 +512,12 @@ def start_scan(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
-        return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
-        )
-    # 1) discover all NEW files
-    new_files = []
-    logger.info("Scanning %s...", MEDIA_DIR)
-
-    # 2) make a ProcessingTask
-    task = ProcessingTask(task_type="scan", total=len(new_files), processed=0)
-    session.add(task)
-    safe_commit(session)
-    session.refresh(task)
-
-    # 3) enqueue the runner
-    background_tasks.add_task(_run_scan, task.id)
+    task = create_and_run_task(
+        session=session,
+        background_tasks=background_tasks,
+        task_type="scan",
+        task=_run_scan,
+    )
     return task
 
 
@@ -521,10 +562,12 @@ def reset_clustering(session: Session = Depends(get_session)):
 def _run_scan(task_id: str):
     sess = Session(engine)
     task = sess.get(ProcessingTask, task_id)
+
+    assert task
     task.status = "running"
     sess.add(task)
     sess.commit()
-    files = []
+
     known_files = [row for row in sess.exec(select(Media.path)).all()]
     media_paths = []
     for root, dirs, files in tqdm(os.walk(MEDIA_DIR, topdown=True)):
@@ -537,13 +580,23 @@ def _run_scan(task_id: str):
             rel = str(full.relative_to(MEDIA_DIR))
             if suffix not in VIDEO_SUFFIXES + IMAGE_SUFFIXES:
                 continue
-
             if rel not in known_files:
                 media_paths.append(rel)
+
     logger.info("Found %s new files", len(media_paths))
     task.total = len(media_paths)
     sess.add(task)
     sess.commit()
+
+    if not media_paths:
+        task.status = "completed"
+        task.finished_at = datetime.now(timezone.utc)
+        sess.add(task)
+        sess.commit()
+        sess.close()
+        logger.info("No new files to process. Scan finished.")
+        return
+
     medias = list()
     for i, filepath in tqdm(enumerate(media_paths)):
         # bail if cancelled
@@ -552,6 +605,7 @@ def _run_scan(task_id: str):
         )  # you’ll extract the per‐file logic out of scan_folder
         if i % 100 == 0:
             task = sess.get(ProcessingTask, task_id)
+            assert task
             if task.status == "cancelled":
                 break
             task.processed += len(medias)

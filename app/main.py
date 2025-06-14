@@ -1,25 +1,32 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from fastapi import BackgroundTasks, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from sqlmodel import Session
 
-from app.api import media, person, tasks, face, tags, search
+from app.api import face, media, person, search, tags, tasks
+from app.api.processors import router as proc_router
 from app.config import (
+    DATABASE_URL,
     MEDIA_DIR,
+    READ_ONLY,
+    AUTO_SCAN,
     STATIC_DIR,
     THUMB_DIR,
-    READ_ONLY,
-    PORT,
-    DATABASE_URL,
+    AUTO_SCAN_TIMEFRAME
 )
 from app.database import init_db, init_vec_index
-from app.api.processors import router as proc_router
-from app.processor_registry import load_processors
-from fastapi.middleware.cors import CORSMiddleware
-import os
 from app.logger import logger
+from app.processor_registry import load_processors
+from app.api.tasks import _run_scan_and_chain
+from sqlalchemy import select
+from app.models import ProcessingTask
+from app.database import engine
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -27,6 +34,31 @@ logging.basicConfig(
 )
 logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.INFO)
+
+scheduler = AsyncIOScheduler()
+
+
+def scheduled_scan_job():
+    logger.info("Running scheduled scan and process chain...")
+    with Session(engine) as session:
+        # Check if any part of the chain is already running
+        running_task = session.exec(
+            select(ProcessingTask).where(ProcessingTask.status == "running")
+        ).first()
+        if running_task:
+            logger.info(
+                "A processing task is already running. Skipping scheduled run."
+            )
+            return
+
+        # Create the first task in the chain
+        task = ProcessingTask(task_type="scan", total=0, processed=0)
+        session.add(task)
+        session.commit()
+        session.refresh(task)
+
+        # Start the chain
+        _run_scan_and_chain(task.id)
 
 
 @asynccontextmanager
@@ -37,6 +69,12 @@ async def lifespan(app: FastAPI):
         init_db()
         init_vec_index()
         load_processors()
+    if AUTO_SCAN:
+        scheduler.add_job(
+            scheduled_scan_job, "interval", minutes=AUTO_SCAN_TIMEFRAME, id="scan_job", misfire_grace_time=60
+        )
+        scheduler.start()
+        logger.info(f"Scheduler started. Scan job scheduled every {AUTO_SCAN_TIMEFRAME} minutes.")
     yield
 
 

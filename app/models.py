@@ -119,9 +119,9 @@ class Scene(SQLModel, table=True):
 
 class Person(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
-    name: str | None
-    age: int | None
-    gender: str | None
+    name: str | None = None
+    age: int | None = None
+    gender: str | None = None
     views: int = Field(default=0, index=True)
     faces: list["Face"] = Relationship(
         back_populates="person",
@@ -154,7 +154,7 @@ class ProcessingTask(SQLModel, table=True):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()), primary_key=True
     )
-    task_type: str  # "extract_faces" or "create_embeddings"
+    task_type: str
     status: str = Field(default="pending", index=True)
     total: int = Field(default=0)
     processed: int = Field(default=0)
