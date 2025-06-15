@@ -19,7 +19,6 @@ from app.config import (
     MEDIA_DIR,
     PERSON_MIN_FACE_COUNT,
     READ_ONLY,
-    AUTO_SCAN,
     ENABLE_PEOPLE,
     VIDEO_SUFFIXES,
 )
@@ -573,6 +572,9 @@ def _run_scan(task_id: str):
     for root, dirs, files in tqdm(os.walk(MEDIA_DIR, topdown=True)):
         if ".smol" in dirs:
             dirs.remove(".smol")
+        if ".DAV" in dirs:
+            dirs.remove(".DAV")
+
 
         for fname in files:
             suffix = Path(fname).suffix.lower()
@@ -610,13 +612,6 @@ def _run_scan(task_id: str):
                 break
             task.processed += len(medias)
             sess.add(task)
-            sess.add_all(medias)
-            sess.flush()
-            for media in medias:
-                if not generate_thumbnails(media):
-                    medias.remove(media)
-            safe_commit(sess)
-            medias.clear()
 
     sess.add_all(medias)
     sess.flush()
