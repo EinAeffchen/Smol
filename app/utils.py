@@ -46,8 +46,9 @@ def process_file(filepath: Path) -> Media:
             duration = float(probe["format"].get("duration", 0))
         else:
             duration = None
+        creation_timestamp = filepath.stat().st_dev or filepath.stat().st_mtime
         creation_date = datetime.fromtimestamp(
-            filepath.stat().st_mtime, timezone.utc
+            creation_timestamp, timezone.utc
         )
         vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
         width = int(vs[0]["width"]) if vs else None
