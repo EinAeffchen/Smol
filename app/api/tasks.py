@@ -44,7 +44,7 @@ def create_and_run_task(
     session: Session,
     background_tasks: BackgroundTasks,
     task_type: Literal["scan", "process_media", "cluster_persons"],
-    task: Callable,
+    callable_task: Callable,
 ):
     """
     Creates a scan task in the database and adds the actual scan
@@ -75,7 +75,7 @@ def create_and_run_task(
     session.refresh(task)
 
     # Enqueue the background runner
-    background_tasks.add_task(task, task.id)
+    background_tasks.add_task(callable_task, task.id)
     return task
 
 
@@ -93,7 +93,7 @@ async def start_media_processing(
         session=session,
         background_tasks=background_tasks,
         task_type="process_media",
-        task=_run_media_processing,
+        callable_task=_run_media_processing,
     )
 
 
@@ -244,7 +244,7 @@ def start_person_clustering(
         session,
         background_tasks,
         "cluster_persons",
-        task=run_person_clustering,
+        callable_task=run_person_clustering,
     )
     return task
 
@@ -515,7 +515,7 @@ def start_scan(
         session=session,
         background_tasks=background_tasks,
         task_type="scan",
-        task=_run_scan,
+        callable_task=_run_scan,
     )
     return task
 
@@ -574,7 +574,6 @@ def _run_scan(task_id: str):
             dirs.remove(".smol")
         if ".DAV" in dirs:
             dirs.remove(".DAV")
-
 
         for fname in files:
             suffix = Path(fname).suffix.lower()
