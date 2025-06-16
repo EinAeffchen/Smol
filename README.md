@@ -6,6 +6,10 @@
 
 This project is a powerful, self-contained media management system designed to run as a standalone service. It brings advanced, AI-powered features like face recognition, multi-lingual full-text search, and similarity tracking directly to your personal photo and video collection, all without relying on external databases or APIs.
 
+<a href="https://photos.dummer.dev">Read only Demo</a>
+
+<img src="app/screenshots/Front.PNG">
+
 ---
 
 ## Key Features
@@ -16,21 +20,23 @@ This project is a powerful, self-contained media management system designed to r
     -   Tracks people across your entire media library to find all content they appear in.
 
     <br>
-    <!-- Screenshot for Face Recognition -->
+    <img src="app/screenshots/Person_Tracking.PNG">
+    <img src="app/screenshots/Person_suggestions.PNG">
     <br>
 
 -   **Multi-Lingual Full-Text Search**
     -   Supports multiple languages, allowing you to find media by what they depict, moods, etc
 
     <br>
-    <!-- Screenshot for Full-Text Search -->
+    <img src="app/screenshots/search_en.PNG">
+    <img src="app/screenshots/search_jp.PNG">
     <br>
 
 -   **Content-Based Similarity Search**
     -   Finds visually similar photos and videos, making it easy to discover related content or duplicates.
 
     <br>
-    <!-- Screenshot for Similar Content -->
+    <img src="app/screenshots/similar.PNG">
     <br>
 
 -   **Interactive Map & Geotagging**
@@ -38,7 +44,7 @@ This project is a powerful, self-contained media management system designed to r
     -   Includes a dedicated API endpoint to add or update GPS coordinates for your media.
 
     <br>
-    <!-- Screenshot for Map View -->
+    <img src="app/screenshots/map.PNG">
     <br>
 
 -   **Advanced Media Processing**
