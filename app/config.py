@@ -91,12 +91,15 @@ model, preprocess, _ = open_clip.create_model_and_transforms(
 )
 
 tokenizer = open_clip.get_tokenizer(CLIP_MODEL)
-# TODO
 # face recognition settings
-MAX_FRAMES_PER_VIDEO = 30
-FACE_RECOGNITION_MIN_CONFIDENCE = 0.75
-FACE_MATCH_COSINE_THRESHOLD = 0.55
-FACE_RECOGNITION_MIN_FACE_PIXELS = 60 * 60
-PERSON_MIN_FACE_COUNT = (
-    2  # how many matching faces must a person have for auto creation
+MAX_FRAMES_PER_VIDEO = os.environ.get("MAX_FRAMES_PER_VIDEO", 30)
+FACE_RECOGNITION_MIN_CONFIDENCE = os.environ.get(
+    "FACE_RECOGNITION_MIN_CONFIDENCE", 0.75
 )
+FACE_MATCH_COSINE_THRESHOLD = os.environ.get(
+    "FACE_MATCH_COSINE_THRESHOLD", 0.55
+)
+FACE_RECOGNITION_MIN_FACE_PIXELS = os.environ.get(
+    "FACE_RECOGNITION_MIN_FACE_PIXELS", 60 * 60
+)
+PERSON_MIN_FACE_COUNT = os.environ.get("PERSON_MIN_FACE_COUNT", 2)

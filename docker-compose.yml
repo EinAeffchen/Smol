@@ -1,11 +1,14 @@
 services:
   smol:
-    build: .
-    image: smol
+    image: einaeffchen2/smol
     container_name: smol
     user: "${UID}:${GID}"
     ports:
       - "${PORT}:${PORT}" # Or your preferred host port
+    # to mount multipe volumes for processing, mount them into
+    # various sub-folders of /app/media
+    # e.g. /local/video/folder:/app/media/videos
+    # /local/photo/folder:/app/media/photos
     volumes:
       - ${HOST_MEDIA_DIR}:/app/media
       - ${HOST_DATABASE_DIR}:/app/database

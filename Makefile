@@ -50,3 +50,8 @@ docker-start:
 
 backup:
 	sqlite3 ".backup ${HOST_DATABASE_DIR}/smol.db '${HOST_MEDIA_DIR}/db.backup'"
+
+push:
+	docker build -t smol .
+	docker tag smol einaeffchen2/smol
+	docker push einaeffchen2/smol
