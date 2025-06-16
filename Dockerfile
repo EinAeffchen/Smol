@@ -38,8 +38,6 @@ INSIGHTFACE_HOME=${MEDIA_DIR}/.smol/models
 RUN python3 -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"
 
-
-RUN mkdir -p $MEDIA_DIR && chown appuser:appgroup $MEDIA_DIR
 RUN chown -R appuser:appgroup $VENV_PATH
 
 COPY requirements.txt .
@@ -48,7 +46,6 @@ pip install -r requirements.txt
 
 COPY --chown=appuser:appgroup frontend /app/frontend
 COPY --chown=appuser:appgroup ./app ./app
-RUN mkdir -p ./database && chown appuser:appgroup ./database
 
 COPY --chown=appuser:appgroup entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
