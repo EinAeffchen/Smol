@@ -81,7 +81,7 @@ async def lifespan(app: FastAPI):
 logger.info("MEDIA_DIR: %s", MEDIA_DIR)
 logger.info("DATABASE DIR: %s", DATABASE_URL)
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None)
 origins = [os.environ.get("DOMAIN", ""), "http://localhost:5173"]
 logger.info("ORIGINS: %s", origins)
 app.add_middleware(

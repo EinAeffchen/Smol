@@ -42,7 +42,6 @@ IMAGE_SUFFIXES = [
     ".jpg",
     ".jpeg",
     ".png",
-    ".JPG",
     ".tiff",
     ".gif",
     ".bmp",
@@ -92,6 +91,7 @@ model, preprocess, _ = open_clip.create_model_and_transforms(
 )
 
 tokenizer = open_clip.get_tokenizer(CLIP_MODEL)
+# TODO
 # face recognition settings
 MAX_FRAMES_PER_VIDEO = 30
 FACE_RECOGNITION_MIN_CONFIDENCE = 0.75
