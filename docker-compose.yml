@@ -2,7 +2,7 @@ services:
   smol:
     image: einaeffchen2/smol
     container_name: smol
-    user: "${UID}:${GID}"
+    user: "${PUID}:${PGID}"
     ports:
       - "${PORT}:${PORT}" # Or your preferred host port
     # to mount multipe volumes for processing, mount them into
@@ -11,6 +11,6 @@ services:
     # /local/photo/folder:/app/media/photos
     volumes:
       - ${HOST_MEDIA_DIR}:/app/media
-      - ${HOST_DATABASE_DIR}:/app/database
-    env_file: .env
+      - ${HOST_DATA_DIR}:/app/data
+    env_file: smol.env
     restart: unless-stopped

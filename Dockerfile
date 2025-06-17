@@ -29,11 +29,11 @@ PIP_DISABLE_PIP_VERSION_CHECK=on \
 VENV_PATH=/app/venv \
 PORT=8000 \
 MEDIA_DIR=/app/media \
-DATABASE_DIR=/app/database
+DATA_DIR=/app/data
 
-ENV HF_HOME=${MEDIA_DIR}/.smol/models \
-TORCH_HOME=${MEDIA_DIR}/.smol/models \
-INSIGHTFACE_HOME=${MEDIA_DIR}/.smol/models
+ENV HF_HOME=${DATA_DIR}/.smol/models \
+TORCH_HOME=${DATA_DIR}/.smol/models \
+INSIGHTFACE_HOME=${DATA_DIR}/.smol/models
 
 RUN python3 -m venv $VENV_PATH
 ENV PATH="$VENV_PATH/bin:$PATH"

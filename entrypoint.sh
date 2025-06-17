@@ -2,7 +2,7 @@
 set -e # Exit immediately if a command exits with a non-zero status
 
 # Path where frontend assets should be/will be built
-STATIC_ASSETS_PATH="/app/media/.smol/static"
+STATIC_ASSETS_PATH="/app/data/.smol/static"
 FRONTEND_SRC_DIR="/app/frontend" # Where frontend source is copied in Dockerfile
 FRONTEND_BUILD_OUTPUT_DIR="${FRONTEND_SRC_DIR}/dist" # Common for Vite/React builds
 

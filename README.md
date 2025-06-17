@@ -63,30 +63,24 @@ This project is a powerful, self-contained media management system designed to r
 
 This application can be run directly on your machine or as a Docker container.
 
+> For arm64 support, update the sqlite-vec version in the requirements.txt to 0.1.7a2 and use a locally build Dockerfile
+ 
 ### Without Docker (Directly on Host)
 
 This method is ideal for a dedicated machine or standard development.
 
 1.  **Create Environment File:**
-    Copy the template environment file to create your own local configuration.
-    ```bash
-    cp template.env .env
-    ```
+    Copy the needed parameters from the template.env into the local.env
+    and adjust the `MEDIA_DIR` to your media folder and the `DATA_DIR` to wherever
+    you want to save the database, thumbnails, models etc.
 
-2.  **Configure Media Directory:**
-    Open the newly created `.env` file and set the `MEDIA_DIR` variable to the absolute path of your photo and video library.
-    ```env
-    # Example:
-    MEDIA_DIR=/path/to/your/photos
-    ```
-
-3.  **Build the Application:**
+2.  **Build the Application:**
     This command will install dependencies and compile the necessary components.
     ```bash
     make build
     ```
 
-4.  **Run the Application:**
+3.  **Run the Application:**
     Once the build is complete, start the server.
     ```bash
     make up
@@ -99,21 +93,20 @@ Your media manager should now be running and be accssible at **[http://localhost
 This is the easiest and most reliable way to run the application, as it includes all dependencies in a self-contained environment.
 
 1.  **Create Environment File:**
-    Just like the non-Docker setup, copy the template to create your local `.env` file.
+    Just like the non-Docker setup, copy the template to create your local `smol.env` file.
     ```bash
-    cp template.env .env
+    cp template.env smol.env
     ```
 
 2.  **Configure Host Directories:**
-    Open the `.env` file and make the following adjustments:
-    -   Ensure `MEDIA_DIR` is **commented out**.
+    Open the `smol.env` file and make the following adjustments:
     -   Set `HOST_MEDIA_DIR` to the absolute path of your media library on your host machine.
-    -   Set `HOST_DATABASE_DIR` to a path on your host machine where you want the application's database and index files to be stored persistently.
+    -   Set `HOST_DATA_DIR` to a path on your host machine where you want the application's database and index files to be stored persistently.
 
     ```env
     # Example:
     HOST_MEDIA_DIR=/home/user/Pictures
-    HOST_DATABASE_DIR=/home/user/media_app_data
+    HOST_DATA_DIR=/home/user/media_app_data
     ```
 
 3.  **Start the Container:**

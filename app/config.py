@@ -3,16 +3,21 @@ from pathlib import Path
 import open_clip
 
 MEDIA_DIR = Path(os.getenv("MEDIA_DIR", "/app/media"))
+DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
 
+DATABASE_DIR = DATA_DIR / "database"
 if not MEDIA_DIR.is_dir():
     raise Exception("MEDIA_DIR: %s is not a directory!", MEDIA_DIR)
 
+DATABASE_DIR.mkdir(parents=False, exist_ok=True)
+
 # Internal storage
-SMOL_DIR = MEDIA_DIR / ".smol"
+SMOL_DIR = DATA_DIR / ".smol"
 SMOL_DIR.mkdir(parents=True, exist_ok=True)
 
-DB_FILE = SMOL_DIR / "media_platform.db"
-DATABASE_URL = f"sqlite:///{os.environ.get("DATABASE_DIR", f"{MEDIA_DIR}")}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL"
+DATABASE_URL = (
+    f"sqlite:///{DATABASE_DIR}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL"
+)
 
 THUMB_DIR = SMOL_DIR / "thumbnails"
 THUMB_DIR.mkdir(exist_ok=True)
@@ -92,14 +97,14 @@ model, preprocess, _ = open_clip.create_model_and_transforms(
 
 tokenizer = open_clip.get_tokenizer(CLIP_MODEL)
 # face recognition settings
-MAX_FRAMES_PER_VIDEO = os.environ.get("MAX_FRAMES_PER_VIDEO", 30)
-FACE_RECOGNITION_MIN_CONFIDENCE = os.environ.get(
-    "FACE_RECOGNITION_MIN_CONFIDENCE", 0.75
+MAX_FRAMES_PER_VIDEO = int(os.environ.get("MAX_FRAMES_PER_VIDEO", 30))
+FACE_RECOGNITION_MIN_CONFIDENCE = float(
+    os.environ.get("FACE_RECOGNITION_MIN_CONFIDENCE", 0.75)
 )
-FACE_MATCH_COSINE_THRESHOLD = os.environ.get(
-    "FACE_MATCH_COSINE_THRESHOLD", 0.55
+FACE_MATCH_COSINE_THRESHOLD = float(
+    os.environ.get("FACE_MATCH_COSINE_THRESHOLD", 0.55)
 )
-FACE_RECOGNITION_MIN_FACE_PIXELS = os.environ.get(
-    "FACE_RECOGNITION_MIN_FACE_PIXELS", 60 * 60
+FACE_RECOGNITION_MIN_FACE_PIXELS = int(
+    os.environ.get("FACE_RECOGNITION_MIN_FACE_PIXELS", 60 * 60)
 )
-PERSON_MIN_FACE_COUNT = os.environ.get("PERSON_MIN_FACE_COUNT", 2)
+PERSON_MIN_FACE_COUNT = int(os.environ.get("PERSON_MIN_FACE_COUNT", 2))
