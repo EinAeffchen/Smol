@@ -600,10 +600,13 @@ def _run_scan(task_id: str):
 
     medias = list()
     for i, filepath in tqdm(enumerate(media_paths)):
-        # bail if cancelled
+        media_obj = process_file(MEDIA_DIR / filepath)
+        if not media_obj:
+            continue
+
         medias.append(
-            process_file(MEDIA_DIR / filepath)
-        )  # you’ll extract the per‐file logic out of scan_folder
+            media_obj
+        )
         if i % 100 == 0:
             task = sess.get(ProcessingTask, task_id)
             assert task
