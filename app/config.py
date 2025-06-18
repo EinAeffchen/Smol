@@ -75,6 +75,12 @@ if ENABLE_PEOPLE.lower() == "true":
 else:
     ENABLE_PEOPLE = False
 
+AUTO_CLUSTER = os.environ.get("AUTO_CLUSTER", "False")
+if AUTO_CLUSTER.lower() == "true":
+    AUTO_CLUSTER = True
+else:
+    AUTO_CLUSTER = False
+
 
 CLIP_MODEL = os.environ.get("CLIP_MODEL", "xlm-roberta-large-ViT-H-14")
 SCENE_EMBEDDING_SIZE = 1024
@@ -102,7 +108,7 @@ FACE_RECOGNITION_MIN_CONFIDENCE = float(
     os.environ.get("FACE_RECOGNITION_MIN_CONFIDENCE", 0.75)
 )
 FACE_MATCH_COSINE_THRESHOLD = float(
-    os.environ.get("FACE_MATCH_COSINE_THRESHOLD", 0.55)
+    os.environ.get("FACE_MATCH_COSINE_THRESHOLD", 0.85)
 )
 FACE_RECOGNITION_MIN_FACE_PIXELS = int(
     os.environ.get("FACE_RECOGNITION_MIN_FACE_PIXELS", 60 * 60)

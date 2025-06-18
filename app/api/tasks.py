@@ -20,6 +20,7 @@ from app.config import (
     PERSON_MIN_FACE_COUNT,
     READ_ONLY,
     ENABLE_PEOPLE,
+    AUTO_CLUSTER,
     VIDEO_SUFFIXES,
 )
 from app.database import engine, get_session, safe_commit
@@ -117,7 +118,7 @@ def _run_media_processing_and_chain(task_id: str):
     _run_media_processing(task_id)
 
     logger.info("Media processing finished.")
-    if ENABLE_PEOPLE:
+    if ENABLE_PEOPLE and AUTO_CLUSTER:
         logger.info("Starting Person Clustering...")
         with Session(engine) as new_session:
             next_task = ProcessingTask(
@@ -182,7 +183,9 @@ def _run_media_processing(task_id: str):
                     continue
                 except FileNotFoundError:
                     delete_media_record(media.id, session)
-                    logger.warning("Couldn't find file %s, deleting record", media.path)
+                    logger.warning(
+                        "Couldn't find file %s, deleting record", media.path
+                    )
                     continue
             else:
                 scenes = split_video(media, full_path)
@@ -260,12 +263,13 @@ def _fetch_faces_and_embeddings(session: Session):
 
 
 def _cluster_embeddings(
-    embeddings: np.ndarray, min_cluster_size=5, min_samples=2
+    embeddings: np.ndarray, min_cluster_size=6, min_samples=10
 ):
     clusterer = hdbscan.HDBSCAN(
-        metric="euclidean",
+        metric="cosine",
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
+        cluster_selection_method="leaf"
     )
     labels = clusterer.fit_predict(embeddings)
     return labels
@@ -604,9 +608,7 @@ def _run_scan(task_id: str):
         if not media_obj:
             continue
 
-        medias.append(
-            media_obj
-        )
+        medias.append(media_obj)
         if i % 100 == 0:
             task = sess.get(ProcessingTask, task_id)
             assert task
