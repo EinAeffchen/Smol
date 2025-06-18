@@ -24,7 +24,6 @@ from app.utils import update_person_embedding
 router = APIRouter()
 
 
-
 @router.post(
     "/{face_id}/assign",
     summary="Assign an existing face to a person",
@@ -64,6 +63,7 @@ async def assign_face(
     safe_commit(session)
     return FaceAssignReturn(face_id=face_id, person_id=person_id)
 
+
 @router.post(
     "/{face_id}/detach",
     summary="Detaches an existing face from a person",
@@ -77,7 +77,7 @@ async def detach_face(
         return HTTPException(
             status_code=403, detail="Not allowed in READ_ONLY mode."
         )
-    
+
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
@@ -87,7 +87,9 @@ async def detach_face(
     session.add(face)
 
     old_person_can_be_deleted(session, person_id)
-    update_face_embedding(session, face_id, -1) # -1 detaches face from person in embedding table
+    update_face_embedding(
+        session, face_id, -1
+    )  # -1 detaches face from person in embedding table
     safe_commit(session)
     return FaceAssignReturn(face_id=face_id, person_id=-1)
 
@@ -225,11 +227,11 @@ async def create_person_from_face(
         previous_person_id = previous_person.id
     else:
         previous_person_id = None
-    safe_commit(session)
 
     if previous_person_id and previous_person_id != person_id:
         old_person_can_be_deleted(session, previous_person_id)
     update_face_embedding(session, face_id, person_id)
+    safe_commit(session)
     session.close()
     return return_obj
 
