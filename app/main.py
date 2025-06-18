@@ -18,13 +18,13 @@ from app.config import (
     AUTO_SCAN,
     STATIC_DIR,
     THUMB_DIR,
-    AUTO_SCAN_TIMEFRAME
+    AUTO_SCAN_TIMEFRAME,
 )
 from app.database import init_db, init_vec_index
 from app.logger import logger
 from app.processor_registry import load_processors
 from app.api.tasks import _run_scan_and_chain
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from app.models import ProcessingTask
 from app.database import engine
 
@@ -43,7 +43,12 @@ def scheduled_scan_job():
     with Session(engine) as session:
         # Check if any part of the chain is already running
         running_task = session.exec(
-            select(ProcessingTask).where(ProcessingTask.status == "running")
+            select(ProcessingTask).where(
+                or_(
+                    ProcessingTask.status == "running",
+                    ProcessingTask.status == "pending",
+                )
+            )
         ).first()
         if running_task:
             logger.info(
@@ -71,10 +76,16 @@ async def lifespan(app: FastAPI):
         load_processors()
     if AUTO_SCAN:
         scheduler.add_job(
-            scheduled_scan_job, "interval", minutes=AUTO_SCAN_TIMEFRAME, id="scan_job", misfire_grace_time=60
+            scheduled_scan_job,
+            "interval",
+            minutes=AUTO_SCAN_TIMEFRAME,
+            id="scan_job",
+            misfire_grace_time=60,
         )
         scheduler.start()
-        logger.info(f"Scheduler started. Scan job scheduled every {AUTO_SCAN_TIMEFRAME} minutes.")
+        logger.info(
+            f"Scheduler started. Scan job scheduled every {AUTO_SCAN_TIMEFRAME} minutes."
+        )
     yield
 
 
