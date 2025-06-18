@@ -182,7 +182,7 @@ def _run_media_processing(task_id: str):
                     continue
                 except FileNotFoundError:
                     delete_media_record(media.id, session)
-                    logger.warning("Couldn't find file %s, deleting record")
+                    logger.warning("Couldn't find file %s, deleting record", media.path)
                     continue
             else:
                 scenes = split_video(media, full_path)
