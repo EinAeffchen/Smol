@@ -134,7 +134,7 @@ class FaceProcessor(MediaProcessor):
     def load_model(self):
         self.model = FaceAnalysis(
             "buffalo_l",
-            providers=["CUDAExecutionProvider", "CPUExecutionProvider"],
+            providers=["CPUExecutionProvider"],
         )
         self.model.prepare(ctx_id=0)  # ctx_id=0 for GPU, -1 for CPU
 

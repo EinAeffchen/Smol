@@ -9,7 +9,7 @@ from fastapi import (
     Query,
     status,
 )
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, or_, and_
 from sqlalchemy.orm import defer, selectinload
 from sqlmodel import Session, delete, select, text, update
 
@@ -51,25 +51,39 @@ def list_persons(
     before_count = None
     before_id = None
     if cursor:
-        count, raw_id = cursor.split("_")
-        before_count = int(count)
-        before_id = int(raw_id)
+        try:
+            count, raw_id = cursor.split("_")
+            before_count = int(count)
+            before_id = int(raw_id)
+        except (ValueError, TypeError):
+            raise HTTPException(400, "Invalid cursor format")
+
+    appearance_count_agg = func.count(Face.id).label("appearance_count")
 
     q = (
-        select(Person, func.count(Face.id).label("appearance_count"))
+        select(Person, appearance_count_agg)
         .outerjoin(Person.faces)
         .group_by(Person.id)
         .options(selectinload(Person.profile_face))
     )
+
     if name:
         q = q.where(Person.name.ilike(f"%{name}%"))
-    q = q.limit(limit)
-    q = q.order_by(desc("appearance_count"), Person.id.desc())
-    if before_id:
-        q = q.having(func.count(Face.id) < before_count)
-        q = q.where(Person.id < before_id)
 
-    people = session.exec(q).all()
+    if cursor and before_id is not None and before_count is not None:
+        q = q.having(
+            or_(
+                appearance_count_agg < before_count,
+                and_(
+                    appearance_count_agg == before_count, Person.id < before_id
+                ),
+            )
+        )
+
+    q = q.order_by(desc("appearance_count"), Person.id.desc())
+    q = q.limit(limit)
+
+    people_with_counts = session.exec(q).all()
     items = [
         PersonRead(
             **person.model_dump(),
@@ -80,12 +94,14 @@ def list_persons(
             ),
             appearance_count=appearance_count,
         )
-        for person, appearance_count in people
+        for person, appearance_count in people_with_counts
     ]
+
+    next_cursor = None
     if len(items) == limit:
-        next_cursor = f"{people[-1][1]}_{people[-1][0].id}"
-    else:
-        next_cursor = None
+        last_person, last_count = people_with_counts[-1]
+        next_cursor = f"{last_count}_{last_person.id}"
+        
     return CursorPage(next_cursor=next_cursor, items=items)
 
 

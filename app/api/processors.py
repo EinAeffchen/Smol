@@ -43,7 +43,9 @@ def start_conversion(
     session: Session = Depends(get_session),
 ):
     if READ_ONLY:
-        return HTTPException(status_code=403, detail="Not allowed in READ_ONLY mode.")
+        return HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(404, "Media not found")
@@ -57,11 +59,13 @@ def start_conversion(
     session.add(task)
     session.commit()
     session.refresh(task)
-    background_tasks.add_task(_run_conversion, task.id, str(media.path), media.id)
+    background_tasks.add_task(
+        _run_conversion, task.id, str(media.path), media.id
+    )
     return task
 
 
-def _run_conversion(task_id: str, media_path: str, media_id:int):
+def _run_conversion(task_id: str, media_path: str, media_id: int):
     with Session(engine) as session:
         task: ProcessingTask = session.get(ProcessingTask, task_id)
         # mark running
@@ -128,7 +132,7 @@ def _run_conversion(task_id: str, media_path: str, media_id:int):
         task.finished_at = datetime.now(timezone.utc)
         media = session.get(Media, media_id)
         new_file = full_path.with_stem(original_stem).with_suffix(".mp4")
-        media.path = new_file
+        media.path = str(new_file.relative_to(MEDIA_DIR))
         media.filename = new_file.name
         session.add(media)
         if new_file.exists():
