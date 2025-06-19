@@ -16,7 +16,7 @@ SMOL_DIR = DATA_DIR / ".smol"
 SMOL_DIR.mkdir(parents=True, exist_ok=True)
 
 DATABASE_URL = (
-    f"sqlite:///{DATABASE_DIR}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL"
+    f"sqlite:///{DATABASE_DIR}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
 )
 
 THUMB_DIR = SMOL_DIR / "thumbnails"
