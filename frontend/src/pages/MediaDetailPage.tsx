@@ -122,7 +122,7 @@ export default function MediaDetailPage() {
           setTask(updatedTask);
           if (updatedTask.status === "completed") {
             console.log("Task completed, reloading details...");
-            loadDetail(); // Reload media details
+            loadDetail();
           }
         } else {
           setTask(updatedTask);
