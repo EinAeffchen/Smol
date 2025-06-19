@@ -102,25 +102,38 @@ export default function MediaDetailPage() {
     }
   }, [isMobile, neighbors.nextId, neighbors.previousId]);
   useEffect(() => {
-    if (!task || task.status === "completed") return;
+    if (!task?.id || ["completed", "failed"].includes(task.status)) {
+      return;
+    }
 
-    const interval = setInterval(async () => {
+    const intervalId = setInterval(async () => {
       try {
-        const res = await fetch(`${API}/tasks/${task.id}`);
-        if (!res.ok) throw new Error();
-        const updated = await res.json();
-        setTask(updated);
-        if (updated.status === "completed") {
-          clearInterval(interval);
-          loadDetail(); // refresh media to reflect new file
+        const res = await fetch(`${API}/api/tasks/${task.id}`);
+        if (!res.ok) {
+          // Stop polling on server errors
+          console.warn("Task polling failed with server error.");
+          clearInterval(intervalId);
+          return;
+        }
+        const updatedTask = await res.json();
+
+        if (["completed", "cancelled"].includes(updatedTask.status)) {
+          clearInterval(intervalId);
+          setTask(updatedTask);
+          if (updatedTask.status === "completed") {
+            console.log("Task completed, reloading details...");
+            loadDetail(); // Reload media details
+          }
+        } else {
+          setTask(updatedTask);
         }
       } catch {
         console.warn("Failed to update task progress");
       }
     }, 1500);
 
-    return () => clearInterval(interval);
-  }, [task]);
+    return () => clearInterval(intervalId);
+  }, [task?.id, task?.status, loadDetail]);
 
   const handleNavigate = useCallback(
     (direction: "prev" | "next") => {
@@ -261,6 +274,18 @@ export default function MediaDetailPage() {
         onToggleExif={handleToggleExif} // CHANGED: This now controls the tabs
         onOpenDialog={setDialogType}
       />
+      {task && (task.status === "running" || task.status === "pending") && (
+        <Box mb={2}>
+          <Typography variant="body2" gutterBottom>
+            Converting… {task.processed}%
+          </Typography>
+          <LinearProgress
+            variant="determinate"
+            value={task.processed}
+            sx={{ height: 8, borderRadius: 1 }}
+          />
+        </Box>
+      )}
       <Box
         sx={{
           position: "relative",
@@ -367,19 +392,6 @@ export default function MediaDetailPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
-
-      {task && task.status === "running" && (
-        <Box mb={2}>
-          <Typography variant="body2" gutterBottom>
-            Converting… {task.processed}%
-          </Typography>
-          <LinearProgress
-            variant="determinate"
-            value={task.processed}
-            sx={{ height: 8, borderRadius: 1 }}
-          />
-        </Box>
-      )}
     </Container>
   );
 }
