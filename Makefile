@@ -52,7 +52,9 @@ docker-down:
 backup:
 	sqlite3 ".backup ${HOST_DATA_DIR}/smol.db '${HOST_MEDIA_DIR}/db.backup'"
 
-push:
+build-image:
 	docker build -t smol .
 	docker tag smol einaeffchen2/smol
+
+push: build-image
 	docker push einaeffchen2/smol
