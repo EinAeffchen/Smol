@@ -63,7 +63,7 @@ This project is a powerful, self-contained media management system designed to r
 
 This application can be run directly on your machine or as a Docker container.
 
-> For arm64 support, update the sqlite-vec version in the requirements.txt to 0.1.7a2 and use a locally build Dockerfile
+> For arm64 support, update the sqlite-vec version in the requirements.txt to 0.1.7a2 and build with `docker buildx build --platform linux/arm64 <name>`
  
 ### Without Docker (Directly on Host)
 
