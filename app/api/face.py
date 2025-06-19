@@ -157,8 +157,6 @@ def delete_face(face_id: int, session: Session = Depends(get_session)):
 
 class FaceCreatePerson(BaseModel):
     name: str | None = None
-    age: int | None = None
-    gender: str | None = None
 
 
 @router.get("/orphans", response_model=CursorPage)
@@ -213,8 +211,6 @@ async def create_person_from_face(
     # 1) Create the Person
     person = Person(
         name=body.name,
-        age=body.age,
-        gender=body.gender,
         profile_face_id=face.id,
     )
     session.add(person)

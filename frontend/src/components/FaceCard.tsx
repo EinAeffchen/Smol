@@ -37,7 +37,7 @@ export default function FaceCard({
   isProfile: boolean;
   onSetProfile: (faceId: number) => void;
   onAssign: (personId: number) => void;
-  onCreate: (data: { name?: string; age?: number; gender?: string }) => void;
+  onCreate: (data: { name?: string; }) => void;
   onDelete: () => void;
   onDetach: () => void;
 }) {
@@ -55,7 +55,7 @@ export default function FaceCard({
   const [cands, setCands] = useState<Person[]>([]);
   const [assigningId, setAssigningId] = useState<number | null>(null);
 
-  const [form, setForm] = useState({ name: "", age: "", gender: "" });
+  const [form, setForm] = useState({ name: "" });
 
   useEffect(() => {
     if (mode !== "search" || !query.trim()) {
@@ -217,8 +217,6 @@ export default function FaceCard({
     setCreating(true);
     const payload: any = {};
     if (form.name) payload.name = form.name;
-    if (form.age) payload.age = Number(form.age);
-    if (form.gender) payload.gender = form.gender;
     try {
       await onCreate(payload);
     } finally {

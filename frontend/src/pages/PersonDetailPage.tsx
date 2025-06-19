@@ -13,29 +13,28 @@ import {
 } from "@mui/material";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
-import React, { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { API, READ_ONLY } from "../config";
+import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import { PersonContentTabs } from "../components/PersonContentTabs";
+import { PersonHero } from "../components/PersonHero";
+import { API } from "../config";
 import { useFaceActions } from "../hooks/useFaceActions";
 import { CursorResponse } from "../hooks/useInfinite";
 import {
   FaceRead,
   Person,
-  PersonDetail,
   SimilarPerson,
+  Media,
   SimilarPersonWithDetails,
-  Tag,
 } from "../types";
-import { PersonHero } from "../components/PersonHero";
-import { PersonContentTabs } from "../components/PersonContentTabs";
 
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [detail, setDetail] = useState<PersonDetail | null>(null);
+  const [person, setPerson] = useState<Person | null>(null);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: "", age: "", gender: "" });
+  const [form, setForm] = useState({ name: "" });
   const [saving, setSaving] = useState(false);
 
   // States for the paginated "Detected Faces" section
@@ -43,6 +42,12 @@ export default function PersonDetailPage() {
   const [facesNextCursor, setFacesNextCursor] = useState<string | null>(null);
   const [loadingMoreFaces, setLoadingMoreFaces] = useState<boolean>(false);
   const [hasMoreFaces, setHasMoreFaces] = useState<boolean>(true);
+
+  // States for paginated media appearances
+  const [mediaList, setMediaList] = useState<Media[]>([]);
+  const [mediaNextCursor, setMediaNextCursor] = useState<string | null>(null);
+  const [loadingMoreMedia, setLoadingMoreMedia] = useState<boolean>(false);
+  const [hasMoreMedia, setHasMoreMedia] = useState<boolean>(true);
 
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<{
@@ -77,6 +82,57 @@ export default function PersonDetailPage() {
     setSnackbar({ open: true, message, severity });
   };
 
+  const fetchMediaPage = useCallback(
+    async (
+      personId: string,
+      cursor: string | null,
+      limit: number = 30,
+      signal?: AbortSignal
+    ): Promise<CursorResponse<Media> | null> => {
+      // Assumes new paginated endpoint exists
+      let url = `${API}/api/persons/${personId}/media-appearances?limit=${limit}`;
+      if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+      try {
+        const res = await fetch(url, { ...(signal && { signal }) });
+        if (!res.ok) return null;
+        return await res.json();
+      } catch (error) {
+        return null;
+      }
+    },
+    []
+  );
+
+  const loadInitialMedia = useCallback(
+    async (personId: string, signal?: AbortSignal) => {
+      if (!personId) return;
+      setMediaList([]);
+      setMediaNextCursor(null);
+      setHasMoreMedia(true);
+      const pageData = await fetchMediaPage(personId, null, 30, signal);
+      if (pageData) {
+        setMediaList(pageData.items);
+        setMediaNextCursor(pageData.next_cursor);
+        setHasMoreMedia(!!pageData.next_cursor);
+      }
+    },
+    [fetchMediaPage]
+  );
+
+  const loadMoreMedia = useCallback(async () => {
+    if (!id || !mediaNextCursor || loadingMoreMedia || !hasMoreMedia) return;
+    setLoadingMoreMedia(true);
+    const pageData = await fetchMediaPage(id, mediaNextCursor);
+    if (pageData?.items) {
+      setMediaList((prev) => [...prev, ...pageData.items]);
+      setMediaNextCursor(pageData.next_cursor);
+      setHasMoreMedia(!!pageData.next_cursor);
+    } else {
+      setHasMoreMedia(false);
+    }
+    setLoadingMoreMedia(false);
+  }, [id, mediaNextCursor, loadingMoreMedia, hasMoreMedia, fetchMediaPage]);
+
   const loadDetail = useCallback(
     async (signal?: AbortSignal) => {
       if (!id) return;
@@ -85,12 +141,10 @@ export default function PersonDetailPage() {
           ...(signal && { signal }),
         });
         if (!res.ok) throw new Error("Failed to fetch person details");
-        const personData: PersonDetail = await res.json();
-        setDetail(personData);
+        const person: Person = await res.json();
+        setPerson(person);
         setForm({
-          name: personData.person.name ?? "",
-          age: personData.person.age?.toString() ?? "",
-          gender: personData.person.gender ?? "",
+          name: person.name ?? "",
         });
       } catch (err) {
         if (signal?.aborted !== true) {
@@ -204,7 +258,6 @@ export default function PersonDetailPage() {
   );
 
   useEffect(() => {
-    // Use an AbortController to cancel fetches on cleanup
     const controller = new AbortController();
     const signal = controller.signal;
 
@@ -215,6 +268,7 @@ export default function PersonDetailPage() {
           // Pass the signal to each fetch call
           await Promise.all([
             loadDetail(signal),
+            loadInitialMedia(id, signal),
             loadInitialDetectedFaces(id, signal),
             loadSuggestedFaces(signal),
             loadSimilar(signal),
@@ -232,7 +286,7 @@ export default function PersonDetailPage() {
       initialLoad();
     } else {
       setLoading(false);
-      setDetail(null);
+      setPerson(null);
     }
 
     return () => {
@@ -245,7 +299,6 @@ export default function PersonDetailPage() {
     assignedToPersonId: number
   ) => {
     await assignFace(faceId, assignedToPersonId);
-    // After assigning, refresh suggestions and faces
     if (id) {
       loadInitialDetectedFaces(id);
       loadSuggestedFaces();
@@ -288,8 +341,8 @@ export default function PersonDetailPage() {
   };
 
   async function deletePerson() {
-    if (!id || !detail) return;
-    const res = await fetch(`${API}/api/persons/${detail.person.id}`, {
+    if (!id || !person) return;
+    const res = await fetch(`${API}/api/persons/${person.id}`, {
       method: "DELETE",
     });
     if (res.ok) {
@@ -303,19 +356,13 @@ export default function PersonDetailPage() {
 
   async function onSave(formDataFromChild: {
     name: string;
-    age: string;
-    gender: string;
   }) {
     if (!id) return;
     setSaving(true);
     try {
       const payload: any = {
         name: formDataFromChild.name,
-        gender: formDataFromChild.gender,
       };
-      if (formDataFromChild.age !== "")
-        payload.age = Number(formDataFromChild.age);
-
       const res = await fetch(`${API}/api/persons/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -392,7 +439,7 @@ export default function PersonDetailPage() {
     };
   }, [debouncedSearchTerm, mergeOpen, id]);
 
-  if (loading || !detail) {
+  if (loading || !person) {
     return (
       <Box
         sx={{
@@ -407,7 +454,6 @@ export default function PersonDetailPage() {
     );
   }
 
-  const { person, medias } = detail;
   return (
     <Container maxWidth="xl" sx={{ pt: 2, pb: 6 }}>
       <PersonHero
@@ -421,7 +467,10 @@ export default function PersonDetailPage() {
 
       <PersonContentTabs
         person={person}
-        medias={medias}
+        mediaList={mediaList}
+        hasMoreMedia={hasMoreMedia}
+        loadingMoreMedia={loadingMoreMedia}
+        loadMoreMedia={loadMoreMedia}
         onTagUpdate={loadDetail}
         onTagAdded={loadDetail}
         detectedFacesList={detectedFacesList}
@@ -436,11 +485,9 @@ export default function PersonDetailPage() {
         onLoadSimilar={loadSimilar}
         suggestedFaces={suggestedFaces}
         similarPersons={similarPersons}
-        // Pass the refresh function to the tabs component
         onRefreshSuggestions={loadSuggestedFaces}
       />
 
-      {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={3000}

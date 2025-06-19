@@ -6,7 +6,7 @@ import { API, READ_ONLY } from '../config';
 
 interface PersonHeroProps {
     person: Person;
-    onSave: (formData: { name: string; age: string; gender: string }) => Promise<void>;
+    onSave: (formData: { name: string; }) => Promise<void>;
     onMerge: () => void;
     onDelete: () => void;
     onRefreshSimilar: () => void;
@@ -60,7 +60,7 @@ export function PersonHero({ person, onSave, onMerge, onDelete, onRefreshSimilar
             {!READ_ONLY && (
                 <Paper sx={{ p: { xs: 2, md: 3 }, bgcolor: 'rgba(255,255,255,0.05)', mt: 4, borderRadius: 3 }}>
                     <PersonEditForm
-                        initialPersonData={{ name: person.name ?? '', age: person.age?.toString() ?? '', gender: person.gender ?? '' }}
+                        initialPersonData={{ name: person.name ?? '' }}
                         onSave={onSave}
                         saving={saving}
                     />

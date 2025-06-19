@@ -23,8 +23,6 @@ export interface Tag {
 export interface Person {
   id: number;
   name?: string;
-  age?: number;
-  gender?: string;
   tags: Tag[];
   appearance_count: number;
   profile_face_id?: number;
@@ -34,8 +32,6 @@ export interface Person {
 export interface PersonIndex {
   id: number;
   name?: string;
-  age?: number;
-  gender?: string;
 }
 export interface Face {
   id: number;
@@ -55,11 +51,6 @@ export interface MediaDetail {
   media: Media;
   persons: Person[];
   orphans: Face[];
-}
-export interface PersonDetail {
-  person: Person;
-  faces: Face[];
-  medias: Media[];
 }
 
 export type TaskType = "process_media" | "cluster_persons" | "scan";

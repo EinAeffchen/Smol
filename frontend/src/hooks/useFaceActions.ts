@@ -23,8 +23,6 @@ export function useFaceActions() {
       faceId: number,
       data: {
         name?: string;
-        age?: number;
-        gender?: string;
       }
     ): Promise<Person> => {
       const res = await fetch(`${API}/api/faces/${faceId}/create_person`, {

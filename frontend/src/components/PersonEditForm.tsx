@@ -13,7 +13,7 @@ export function PersonEditForm({
   onSave,
   saving,
 }: {
-  initialPersonData: { name: string; age: string; gender: string };
+  initialPersonData: { name: string; };
   onSave: (form: any) => void;
   saving: boolean;
 }) {

@@ -9,23 +9,27 @@ from fastapi import (
     Query,
     status,
 )
-from sqlalchemy import func, desc, or_, and_
+from datetime import datetime
+from sqlalchemy import func, desc, or_, and_, tuple_
 from sqlalchemy.orm import defer, selectinload
-from sqlmodel import Session, delete, select, text, update
+from sqlmodel import Session, delete, select, text, update, distinct
 
 from app.config import READ_ONLY
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
-from app.models import Face, Person, PersonTagLink
+from app.models import Face, Person, PersonTagLink, Media
 from app.schemas.face import CursorPage as FaceCursorPage
+from app.schemas.media import MediaDetail
 from app.schemas.person import (
     CursorPage,
+    MediaCursorPage,
     FaceRead,
     MergePersonsRequest,
     PersonDetail,
     PersonRead,
     PersonUpdate,
     SimilarPerson,
+    ProfileFace,
 )
 from app.utils import (
     get_person_embedding,
@@ -101,7 +105,7 @@ def list_persons(
     if len(items) == limit:
         last_person, last_count = people_with_counts[-1]
         next_cursor = f"{last_count}_{last_person.id}"
-        
+
     return CursorPage(next_cursor=next_cursor, items=items)
 
 
@@ -180,6 +184,55 @@ def get_faces(
     return FaceCursorPage(next_cursor=next_cursor, items=faces)
 
 
+@router.get("/{person_id}/media-appearances", response_model=MediaCursorPage)
+def get_appearances(
+    person_id: int,
+    limit: int = 30,
+    cursor: str | None = Query(
+        None,
+        description="encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+    ),
+    session: Session = Depends(get_session),
+):
+    person = session.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    # Base query: Select DISTINCT media items for this person
+    q = (
+        select(Media)
+        .distinct()
+        .join(Face, Face.media_id == Media.id)
+        .where(Face.person_id == person_id)
+    )
+
+    if cursor:
+        try:
+            created_at_str, media_id_str = cursor.rsplit("_", 1)
+            cursor_created_at = datetime.fromisoformat(created_at_str)
+            cursor_media_id = int(media_id_str)
+
+            q = q.where(
+                tuple_(Media.created_at, Media.id)
+                < (cursor_created_at, cursor_media_id)
+            )
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=400, detail="Invalid cursor format"
+            )
+
+    q = q.order_by(desc(Media.created_at), desc(Media.id)).limit(limit)
+
+    items = session.exec(q).all()
+
+    next_cursor = None
+    if len(items) == limit:
+        last_item = items[-1]
+        next_cursor = f"{last_item.created_at.isoformat()}_{last_item.id}"
+
+    return MediaCursorPage(next_cursor=next_cursor, items=items)
+
+
 @router.get("/{person_id}", response_model=PersonDetail)
 def get_person(person_id: int, session: Session = Depends(get_session)):
     person = session.get(Person, person_id)
@@ -191,50 +244,28 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         session.add(person)
         session.commit()
         session.refresh(person)
-    q = (
-        select(Face)
-        .where(Face.person_id == person.id)
-        .options(selectinload(Face.media), defer(Face.embedding))
+    stmt = (
+        select(func.count(distinct(Media.id)))
+        .join_from(
+            Person, Face, Face.person_id == Person.id
+        )  # Joins Person to Face
+        .join_from(
+            Face, Media, Face.media_id == Media.id
+        )  # Joins Face to Media
+        .where(Person.id == person_id)
     )
-    faces: list[Face] = session.exec(q).all()
-    seen = set()
-    medias: list[dict[str, Any]] = []
-    for f in faces:
-        m = f.media
-        if not m or m.id in seen:
-            continue
-        seen.add(m.id)
-        medias.append(
-            {
-                "id": m.id,
-                "path": m.path,
-                "filename": m.filename,
-                "duration": m.duration,
-                "width": m.width,
-                "height": m.height,
-                "views": m.views,
-                "inserted_at": m.inserted_at.isoformat(),
-            }
-        )
-        medias = sorted(medias, key=lambda a: a["inserted_at"])
-    dict_person = {
-        "id": person.id,
-        "name": person.name,
-        "age": person.age,
-        "gender": person.gender,
-    }
-    if person.profile_face_id and person.profile_face:
-        dict_person["profile_face_id"] = person.profile_face_id
-        dict_person["profile_face"] = {
-            "id": person.profile_face.id,
-            "thumbnail_path": person.profile_face.thumbnail_path,
-        }
-        dict_person["tags"] = person.tags
-        dict_person["appearance_count"] = len(seen)
-    return {
-        "person": dict_person,
-        "medias": medias,
-    }
+    media_count = session.scalar(stmt)
+    return PersonDetail(
+        id=person.id,
+        name=person.name,
+        profile_face_id=person.profile_face_id,
+        profile_face=ProfileFace(
+            id=person.profile_face.id,
+            thumbnail_path=person.profile_face.thumbnail_path,
+        ),
+        tags=person.tags,
+        appearance_count=media_count,
+    )
 
 
 @router.patch(
