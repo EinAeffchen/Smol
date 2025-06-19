@@ -145,6 +145,7 @@ class Person(SQLModel, table=True):
     tags: list[Tag] = Relationship(
         back_populates="persons", link_model=PersonTagLink
     )
+    appearance_count: int = Field(default=None, index=True)
 
     class Config:
         from_attributes = True

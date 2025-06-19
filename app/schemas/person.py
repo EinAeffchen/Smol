@@ -10,9 +10,9 @@ class ProfileFace(BaseModel):
 
 class PersonDetail(BaseModel):
     id: int
-    name: str
-    profile_face_id: int
-    profile_face: ProfileFace|None
+    name: str | None
+    profile_face_id: int |None
+    profile_face: ProfileFace | None
     tags: list[dict]
     appearance_count: int
 
@@ -25,10 +25,10 @@ class PersonUpdate(BaseModel):
 class PersonMedia(SQLModel):
     id: int
     path: str
-    duration: float|None
+    duration: float | None
     filename: str
-    width: int|None
-    height: int|None
+    width: int | None
+    height: int | None
 
 
 class PersonMinimal(SQLModel):
@@ -69,6 +69,7 @@ class CursorPage(BaseModel):
     items: list[PersonRead]
     next_cursor: str | None
 
+
 class MediaCursorPage(BaseModel):
     items: list[PersonMedia]
-    next_cursor: str|None
+    next_cursor: str | None

@@ -1,5 +1,3 @@
-import json
-
 from fastapi import (
     APIRouter,
     Body,
@@ -38,12 +36,12 @@ async def assign_face(
         return HTTPException(
             status_code=403, detail="Not allowed in READ_ONLY mode."
         )
-    person_id = body.person_id
+    new_person_id = body.person_id
     face = session.get(Face, face_id)
     if not face:
         raise HTTPException(status_code=404, detail="Face not found")
 
-    new_person = session.get(Person, person_id)
+    new_person = session.get(Person, new_person_id)
     if not new_person:
         raise HTTPException(status_code=404, detail="Person not found")
 
@@ -51,17 +49,20 @@ async def assign_face(
     original_person_id: int | None = None
     if original_person_object:
         original_person_id = original_person_object.id
+        original_person_object.appearance_count -= 1
+        session.add(original_person_object)
 
     face.person = new_person
+    new_person.appearance_count += 1
 
+    session.add(new_person)
     session.add(face)
 
     if original_person_id and original_person_id != body.person_id:
         old_person_can_be_deleted(session, original_person_id)
-    update_face_embedding(session, face_id, person_id)
-    person_id = face.person_id
+    update_face_embedding(session, face_id, new_person_id)
     safe_commit(session)
-    return FaceAssignReturn(face_id=face_id, person_id=person_id)
+    return FaceAssignReturn(face_id=face_id, person_id=new_person_id)
 
 
 @router.post(
@@ -83,6 +84,9 @@ async def detach_face(
         raise HTTPException(status_code=404, detail="Face not found")
 
     person_id = face.person_id
+    person = face.person
+    person.appearance_count-=1
+    session.add(person)
     face.person_id = None
     session.add(face)
 
@@ -142,8 +146,10 @@ def delete_face(face_id: int, session: Session = Depends(get_session)):
         thumb.unlink()
 
     face_id = face.id
-    if face.person:
+    if person:=face.person:
         person_id = face.person.id
+        person.appearance_count -=1
+        session.add(person)
     else:
         person_id = None
     session.delete(face)
@@ -212,6 +218,7 @@ async def create_person_from_face(
     person = Person(
         name=body.name,
         profile_face_id=face.id,
+        appearance_count=1
     )
     session.add(person)
     session.flush()

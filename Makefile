@@ -58,3 +58,10 @@ build-image:
 
 push: build-image
 	docker push einaeffchen2/smol
+
+alembic-generate:
+	echo ${DATA_DIR}
+	alembic revision --autogenerate -m "RENAME_ME"
+
+alembic-upgrade:
+	alembic upgrade head

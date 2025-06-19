@@ -270,27 +270,18 @@ def get_neighbors(
 def get_media(media_id: int, session: Session = Depends(get_session)):
     profile_face_alias = aliased(Face)
 
-    appearance_subq = (
-        select(Face.person_id, func.count(Face.id).label("appearance_count"))
-        .where(Face.person_id != None)
-        .group_by(Face.person_id)
-        .subquery()
-    )
     statement = (
         select(
             Media,
             Person,
-            appearance_subq.c.appearance_count,
         )
         .outerjoin(Media.faces)
         .outerjoin(Face.person)
         .outerjoin(profile_face_alias, Person.profile_face)
-        .outerjoin(appearance_subq, appearance_subq.c.person_id == Person.id)
         .where(Media.id == media_id)
-        .group_by(Media.id, Person.id, appearance_subq.c.appearance_count)
+        .group_by(Person.id)
         .options(selectinload(Media.tags))
     )
-
     rows = session.exec(statement).all()
     if not rows:
         raise HTTPException(404, "Media not found")
@@ -299,7 +290,7 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
     seen = set()
     persons: list[PersonRead] = []
     orphans: list[Face] = []
-    for _, person, appearance_count in rows:
+    for _, person in rows:
         if person and person.id not in seen:
             seen.add(person.id)
             persons.append(
@@ -310,14 +301,13 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
                         if person.profile_face
                         else None
                     ),
-                    appearance_count=appearance_count,
                 )
             )
     orphans = [f for f in media.faces if not f.person]
     # 2) take tags straight off media.tags
     return MediaDetail(media=media, persons=persons, orphans=orphans)
 
-
+#TODO ADD handling of appearancecount at all relevant endpoints and tasks
 @router.get(
     "/{media_id}/scenes.vtt",
     response_class=PlainTextResponse,

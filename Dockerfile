@@ -15,14 +15,6 @@ build-essential \
 && rm -rf /var/lib/apt/lists/* \
 && apt-get clean
 
-# Set environment variables
-# PYTHONUNBUFFERED: Prevents Python output from being buffered, making logs appear in real-time.
-# PIP_NO_CACHE_DIR: Disables pip's cache, reducing image size.
-# PIP_DISABLE_PIP_VERSION_CHECK: Speeds up pip installs slightly.
-# VENV_PATH: Defines the path for the virtual environment.
-# PORT: The port your application will run on (uvicorn will use this).
-# MEDIA_DIR: Application directory for media files (runtime data, should be a volume).
-# STATIC_DIR: Directory where static frontend assets will be served from.
 ENV PYTHONUNBUFFERED=1 \
 PIP_NO_CACHE_DIR=true \
 PIP_DISABLE_PIP_VERSION_CHECK=on \
@@ -31,6 +23,7 @@ PORT=8000 \
 MEDIA_DIR=/app/media \
 DATA_DIR=/app/data
 
+ENV SQLITE_VEC_PATH=${VENV_PATH}/lib/python3.12/site-packages/sqlite_vec/vec0
 ENV HF_HOME=${DATA_DIR}/.smol/models \
 TORCH_HOME=${DATA_DIR}/.smol/models \
 INSIGHTFACE_HOME=${DATA_DIR}/.smol/models
@@ -50,6 +43,8 @@ COPY --chown=appuser:appgroup ./app ./app
 COPY --chown=appuser:appgroup entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
+COPY --chown=appuser:appuser alembic /app/alembic
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 # Create a non-root user and switch to it for better security
 
 EXPOSE $PORT

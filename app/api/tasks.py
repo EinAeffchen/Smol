@@ -32,7 +32,6 @@ from app.processor_registry import processors
 from app.utils import (
     complete_task,
     generate_thumbnails,
-    get_person_embedding,
     process_file,
     split_video,
 )
@@ -335,7 +334,7 @@ def _assign_faces_to_clusters(
             for face_id in face_ids:
                 session.merge(Face(id=face_id, person_id=new_person.id))
                 # logger.info("Added face %s to person: %s", face_id, new_person.id)
-                
+
             for face_id in face_ids:
                 sql_face_emb = text(
                     "UPDATE face_embeddings SET person_id = :p_id WHERE face_id= :f_id"
@@ -466,7 +465,9 @@ def run_person_clustering(task_id: str):
         if not unassigned_face_ids:
             with Session(engine) as session:
                 task = session.get(ProcessingTask, task_id)
-                logger.info("Finished clustering faces, no orphans left to cluster.")
+                logger.info(
+                    "Finished clustering faces, no orphans left to cluster."
+                )
                 complete_task(session, task)
             return
         new_faces_ids, new_embs = _filter_embeddings_by_id(
@@ -478,7 +479,9 @@ def run_person_clustering(task_id: str):
     if len(new_embs) <= 6:
         with Session(engine) as session:
             task = session.get(ProcessingTask, task_id)
-            logger.info("Not enough embeddings to create new persons, finishing.")
+            logger.info(
+                "Not enough embeddings to create new persons, finishing."
+            )
             complete_task(session, task)
         return
 

@@ -38,7 +38,6 @@ function TabPanel(props: TabPanelProps) {
 interface PersonContentTabsProps {
   onLoadSimilar: () => void;
   person: Person;
-  loadMoreMedia: () => void;
   detectedFacesList: FaceRead[];
   hasMoreFaces: boolean;
   loadingMoreFaces: boolean;
@@ -109,7 +108,7 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
           <Button
             variant="outlined"
             size="small"
-            onClick={props.onRefreshSuggestions}
+            onClick={() => props.onRefreshSuggestions()}
           >
             Refresh Suggestions
           </Button>

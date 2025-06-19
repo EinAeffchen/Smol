@@ -104,9 +104,22 @@ def generate_thumbnails(media: Media):
 
 
 def get_person_embedding(
-    session: Session, person_id: int, face_embeddings: list | None = None
-) -> np.ndarray:
+    session: Session,
+    person_id: int,
+    face_embeddings: list | None = None,
+    new: bool = False,
+) -> str | bytes | None:
     if not face_embeddings:
+        if not new:
+            person_embedding = session.exec(
+                text(
+                    "SELECT embedding FROM person_embeddings WHERE person_id=:p_id"
+                ).bindparams(p_id=person_id)
+            ).first()
+            if person_embedding:
+                # returns bytes
+                return person_embedding[0]
+
         face_embeddings = session.exec(
             select(Face.embedding).where(
                 Face.person_id == person_id, Face.embedding != None
@@ -122,12 +135,12 @@ def get_person_embedding(
     )
     centroid = embeddings_array.mean(axis=0)
     centroid /= np.linalg.norm(centroid)
-    return centroid
+    return json.dumps(centroid.tolist())
 
 
 def update_person_embedding(session: Session, person_id: int):
     # Retrieve all embeddings associated with this person
-    centroid = get_person_embedding(session, person_id)
+    centroid = get_person_embedding(session, person_id, new=True)
 
     # Update the embedding in your embeddings table
     sql = text(
@@ -135,7 +148,7 @@ def update_person_embedding(session: Session, person_id: int):
         INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
         VALUES (:p_id, :emb)
     """
-    ).bindparams(p_id=person_id, emb=json.dumps(centroid.tolist()))
+    ).bindparams(p_id=person_id, emb=centroid)
     session.exec(sql)
     safe_commit(session)
 
@@ -313,7 +326,9 @@ def refresh_similarities_for_person(person_id: int) -> None:
             emb = get_person_embedding(session, oid)
             if emb is None:
                 continue
-            sim = cosine_similarity(target, emb)
+            sim = cosine_similarity(
+                np.ndarray(json.loads(target)), np.ndarray(json.loads(emb))
+            )
             # upsert into PersonSimilarity
             existing = session.get(PersonSimilarity, (person_id, oid))
             if existing:

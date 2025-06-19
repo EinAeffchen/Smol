@@ -354,9 +354,7 @@ export default function PersonDetailPage() {
     setConfirmDelete(false);
   }
 
-  async function onSave(formDataFromChild: {
-    name: string;
-  }) {
+  async function onSave(formDataFromChild: { name: string }) {
     if (!id) return;
     setSaving(true);
     try {
@@ -467,10 +465,6 @@ export default function PersonDetailPage() {
 
       <PersonContentTabs
         person={person}
-        mediaList={mediaList}
-        hasMoreMedia={hasMoreMedia}
-        loadingMoreMedia={loadingMoreMedia}
-        loadMoreMedia={loadMoreMedia}
         onTagUpdate={loadDetail}
         onTagAdded={loadDetail}
         detectedFacesList={detectedFacesList}

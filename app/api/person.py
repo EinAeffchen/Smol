@@ -1,6 +1,7 @@
 import json
-from typing import Any
+from datetime import datetime
 
+import numpy as np
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -9,27 +10,25 @@ from fastapi import (
     Query,
     status,
 )
-from datetime import datetime
-from sqlalchemy import func, desc, or_, and_, tuple_
-from sqlalchemy.orm import defer, selectinload
-from sqlmodel import Session, delete, select, text, update, distinct
+from sqlalchemy import and_, desc, func, or_, tuple_
+from sqlalchemy.orm import defer
+from sqlmodel import Session, delete, distinct, select, text, update
 
 from app.config import READ_ONLY
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
-from app.models import Face, Person, PersonTagLink, Media
+from app.models import Face, Media, Person, PersonTagLink
 from app.schemas.face import CursorPage as FaceCursorPage
-from app.schemas.media import MediaDetail
 from app.schemas.person import (
     CursorPage,
-    MediaCursorPage,
     FaceRead,
+    MediaCursorPage,
     MergePersonsRequest,
     PersonDetail,
     PersonRead,
     PersonUpdate,
-    SimilarPerson,
     ProfileFace,
+    SimilarPerson,
 )
 from app.utils import (
     get_person_embedding,
@@ -62,31 +61,25 @@ def list_persons(
         except (ValueError, TypeError):
             raise HTTPException(400, "Invalid cursor format")
 
-    appearance_count_agg = func.count(Face.id).label("appearance_count")
-
-    q = (
-        select(Person, appearance_count_agg)
-        .outerjoin(Person.faces)
-        .group_by(Person.id)
-        .options(selectinload(Person.profile_face))
-    )
+    q = select(Person)
 
     if name:
         q = q.where(Person.name.ilike(f"%{name}%"))
 
     if cursor and before_id is not None and before_count is not None:
-        q = q.having(
+        q = q.where(
             or_(
-                appearance_count_agg < before_count,
+                Person.appearance_count < before_count,
                 and_(
-                    appearance_count_agg == before_count, Person.id < before_id
+                    Person.appearance_count == before_count,
+                    Person.id < before_id,
                 ),
             )
         )
 
-    q = q.order_by(desc("appearance_count"), Person.id.desc())
+    q = q.order_by(Person.appearance_count.desc(), Person.id.desc())
     q = q.limit(limit)
-
+    logger.info(q)
     people_with_counts = session.exec(q).all()
     items = [
         PersonRead(
@@ -96,15 +89,14 @@ def list_persons(
                 if person.profile_face
                 else None
             ),
-            appearance_count=appearance_count,
         )
-        for person, appearance_count in people_with_counts
+        for person in people_with_counts
     ]
 
     next_cursor = None
     if len(items) == limit:
-        last_person, last_count = people_with_counts[-1]
-        next_cursor = f"{last_count}_{last_person.id}"
+        last_person = people_with_counts[-1]
+        next_cursor = f"{last_person.appearance_count}_{last_person.id}"
 
     return CursorPage(next_cursor=next_cursor, items=items)
 
@@ -131,7 +123,7 @@ def suggest_faces(
                     and distance < 1.3
              ORDER BY distance
             """
-    ).bindparams(vec=json.dumps(target.tolist()), k=limit)
+    ).bindparams(vec=target, k=limit)
     rows = session.exec(sql).all()
     face_ids = [r[0] for r in rows]
 
@@ -147,7 +139,7 @@ def suggest_faces(
         )
         for f in ordered
     ]
-
+#TODO write function to properly calulcate appearance count on face changes
 
 @router.get("/{person_id}/faces", response_model=FaceCursorPage)
 def get_faces(
@@ -334,7 +326,9 @@ def merge_persons(
         )
 
     source = session.get(Person, sid)
+    source_media_count = source.appearance_count
     target = session.get(Person, tid)
+    target.appearance_count += source_media_count
     if not source or not target:
         raise HTTPException(
             status_code=404, detail="Source or target person not found"
@@ -460,11 +454,7 @@ def get_similarities(
         """
     ).bindparams(
         p_id=person_id,
-        vec=(
-            json.dumps(vec.tolist())
-            if hasattr(vec, "tolist")
-            else json.dumps(vec)
-        ),  # Handle numpy array or list
+        vec=vec,  # Handle numpy array or list
         k_param=k_val,  # Parameter for the 'pe.k = :k_param' condition
         limit_val=k_val,  # Parameter for the LIMIT clause
     )
@@ -492,7 +482,6 @@ def get_similarities(
 )
 def refresh_similarities(
     person_id: int,
-    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
     if READ_ONLY:

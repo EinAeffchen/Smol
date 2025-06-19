@@ -49,6 +49,8 @@ cp -a "${FRONTEND_BUILD_OUTPUT_DIR}/." "${STATIC_ASSETS_PATH}/"
 echo "Frontend build complete."
 cd "/app" # Return to WORKDIR
 
+alembic upgrade head
+
 
 echo "--- Entrypoint: Starting Uvicorn ---"
 # Ensure venv is activated for the uvicorn command
