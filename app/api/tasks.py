@@ -1,8 +1,10 @@
 import json
 import os
 from collections import defaultdict
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import hdbscan
 import numpy as np
@@ -11,16 +13,16 @@ from PIL import Image, UnidentifiedImageError
 from sqlalchemy import or_
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
-from collections.abc import Callable
+
 from app.api.media import delete_media_record
 from app.config import (
+    AUTO_CLUSTER,
+    ENABLE_PEOPLE,
     FACE_MATCH_COSINE_THRESHOLD,
     IMAGE_SUFFIXES,
     MEDIA_DIR,
     PERSON_MIN_FACE_COUNT,
     READ_ONLY,
-    ENABLE_PEOPLE,
-    AUTO_CLUSTER,
     VIDEO_SUFFIXES,
 )
 from app.database import engine, get_session, safe_commit
@@ -34,7 +36,6 @@ from app.utils import (
     process_file,
     split_video,
 )
-from typing import Literal
 
 router = APIRouter()
 
@@ -252,152 +253,169 @@ def start_person_clustering(
     return task
 
 
-def _fetch_faces_and_embeddings(session: Session):
-    faces = session.exec(
-        select(Face).where(Face.embedding != None, Face.person_id == None)
+def _fetch_faces_and_embeddings(
+    session: Session,
+) -> tuple[list[int], np.ndarray]:
+    results = session.exec(
+        select(Face.id, Face.embedding).where(
+            Face.embedding != None, Face.person_id == None
+        )
     ).all()
-    embeddings = np.array(
-        [np.array(face.embedding, dtype=np.float32) for face in faces]
-    )
-    return faces, embeddings
+
+    if not results:
+        return [], np.array([])
+
+    face_ids, embeddings_list = zip(*results)
+
+    embeddings = np.array(embeddings_list, dtype=np.float32)
+
+    return list(face_ids), embeddings
 
 
 def _cluster_embeddings(
     embeddings: np.ndarray, min_cluster_size=6, min_samples=10
 ):
+    embeddings_64 = embeddings.astype(np.float64)
     clusterer = hdbscan.HDBSCAN(
         metric="cosine",
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
-        cluster_selection_method="leaf"
+        cluster_selection_method="eom",
+        cluster_selection_epsilon=0.15,
+        algorithm="generic",
     )
-    labels = clusterer.fit_predict(embeddings)
+    labels = clusterer.fit_predict(embeddings_64)
     return labels
 
 
 def _group_faces_by_cluster(
-    labels: np.ndarray, faces: list[Face]
-) -> dict[int, list[Face]]:
-    clusters = defaultdict(list)
-    for label, face in zip(labels, faces):
-        if label != -1:  # exclude noise
-            clusters[label].append(face)
+    labels: np.ndarray, new_face_ids: list[int], new_embs
+) -> dict[int, tuple[list[int], list[np.ndarray]]]:
+    clusters = defaultdict(lambda: ([], []))
+    for label, face, emb in zip(labels, new_face_ids, new_embs):
+        if label != -1:
+            clusters[label][0].append(face)
+            clusters[label][1].append(emb)
     return clusters
 
 
+def _filter_embeddings_by_id(
+    all_face_ids: list[int],
+    all_embeddings: np.ndarray,
+    unassigned_ids: list[int],
+) -> tuple[list[int], np.ndarray]:
+    id_to_emb_map = dict(zip(all_face_ids, all_embeddings))
+    unassigned_embs = np.array([id_to_emb_map[id] for id in unassigned_ids])
+    return unassigned_ids, unassigned_embs
+
+
 def _assign_faces_to_clusters(
-    clusters: dict[int, list[Face]], session: Session, task: ProcessingTask
+    clusters: dict[int, tuple[list[int], list[np.ndarray]]], task_id: str
 ):
-    for faces in tqdm(clusters.values()):
-        if len(faces) < PERSON_MIN_FACE_COUNT:
+    for face_ids, embeddings in tqdm(clusters.values()):
+        if len(face_ids) < PERSON_MIN_FACE_COUNT:
             continue
 
-        new_person = Person(name=None)
-        session.add(new_person)
-        session.flush()  # get new_person.id
+        embeddings_arr = np.array(embeddings)
+        centroid = embeddings_arr.mean(axis=0)
+        similarities = embeddings_arr @ centroid
 
-        embeddings = [face.embedding for face in faces]
-        centroid = get_person_embedding(
-            session=session,
-            person_id=new_person.id,
-            face_embeddings=embeddings,
-        )
-        embeddings = np.stack([np.array(emb) for emb in embeddings])
+        best_face_id = face_ids[np.argmax(similarities)]
 
-        similarities = embeddings @ centroid
-        best_face = faces[np.argmax(similarities)]
-        new_person.profile_face_id = best_face.id
+        # Each cluster gets its own self-contained transaction
+        with Session(engine) as session:
+            task = session.get(ProcessingTask, task_id)
+            if task.status == "cancelled":
+                break
 
-        for face in faces:
-            face.person_id = new_person.id
-            session.add(face)
+            new_person = Person(name=None, profile_face_id=best_face_id)
+            session.add(new_person)
+            session.flush()  # Get new_person.id
 
-            # sync embeddings
-            sql = text(
+            for face_id in face_ids:
+                session.merge(Face(id=face_id, person_id=new_person.id))
+                # logger.info("Added face %s to person: %s", face_id, new_person.id)
+                
+            for face_id in face_ids:
+                sql_face_emb = text(
+                    "UPDATE face_embeddings SET person_id = :p_id WHERE face_id= :f_id"
+                ).bindparams(p_id=new_person.id, f_id=face_id)
+                session.exec(sql_face_emb)
+
+            sql_person_emb = text(
                 """
-                UPDATE face_embeddings SET person_id = :p_id
-                WHERE face_id = :f_id
-            """
-            ).bindparams(p_id=new_person.id, f_id=face.id)
-            session.exec(sql)
+                INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
+                VALUES (:p_id, :emb)
+                """
+            ).bindparams(p_id=new_person.id, emb=json.dumps(centroid.tolist()))
+            session.exec(sql_person_emb)
 
-        person_embedding = centroid  # Already computed above
-        sql = text(
-            """
-            INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
-            VALUES (:p_id, :emb)
-        """
-        ).bindparams(
-            p_id=new_person.id, emb=json.dumps(person_embedding.tolist())
-        )
-        session.exec(sql)
-
-        task.processed += len(faces)
-
-        session.add(new_person)
-        session.add(task)
-
-    safe_commit(session)
+            task.processed += len(face_ids)
+            session.add(task)
+            safe_commit(session)
 
 
 def assign_to_existing_persons(
-    session: Session,
-    faces: list[Face],
-    embs: np.ndarray,
-    task: ProcessingTask,
-    threshold: float,
-) -> list[Face]:
+    face_ids: list[int], embs: np.ndarray, task_id: str, threshold: float
+) -> list[int]:
     """
     For each face, do a vec0 nearest‐neighbor lookup in person_embeddings.
     If sim >= threshold, assign face.person_id and update face_embeddings.
     Otherwise keep it in 'unassigned' for later clustering.
     """
-    unassigned: list[Face] = []
+    unassigned: list[int] = []
 
-    for face, emb in zip(faces, embs):
-        # turn your float32 vector into JSON (or raw bytes,
-        # whichever your table expects)
-        vec_param = json.dumps(emb.tolist())
-        sql = text(
-            """
-                SELECT person_id, distance
-                  FROM person_embeddings
-                 WHERE embedding MATCH :vec
-                 and K = 1
-                 ORDER BY distance
-            """
-        ).bindparams(vec=vec_param)
-        row = session.exec(sql).first()
+    with Session(engine) as session:
 
-        if row and row[1] <= threshold:
-            # nearest person is good enough
-            person_id = row[0]
-            face.person_id = person_id
-            session.add(face)
+        for face_id, emb in tqdm(zip(face_ids, embs), total=len(face_ids)):
+            face = session.get(Face, face_id)
+            task = session.get(ProcessingTask, task_id)
+            assert task
 
+            if task.status == "cancelled":
+                break
+            # turn your float32 vector into JSON (or raw bytes,
+            # whichever your table expects)
+            vec_param = json.dumps(emb.tolist())
             sql = text(
                 """
-                   UPDATE face_embeddings 
-                      SET person_id = :p_id
-                    WHERE face_id   = :f_id
+                    SELECT person_id, distance
+                    FROM person_embeddings
+                    WHERE embedding MATCH :vec
+                    and K = 1
+                    ORDER BY distance
                 """
-            ).bindparams(p_id=person_id, f_id=face.id)
-            # sync your face_embeddings table
-            session.exec(sql)
-        else:
-            # not matched → keep for later clustering
-            unassigned.append(face)
+            ).bindparams(vec=vec_param)
+            row = session.exec(sql).first()
 
-        task.processed += 1
+            if row and row[1] <= threshold:
+                # nearest person is good enough
+                person_id = row[0]
+                face.person_id = person_id
+                session.add(face)
 
-        # commit periodically to avoid huge transactions
-        if task.processed % 100 == 0:
-            session.add(task)
-            session.commit()
+                sql = text(
+                    """
+                    UPDATE face_embeddings 
+                        SET person_id = :p_id
+                        WHERE face_id   = :f_id
+                    """
+                ).bindparams(p_id=person_id, f_id=face.id)
+                # sync your face_embeddings table
+                session.exec(sql)
+            else:
+                # not matched → keep for later clustering
+                unassigned.append(face_id)
 
-    # final commit of this pass
-    session.add(task)
-    session.commit()
+            task.processed += 1
+
+            # commit periodically to avoid huge transactions
+            if task.processed % 100 == 0:
+                session.add(task)
+                safe_commit(session)
+
+        session.add(task)
+        safe_commit(session)
     return unassigned
 
 
@@ -411,44 +429,68 @@ def unzip_faces_embeddings(faces: list[Face]):
 
 def run_person_clustering(task_id: str):
     with Session(engine) as session:
-        task: ProcessingTask = session.get(ProcessingTask, task_id)
+        task = session.get(ProcessingTask, task_id)
+        if not task:
+            logger.error("Task %s not found.", task_id)
+            return
+
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
 
-        faces, embeddings = _fetch_faces_and_embeddings(session)
-        task.total = len(faces)
+        faces_ids, embeddings = _fetch_faces_and_embeddings(session)
+        task.total = len(faces_ids)
         session.add(task)
         safe_commit(session)
 
-        if not faces:
+    if not faces_ids:
+        with Session(engine) as session:
+            task = session.get(ProcessingTask, task_id)
+            logger.warning("No faces to cluster, finishing clustering!")
             complete_task(session, task)
-            return
+        return
 
-        # Fetch embeddings once
-        person = session.exec(select(Person).limit(1)).first()
-        if person:
-            unassigned_faces = assign_to_existing_persons(
-                session,
-                faces,
-                embeddings,
-                task,
-                threshold=FACE_MATCH_COSINE_THRESHOLD,
-            )
-            if not unassigned_faces:
+    # Fetch embeddings once
+    person_exists = False
+    with Session(engine) as session:  # Quick, read-only check
+        person_exists = (
+            session.exec(select(Person).limit(1)).first() is not None
+        )
+
+    if person_exists:
+        unassigned_face_ids = assign_to_existing_persons(
+            faces_ids,
+            embeddings,
+            task_id,
+            threshold=FACE_MATCH_COSINE_THRESHOLD,
+        )
+        if not unassigned_face_ids:
+            with Session(engine) as session:
+                task = session.get(ProcessingTask, task_id)
+                logger.info("Finished clustering faces, no orphans left to cluster.")
                 complete_task(session, task)
-                return
-            new_faces, new_embs = unzip_faces_embeddings(unassigned_faces)
-        else:
-            new_faces = faces
-            new_embs = embeddings
+            return
+        new_faces_ids, new_embs = _filter_embeddings_by_id(
+            faces_ids, embeddings, unassigned_face_ids
+        )
+    else:
+        new_faces_ids, new_embs = faces_ids, embeddings
 
-        if len(new_embs) > 5:
-            labels = _cluster_embeddings(new_embs)
+    if len(new_embs) <= 6:
+        with Session(engine) as session:
+            task = session.get(ProcessingTask, task_id)
+            logger.info("Not enough embeddings to create new persons, finishing.")
+            complete_task(session, task)
+        return
 
-            clusters = _group_faces_by_cluster(labels, new_faces)
+    labels = _cluster_embeddings(new_embs)
 
-            _assign_faces_to_clusters(clusters, session, task)
+    clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
 
+    _assign_faces_to_clusters(clusters, task_id)
+
+    with Session(engine) as session:
+        task = session.get(ProcessingTask, task_id)
+        logger.info("FINISHED CLUSTERING!")
         complete_task(session, task)
 
 
