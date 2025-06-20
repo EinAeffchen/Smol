@@ -253,11 +253,14 @@ def start_person_clustering(
 
 
 def _fetch_faces_and_embeddings(
-    session: Session, limit: int = 10000
+    session: Session, limit: int = 10000, last_id: int = 0
 ) -> tuple[list[int], np.ndarray]:
     results = session.exec(
         select(Face.id, Face.embedding)
-        .where(Face.embedding != None, Face.person_id == None)
+        .where(
+            Face.embedding != None, Face.person_id == None, Face.id > last_id
+        )
+        .order_by(Face.id.asc())
         .limit(limit)
     ).all()
 
@@ -331,7 +334,11 @@ def _assign_faces_to_clusters(
                     Face.id.in_(face_ids)
                 )
             ).one()
-            new_person = Person(name=None, profile_face_id=best_face_id, appearance_count=media_count)
+            new_person = Person(
+                name=None,
+                profile_face_id=best_face_id,
+                appearance_count=media_count,
+            )
             session.add(new_person)
             session.flush()  # Get new_person.id
 
@@ -450,13 +457,16 @@ def run_person_clustering(task_id: str):
         task.total = _get_face_total(session)
         logger.info("Got %s faces to cluster!", task.total)
         safe_commit(session)
-
+    limit = 10000
+    last_id = 0
     while True:
         logger.info("--- Starting new Clustering Batch ---")
         with Session(engine) as session:
+            logger.debug("Continuing from id: %s", last_id)
             batch_face_ids, batch_embeddings = _fetch_faces_and_embeddings(
-                session
+                session, last_id=last_id, limit=limit
             )
+            last_id = batch_face_ids[-1]
 
         if len(batch_face_ids) == 0:
             logger.info("No more unassigned faces found. Finishing process.")
@@ -472,6 +482,7 @@ def run_person_clustering(task_id: str):
             )
 
         if person_exists:
+            logger.debug("Trying to assign faces to known persons")
             unassigned_face_ids = assign_to_existing_persons(
                 batch_face_ids,
                 batch_embeddings,
@@ -493,7 +504,11 @@ def run_person_clustering(task_id: str):
         if len(new_embs) > 6:
             labels = _cluster_embeddings(new_embs)
             clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
+            logger.debug("Created %s Persons!", len(clusters))
             _assign_faces_to_clusters(clusters, task_id)
+        if len(batch_face_ids) < limit:
+            break
+
 
     with Session(engine) as session:
         task = session.get(ProcessingTask, task_id)
