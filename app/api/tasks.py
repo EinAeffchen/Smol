@@ -10,7 +10,7 @@ import hdbscan
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import or_
+from sqlalchemy import or_, func
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
 
@@ -253,12 +253,12 @@ def start_person_clustering(
 
 
 def _fetch_faces_and_embeddings(
-    session: Session,
+    session: Session, limit: int = 10000
 ) -> tuple[list[int], np.ndarray]:
     results = session.exec(
-        select(Face.id, Face.embedding).where(
-            Face.embedding != None, Face.person_id == None
-        )
+        select(Face.id, Face.embedding)
+        .where(Face.embedding != None, Face.person_id == None)
+        .limit(limit)
     ).all()
 
     if not results:
@@ -326,8 +326,12 @@ def _assign_faces_to_clusters(
             task = session.get(ProcessingTask, task_id)
             if task.status == "cancelled":
                 break
-
-            new_person = Person(name=None, profile_face_id=best_face_id)
+            media_count = session.exec(
+                select(func.count(func.distinct(Face.media_id))).where(
+                    Face.id.in_(face_ids)
+                )
+            ).one()
+            new_person = Person(name=None, profile_face_id=best_face_id, appearance_count=media_count)
             session.add(new_person)
             session.flush()  # Get new_person.id
 
@@ -426,6 +430,14 @@ def unzip_faces_embeddings(faces: list[Face]):
     return new_faces, embs
 
 
+def _get_face_total(session: Session):
+    return session.exec(
+        select(func.count(Face.id)).where(
+            Face.embedding != None, Face.person_id == None
+        )
+    ).first()
+
+
 def run_person_clustering(task_id: str):
     with Session(engine) as session:
         task = session.get(ProcessingTask, task_id)
@@ -435,61 +447,53 @@ def run_person_clustering(task_id: str):
 
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
-
-        faces_ids, embeddings = _fetch_faces_and_embeddings(session)
-        task.total = len(faces_ids)
-        session.add(task)
+        task.total = _get_face_total(session)
+        logger.info("Got %s faces to cluster!", task.total)
         safe_commit(session)
 
-    if not faces_ids:
+    while True:
+        logger.info("--- Starting new Clustering Batch ---")
         with Session(engine) as session:
-            task = session.get(ProcessingTask, task_id)
-            logger.warning("No faces to cluster, finishing clustering!")
-            complete_task(session, task)
-        return
-
-    # Fetch embeddings once
-    person_exists = False
-    with Session(engine) as session:  # Quick, read-only check
-        person_exists = (
-            session.exec(select(Person).limit(1)).first() is not None
-        )
-
-    if person_exists:
-        unassigned_face_ids = assign_to_existing_persons(
-            faces_ids,
-            embeddings,
-            task_id,
-            threshold=FACE_MATCH_COSINE_THRESHOLD,
-        )
-        if not unassigned_face_ids:
-            with Session(engine) as session:
-                task = session.get(ProcessingTask, task_id)
-                logger.info(
-                    "Finished clustering faces, no orphans left to cluster."
-                )
-                complete_task(session, task)
-            return
-        new_faces_ids, new_embs = _filter_embeddings_by_id(
-            faces_ids, embeddings, unassigned_face_ids
-        )
-    else:
-        new_faces_ids, new_embs = faces_ids, embeddings
-
-    if len(new_embs) <= 6:
-        with Session(engine) as session:
-            task = session.get(ProcessingTask, task_id)
-            logger.info(
-                "Not enough embeddings to create new persons, finishing."
+            batch_face_ids, batch_embeddings = _fetch_faces_and_embeddings(
+                session
             )
-            complete_task(session, task)
-        return
 
-    labels = _cluster_embeddings(new_embs)
+        if len(batch_face_ids) == 0:
+            logger.info("No more unassigned faces found. Finishing process.")
+            break  # Exit the while loop
 
-    clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
+        logger.info("Processing batch of %d faces...", len(batch_face_ids))
 
-    _assign_faces_to_clusters(clusters, task_id)
+        # Fetch embeddings once
+        person_exists = False
+        with Session(engine) as session:  # Quick, read-only check
+            person_exists = (
+                session.exec(select(Person).limit(1)).first() is not None
+            )
+
+        if person_exists:
+            unassigned_face_ids = assign_to_existing_persons(
+                batch_face_ids,
+                batch_embeddings,
+                task_id,
+                threshold=FACE_MATCH_COSINE_THRESHOLD,
+            )
+            if not unassigned_face_ids:
+                logger.info(
+                    "All faces in batch were assigned to existing persons."
+                )
+                continue  # Go to the next batch
+
+            new_faces_ids, new_embs = _filter_embeddings_by_id(
+                batch_face_ids, batch_embeddings, unassigned_face_ids
+            )
+        else:
+            new_faces_ids, new_embs = batch_face_ids, batch_embeddings
+
+        if len(new_embs) > 6:
+            labels = _cluster_embeddings(new_embs)
+            clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
+            _assign_faces_to_clusters(clusters, task_id)
 
     with Session(engine) as session:
         task = session.get(ProcessingTask, task_id)
