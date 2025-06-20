@@ -114,9 +114,14 @@ class FaceProcessor(MediaProcessor):
 
             faces = self.model.get(scene)
             face_objs = self._parse_faces(faces, scene, media)
+
+            if not face_objs:
+                continue
+            
+            session.add_all(face_objs)
+            session.flush()
+
             for face_obj in face_objs:
-                session.add(face_obj)
-                session.flush()
                 sql = text(
                     """
                         INSERT OR REPLACE INTO face_embeddings(face_id, person_id, embedding)
@@ -128,6 +133,7 @@ class FaceProcessor(MediaProcessor):
                 session.exec(sql)
         media.faces_extracted = True
         media.embeddings_created = True
+        session.add(media)
         safe_commit(session)
         return True
 
