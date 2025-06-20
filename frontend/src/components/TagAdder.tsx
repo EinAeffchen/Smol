@@ -16,7 +16,7 @@ interface TagAdderProps {
     ownerType: OwnerType;
     ownerId: number;
     existingTags: Tag[];
-    onTagAdded: (tag: Tag) => void;
+    onTagAdded: () => void;
 }
 
 // A custom type for our Autocomplete options, which can be a real Tag or a "Create" action
@@ -91,7 +91,7 @@ export default function TagAdder({ ownerType, ownerId, existingTags, onTagAdded 
         try {
             const assignRes = await fetch(`${API}/api/tags/${ownerType}/${ownerId}/${tagToAssign!.id}`, { method: 'POST' });
             if (!assignRes.ok) throw new Error('Failed to assign tag');
-            onTagAdded(tagToAssign!);
+            onTagAdded();
         } catch (error) {
             console.error('Error assigning tag:', error);
         }

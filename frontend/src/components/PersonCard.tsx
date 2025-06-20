@@ -73,7 +73,7 @@ export default function PersonCard({ person }: { person: Person }) {
           {person.name || 'Unknown'}
         </Typography>
         <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.7)', mt: 0.5 }}>
-          {person.appearance_count ? `${person.appearance_count} photos` : ''}
+          {person.appearance_count ? `${person.appearance_count} media` : ''}
         </Typography>
       </Box>
     </Box>

@@ -8,12 +8,19 @@ class ProfileFace(BaseModel):
     thumbnail_path: str
 
 
+class TagSimple(SQLModel):
+    id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class PersonDetail(BaseModel):
     id: int
     name: str | None
-    profile_face_id: int |None
+    profile_face_id: int | None
     profile_face: ProfileFace | None
-    tags: list[dict]
+    tags: list[TagSimple]
     appearance_count: int
 
 
