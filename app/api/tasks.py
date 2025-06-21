@@ -17,6 +17,7 @@ from tqdm import tqdm
 from app.api.media import delete_media_record
 from app.config import (
     AUTO_CLUSTER,
+    CLUSTER_BATCH_SIZE,
     ENABLE_PEOPLE,
     FACE_MATCH_COSINE_THRESHOLD,
     IMAGE_SUFFIXES,
@@ -457,14 +458,13 @@ def run_person_clustering(task_id: str):
         task.total = _get_face_total(session)
         logger.info("Got %s faces to cluster!", task.total)
         safe_commit(session)
-    limit = 10000
     last_id = 0
     while True:
         logger.info("--- Starting new Clustering Batch ---")
         with Session(engine) as session:
             logger.debug("Continuing from id: %s", last_id)
             batch_face_ids, batch_embeddings = _fetch_faces_and_embeddings(
-                session, last_id=last_id, limit=limit
+                session, last_id=last_id, limit=CLUSTER_BATCH_SIZE
             )
             last_id = batch_face_ids[-1]
 
@@ -506,7 +506,7 @@ def run_person_clustering(task_id: str):
             clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
             logger.debug("Created %s Persons!", len(clusters))
             _assign_faces_to_clusters(clusters, task_id)
-        if len(batch_face_ids) < limit:
+        if len(batch_face_ids) < CLUSTER_BATCH_SIZE:
             break
 
     with Session(engine) as session:

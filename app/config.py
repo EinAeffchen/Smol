@@ -81,6 +81,7 @@ if AUTO_CLUSTER.lower() == "true":
     AUTO_CLUSTER = True
 else:
     AUTO_CLUSTER = False
+CLUSTER_BATCH_SIZE = int(os.environ.get("CLUSTER_BATCH_SIZE", 10000))
 
 
 CLIP_MODEL = os.environ.get("CLIP_MODEL", "xlm-roberta-large-ViT-H-14")
