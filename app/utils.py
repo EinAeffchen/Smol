@@ -20,6 +20,7 @@ from app.config import (
     MAX_FRAMES_PER_VIDEO,
     MEDIA_DIR,
     THUMB_DIR,
+    THUMB_DIR_FOLDER_SIZE,
     VIDEO_SUFFIXES,
 )
 from app.database import engine, safe_commit
@@ -69,10 +70,29 @@ def process_file(filepath: Path) -> Media:
         return media
 
 
-def generate_thumbnails(media: Media):
-    thumb_path = THUMB_DIR / f"{media.id}.jpg"
+def get_thumb_folder(path: Path) -> Path:
+    path.mkdir(parents=True, exist_ok=True)
+    folders = [folder for folder in path.iterdir() if folder.is_dir()]
+    if not folders:
+        new_folder = path / "1"
+        new_folder.mkdir()
+        return new_folder
+    else:
+        latest = folders[-1]
+        file_count = len([file for file in latest.iterdir()])
+        if file_count >= THUMB_DIR_FOLDER_SIZE:
+            new_folder = path / str(int(latest.name) + 1)
+            new_folder.mkdir()
+            return new_folder
+        return latest
+
+
+def generate_thumbnail(media: Media) -> str | None:
+    thumb_folder = get_thumb_folder(THUMB_DIR / "media")
+    thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
     full_path = MEDIA_DIR / filepath
+    logger.debug("Creating thumbnail in %s", thumb_path)
     if filepath.suffix.lower() in VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)
@@ -86,12 +106,12 @@ def generate_thumbnails(media: Media):
             img = ImageOps.exif_transpose(img)
         except UnidentifiedImageError:
             logger.warning("Couldn't open %s", filepath)
-            return False
+            return
         except OSError as e:
             logger.warning(
                 "Failed to process image %s, because of: %s", filepath, e
             )
-            return False
+            return
         img.thumbnail((480, -1))
         try:
             img.save(thumb_path, format="JPEG")
@@ -100,7 +120,7 @@ def generate_thumbnails(media: Media):
             img.save(thumb_path, format="JPEG")
 
         assert thumb_path.is_file()
-    return True
+    return str(thumb_path.relative_to(THUMB_DIR))
 
 
 def get_person_embedding(
@@ -167,7 +187,8 @@ def _split_by_scenes(
     for i, (start_time, end_time) in tqdm(
         enumerate(scenes), total=len(scenes)
     ):
-        thumbnail_path = THUMB_DIR / f"{i}_{Path(media.path).stem}.jpg"
+        thumb_dir = get_thumb_folder(THUMB_DIR / "scenes")
+        thumbnail_path = thumb_dir / f"{i}_{Path(media.path).stem}.jpg"
         ffmpeg.input(
             str(MEDIA_DIR / media.path), ss=start_time.get_seconds()
         ).filter("scale", 480, -1).output(str(thumbnail_path), vframes=1).run(
@@ -192,7 +213,7 @@ def _split_by_scenes(
             media_id=media.id,
             start_time=start_time,
             end_time=end_time,
-            thumbnail_path=str(thumbnail_path.relative_to(THUMB_DIR)),
+            thumbnail_path=str(thumbnail_path.relative_to(thumb_dir)),
         )
         scene_objs.append((scene, frame_rgb))
     return scene_objs
@@ -226,7 +247,8 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
 
         # 2) save a thumbnail
         thumb_name = f"{media.id}_frame_{i}.jpg"
-        thumb_file = THUMB_DIR / thumb_name
+        thumb_dir = get_thumb_folder(THUMB_DIR / "scenes")
+        thumb_file = thumb_dir / thumb_name
         (
             ffmpeg.input(str(video_path), ss=start_sec)
             .filter("scale", 360, -1)
@@ -238,7 +260,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
             media_id=media.id,
             start_time=start_sec,
             end_time=end_sec,
-            thumbnail_path=str(thumb_name),
+            thumbnail_path=str(thumb_file.relative_to(THUMB_DIR)),
         )
         scene_objs.append((scene, frame_rgb))
     cap.release()

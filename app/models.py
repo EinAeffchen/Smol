@@ -46,7 +46,7 @@ class Tag(SQLModel, table=True):
 class Face(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     media_id: int = Field(foreign_key="media.id")
-    person_id: int | None = Field(foreign_key="person.id")
+    person_id: int | None = Field(foreign_key="person.id", default=None)
     thumbnail_path: str
     bbox: list[int] = Field(sa_column=Column(JSON))
     embedding: list[float] | None = Field(
@@ -67,6 +67,7 @@ class Media(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     path: str = Field(unique=True)
     filename: str = Field(index=True)
+    thumbnail_path: str = Field(default=None)
     size: int
     duration: float | None = None
     width: int | None = None
@@ -109,9 +110,9 @@ class Scene(SQLModel, table=True):
     start_time: float  # in seconds
     end_time: float  # in seconds
     thumbnail_path: str  # relative path under THUMB_DIR
-    description: str | None
+    description: str | None = Field(default=None)
     embedding: list[float] | None = Field(
-        sa_column=Column(JSON, nullable=True, index=True)
+        sa_column=Column(JSON, nullable=True, index=True), default=None
     )
 
     media: "Media" = Relationship(back_populates="scenes")

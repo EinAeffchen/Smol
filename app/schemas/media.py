@@ -26,6 +26,7 @@ class MediaRead(SQLModel):
     scenes: list[SceneRead]
     tags: list[TagSimple]
     extracted_scenes: bool
+    thumbnail_path: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -39,6 +40,7 @@ class MediaPreview(SQLModel):
     views: int
     path: str
     inserted_at: datetime
+    thumbnail_path: str | None
 
 
 class MediaLocation(SQLModel):
@@ -59,12 +61,13 @@ class MediaDetail(SQLModel):
     persons: list[PersonRead] = Field(default_factory=list)
     faces: list[Face] = Field(default_factory=list)
     orphans: list[Face] = Field(default_factory=list)
-
     model_config = ConfigDict(from_attributes=True)
 
+
 class MediaNeighbors(SQLModel):
-    next_id: int|None
-    previous_id: int|None
+    next_id: int | None
+    previous_id: int | None
+
 
 class GeoUpdate(SQLModel):
     latitude: float

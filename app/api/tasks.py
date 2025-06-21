@@ -31,7 +31,7 @@ from app.models import Face, Media, Person, PersonSimilarity, ProcessingTask
 from app.processor_registry import processors
 from app.utils import (
     complete_task,
-    generate_thumbnails,
+    generate_thumbnail,
     process_file,
     split_video,
 )
@@ -509,7 +509,6 @@ def run_person_clustering(task_id: str):
         if len(batch_face_ids) < limit:
             break
 
-
     with Session(engine) as session:
         task = session.get(ProcessingTask, task_id)
         logger.info("FINISHED CLUSTERING!")
@@ -666,7 +665,7 @@ def _run_scan(task_id: str):
         logger.info("No new files to process. Scan finished.")
         return
 
-    medias = list()
+    medias: list[Media] = list()
     for i, filepath in tqdm(enumerate(media_paths)):
         media_obj = process_file(MEDIA_DIR / filepath)
         if not media_obj:
@@ -683,11 +682,19 @@ def _run_scan(task_id: str):
 
     sess.add_all(medias)
     sess.flush()
+
     task.processed += len(medias)
     sess.add(task)
     for media in medias:
-        if not generate_thumbnails(media):
-            medias.remove(media)
+        thumbnail = generate_thumbnail(media)
+        logger.debug("Got thumbnail %s for media: %s", thumbnail, media.id)
+        if not thumbnail:
+            sess.exec(delete(Media).where(Media.id == media.id))
+            continue
+
+        media.thumbnail_path = thumbnail
+        sess.add(media)
+
     safe_commit(sess)
     medias.clear()
 

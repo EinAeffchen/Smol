@@ -79,7 +79,6 @@ def list_persons(
 
     q = q.order_by(Person.appearance_count.desc(), Person.id.desc())
     q = q.limit(limit)
-    logger.info(q)
     people_with_counts = session.exec(q).all()
     items = [
         PersonRead(

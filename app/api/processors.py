@@ -75,10 +75,15 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
         session.commit()
         full_path = MEDIA_DIR / media_path
         original_stem = full_path.stem
+        try:
+            info = ffmpeg.probe(str(full_path))
+        except ffmpeg.Error as e:
+            logger.error("stdout: %s", e.stdout.decode("utf8"))
+            logger.error("stderr: %s", e.stderr.decode("utf8"))
+            raise
         full_path = full_path.rename(
             full_path.with_stem("tmp_" + original_stem)
         )
-        info = ffmpeg.probe(str(full_path))
         dur_s = float(info["format"]["duration"])
         dur_us = dur_s * 1000000
         # run ffmpeg with stderr piped so we can parse “progress=…”

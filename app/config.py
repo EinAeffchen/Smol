@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 import open_clip
+from app.logger import logger
 
 MEDIA_DIR = Path(os.getenv("MEDIA_DIR", "/app/media"))
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
@@ -15,17 +16,17 @@ DATABASE_DIR.mkdir(parents=False, exist_ok=True)
 SMOL_DIR = DATA_DIR / ".smol"
 SMOL_DIR.mkdir(parents=True, exist_ok=True)
 
-DATABASE_URL = (
-    f"sqlite:///{DATABASE_DIR}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
-)
+DATABASE_URL = f"sqlite:///{DATABASE_DIR}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
 
 THUMB_DIR = SMOL_DIR / "thumbnails"
 THUMB_DIR.mkdir(exist_ok=True)
+THUMB_DIR_FOLDER_SIZE = (
+    1000  # defines max number of thumbnails in single folder
+)
 
 STATIC_DIR: Path = SMOL_DIR / "static"
 STATIC_DIR.mkdir(exist_ok=True, parents=True)
 # Where thumbnails are written
-THUMB_DIR = SMOL_DIR / "thumbnails"
 MODELS_DIR = SMOL_DIR / "models"
 MODELS_DIR.mkdir(exist_ok=True, parents=True)
 
@@ -95,6 +96,11 @@ elif CLIP_MODEL == "ViT-B-32":
     PRETRAINED = "laion2b_s34b_b79k"
 elif CLIP_MODEL == "convnext_base_w":
     PRETRAINED = "laion2b_s13b_b82k_augreg"
+else:
+    logger.error(
+        "Not a valid model name: '%s' Please check the tample.env for valid models!",
+        CLIP_MODEL,
+    )
 model, preprocess, _ = open_clip.create_model_and_transforms(
     CLIP_MODEL,
     pretrained=PRETRAINED,

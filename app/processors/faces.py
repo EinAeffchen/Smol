@@ -17,6 +17,7 @@ from app.database import safe_commit
 from app.logger import logger
 from app.models import ExifData, Face, Media, Scene
 from app.processors.base import MediaProcessor
+from app.utils import get_thumb_folder
 
 
 class FaceProcessor(MediaProcessor):
@@ -60,7 +61,8 @@ class FaceProcessor(MediaProcessor):
 
             ts = int(time.time() * 1000)
             name = f"{Path(media.path).stem}_ins_{i}_{ts}.jpg"
-            thumb_file = THUMB_DIR / name
+            thumb_dir = get_thumb_folder(THUMB_DIR / "faces")
+            thumb_file = thumb_dir / name
             pil_img = Image.fromarray(crop)
             pil_img.thumbnail((320, -1), Image.LANCZOS)
             pil_img.save(
@@ -76,7 +78,7 @@ class FaceProcessor(MediaProcessor):
                 vec /= norm
             face = Face(
                 media=media,
-                thumbnail_path=name,
+                thumbnail_path=str(thumb_file.relative_to(THUMB_DIR)),
                 bbox=[x1, y1, x2 - x1, y2 - y1],
                 embedding=vec.tolist(),
             )
@@ -117,7 +119,7 @@ class FaceProcessor(MediaProcessor):
 
             if not face_objs:
                 continue
-            
+
             session.add_all(face_objs)
             session.flush()
 

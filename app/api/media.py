@@ -356,7 +356,10 @@ def delete_file(session: Session, media_id: int):
         orig.unlink()
 
     # delete thumbnail
-    thumb = THUMB_DIR / f"{media.id}.jpg"
+    if not media.thumbnail_path:
+        thumb = THUMB_DIR / f"{media.id}.jpg"
+    else:
+        thumb = THUMB_DIR/media.thumbnail_path
     if thumb.exists():
         thumb.unlink()
 
