@@ -10,6 +10,7 @@ export interface Media {
   inserted_at: string;
   tags: Tag[];
   faces: Face[];
+  thumbnail_path?: string;
   extracted_scenes: boolean;
 }
 

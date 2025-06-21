@@ -37,7 +37,7 @@ export default function FaceCard({
   isProfile: boolean;
   onSetProfile: (faceId: number) => void;
   onAssign: (personId: number) => void;
-  onCreate: (data: { name?: string; }) => void;
+  onCreate: (data: { name?: string }) => void;
   onDelete: () => void;
   onDetach: () => void;
 }) {

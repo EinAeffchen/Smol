@@ -1,92 +1,117 @@
-import React, { useCallback, useMemo } from 'react'
-import { useSearchParams } from 'react-router-dom'
-import {
-    Container,
-    Typography,
-    Grid,
-    Box,
-    CircularProgress,
-} from '@mui/material'
-import MediaCard from '../components/MediaCard'
-import PersonCard from '../components/PersonCard'
-import TagCard from '../components/TagCard'
-import { SearchResult } from '../types'
-import { useInfinite, CursorResponse } from '../hooks/useInfinite'
-import { API } from '../config'
-const ITEMS_PER_PAGE = 30
+import React, { useCallback, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Container, Typography, Box, CircularProgress } from "@mui/material";
+import Masonry from "react-masonry-css";
+import { useInfinite, CursorResponse } from "../hooks/useInfinite";
+import { API } from "../config";
+import { Media, Person, Tag } from "../types";
+import MediaCard from "../components/MediaCard";
+import PersonCard from "../components/PersonCard";
+import TagCard from "../components/TagCard";
+
+const ITEMS_PER_PAGE = 30;
+
+const breakpointColumnsObj = {
+  default: 5,
+  1600: 4,
+  1200: 5,
+  900: 2,
+  600: 2,
+};
+
+function isMedia(item: any): item is Media {
+  return item && "thumbnail_path" in item;
+}
+function isPerson(item: any): item is Person {
+  return item && "profile_face" in item;
+}
+function isTag(item: any): item is Tag {
+  return item && !("tags" in item) && "name" in item;
+}
 
 export default function SearchResultsPage() {
-    const [searchParams] = useSearchParams()
-    const category = (searchParams.get('category') as 'media' | 'person' | 'tag') || 'media'
-    const query = searchParams.get('query') || ''
+  const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
+  const [searchParams] = useSearchParams();
+  const category =
+    (searchParams.get("category") as "media" | "person" | "tag") || "media";
+  const query = searchParams.get("query") || "";
 
-    const fetchPage = useCallback(
-        (cursor: string | null, limit: number) => {
-            const params = new URLSearchParams({ category, query })
-            params.set('limit', String(limit))
-            if (cursor) params.set('cursor', cursor)
-            return fetch(`${API}/api/search/?${params.toString()}`)
-                .then(res => {
-                    if (!res.ok) throw new Error(res.statusText)
-                    return res.json() as Promise<CursorResponse<SearchResult>>
-                })
-        },
-        [category, query]
-    )
+  const fetchPage = useCallback(
+    (cursor: string | null, limit: number) => {
+      // --- UPDATED LOGIC TO CHOOSE THE CORRECT ENDPOINT ---
+      let endpointPath = "/api/search/media";
+      if (category === "person") {
+        endpointPath = "/api/search/people";
+      } else if (category === "tag") {
+        endpointPath = "/api/search/tags";
+      }
 
-    const { items: pages, hasMore, loading, loaderRef } = useInfinite<SearchResult>(fetchPage, ITEMS_PER_PAGE, [category, query])
+      const params = new URLSearchParams({ query });
+      params.set("limit", String(limit));
+      if (cursor) params.set("cursor", cursor);
 
-    const mediaList = useMemo(() => pages.flatMap(p => p.media), [pages])
-    const peopleList = useMemo(() => pages.flatMap(p => p.persons), [pages])
-    const tagList = useMemo(() => pages.flatMap(p => p.tags), [pages])
+      return fetch(`${API}${endpointPath}?${params.toString()}`).then((res) => {
+        if (!res.ok) throw new Error(res.statusText);
+        // The response is now a simple list of one type of item
+        return res.json() as Promise<CursorResponse<Media | Person | Tag>>;
+      });
+    },
+    [category, query]
+  );
 
-    const title =
-        category === 'media'
-            ? 'Media Results'
-            : category === 'person'
-                ? 'People Results'
-                : 'Tag Results'
+  const { items, hasMore, loading, loaderRef } = useInfinite<
+    Media | Person | Tag
+  >(fetchPage, ITEMS_PER_PAGE, [category, query]);
+  const visibleItems = useMemo(() => {
+    return items.filter((item) => !deletedItemIds.includes(item.id));
+  }, [items, deletedItemIds]);
 
-    return (
-        <Container maxWidth="lg" sx={{ pt: 4, pb: 6, bgcolor: 'background.default' }}>
-            <Typography variant="h4" gutterBottom sx={{ color: 'accent.main' }}>
-                {title}
-            </Typography>
+  const renderItem = (item: Media | Person | Tag) => {
+    console.log(item);
+    if (isMedia(item)) {
+      return <MediaCard media={item} />;
+    }
+    if (isPerson(item)) {
+      return <PersonCard person={item} />;
+    }
+    if (isTag(item)) {
+      return <TagCard onTagDeleted={handleTagDeleted} tag={item} />;
+    }
+    return null;
+  };
 
-            <Grid container spacing={2}>
-                {category === 'media' &&
-                    mediaList.map(m => (
-                        <Grid key={m.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                            <MediaCard media={m} />
-                        </Grid>
-                    ))}
+  const title = `Search Results for "${query}" in category: ${category}`;
 
-                {category === 'person' &&
-                    peopleList.map(p => (
-                        <Grid key={p.id} size={{ xs: 6, sm: 4, md: 3, lg: 2.4 }}>
-                            <PersonCard person={p} />
-                        </Grid>
-                    ))}
+  const handleTagDeleted = (tagId: number) => {
+    setDeletedItemIds((prevIds) => [...prevIds, tagId]);
+  };
 
-                {category === 'tag' &&
-                    tagList.map(t => (
-                        <Grid key={t.id} size={{ xs: 12, sm: 6, md: 4, lg: 3 }}>
-                            <TagCard tag={t} />
-                        </Grid>
-                    ))}
-            </Grid>
+  return (
+    <Container maxWidth="xl" sx={{ pt: 4, pb: 6 }}>
+      <Typography variant="h4" gutterBottom>
+        {title}
+      </Typography>
 
-            {loading && (
-                <Box textAlign="center" py={4}>
-                    <CircularProgress color="secondary" />
-                </Box>
-            )}
+      <Masonry
+        breakpointCols={breakpointColumnsObj}
+        className="my-masonry-grid"
+        columnClassName="my-masonry-grid_column"
+      >
+        {visibleItems.map((item) => (
+          <div key={`${category}-${item.id}`}>{renderItem(item)}</div>
+        ))}
+      </Masonry>
 
-            {!loading && hasMore && (
-                <Box ref={loaderRef} textAlign="center" py={2} sx={{ color: 'primary' }}>
-                    Scroll to load more…
-                </Box>
-            )}
-        </Container>
-    )
+      {loading && (
+        <Box textAlign="center" py={4}>
+          <CircularProgress />
+        </Box>
+      )}
+      {hasMore && <Box ref={loaderRef} sx={{ height: "1px" }} />}
+
+      {!loading && items.length === 0 && (
+        <Typography sx={{ mt: 4 }}>No results found for your query.</Typography>
+      )}
+    </Container>
+  );
 }

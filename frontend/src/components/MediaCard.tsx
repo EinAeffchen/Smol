@@ -10,7 +10,6 @@ import {
 } from "@mui/material";
 import { Media } from "../types";
 import { API } from "../config";
-import { useLocation } from "react-router-dom";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
 
