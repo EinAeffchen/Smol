@@ -92,7 +92,6 @@ def generate_thumbnail(media: Media) -> str | None:
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
     full_path = MEDIA_DIR / filepath
-    logger.debug("Creating thumbnail in %s", thumb_path)
     if filepath.suffix.lower() in VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)

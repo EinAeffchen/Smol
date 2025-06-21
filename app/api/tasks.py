@@ -687,7 +687,6 @@ def _run_scan(task_id: str):
     sess.add(task)
     for media in medias:
         thumbnail = generate_thumbnail(media)
-        logger.debug("Got thumbnail %s for media: %s", thumbnail, media.id)
         if not thumbnail:
             sess.exec(delete(Media).where(Media.id == media.id))
             continue

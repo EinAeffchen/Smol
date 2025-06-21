@@ -1,16 +1,9 @@
 from pydantic import BaseModel
+from typing import Generic, TypeVar
 
-from app.schemas.person import PersonReadSimple
-from app.schemas.media import MediaPreview
-from app.schemas.tag import TagRead
-
-
-class SearchResult(BaseModel):
-    persons: list[PersonReadSimple] | None = None
-    media: list[MediaPreview] | None = None
-    tags: list[TagRead] | None = None
+T = TypeVar("T")
 
 
-class CursorPage(BaseModel):
-    items: list[SearchResult]
+class CursorPage(BaseModel, Generic[T]):
+    items: list[T]
     next_cursor: str | None
