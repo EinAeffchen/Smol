@@ -6,6 +6,7 @@ from pathlib import Path
 import numpy as np
 from cv2.typing import MatLike
 from insightface.app import FaceAnalysis
+from config import MODELS_DIR
 from PIL import Image
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text
@@ -142,6 +143,7 @@ class FaceProcessor(MediaProcessor):
     def load_model(self):
         self.model = FaceAnalysis(
             "buffalo_l",
+            root=str(MODELS_DIR),
             providers=["CPUExecutionProvider"],
         )
         self.model.prepare(ctx_id=0)  # ctx_id=0 for GPU, -1 for CPU
