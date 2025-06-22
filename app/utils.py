@@ -78,11 +78,12 @@ def get_thumb_folder(path: Path) -> Path:
         new_folder.mkdir()
         return new_folder
     else:
+        folders.sort(key=lambda p: int(p.name))
         latest = folders[-1]
-        file_count = len([file for file in latest.iterdir()])
+        file_count = sum(1 for file in latest.iterdir() if file.is_file())
         if file_count >= THUMB_DIR_FOLDER_SIZE:
             new_folder = path / str(int(latest.name) + 1)
-            new_folder.mkdir()
+            new_folder.mkdir(exist_ok=True)
             return new_folder
         return latest
 
@@ -95,7 +96,7 @@ def generate_thumbnail(media: Media) -> str | None:
     if filepath.suffix.lower() in VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)
-            .filter("scale", 480, -1)
+            .filter("scale", 360, -1)
             .output(str(thumb_path), vframes=1)
             .run(quiet=True, overwrite_output=True)
         )
@@ -111,7 +112,7 @@ def generate_thumbnail(media: Media) -> str | None:
                 "Failed to process image %s, because of: %s", filepath, e
             )
             return
-        img.thumbnail((480, -1))
+        img.thumbnail((360, -1))
         try:
             img.save(thumb_path, format="JPEG")
         except OSError:
