@@ -13,7 +13,7 @@ from PIL import Image, UnidentifiedImageError
 from sqlalchemy import or_, func
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
-
+from sqlalchemy.exc import OperationalError
 from app.api.media import delete_media_record
 from app.config import (
     AUTO_CLUSTER,
@@ -58,12 +58,16 @@ def create_and_run_task(
         )
 
     # Check if a scan is already running to prevent overlap
-    existing_task = session.exec(
-        select(ProcessingTask).where(
-            ProcessingTask.task_type == task_type,
-            ProcessingTask.status == "running",
-        )
-    ).first()
+    try:
+        existing_task = session.exec(
+            select(ProcessingTask).where(
+                ProcessingTask.task_type == task_type,
+                ProcessingTask.status == "running",
+            )
+        ).first()
+    except OperationalError:
+        logger.warning("Database currently busy, skipping auto scan.")
+        return
 
     if existing_task:
         logger.info("Scan task is already running. Skipping new scan.")
@@ -626,17 +630,22 @@ def reset_clustering(session: Session = Depends(get_session)):
 
 
 def _run_scan(task_id: str):
-    sess = Session(engine)
-    task = sess.get(ProcessingTask, task_id)
+    with Session(engine) as sess:
+        task = sess.get(ProcessingTask, task_id)
 
-    assert task
-    task.status = "running"
-    sess.add(task)
-    sess.commit()
+        if not task:
+            logger.error("Task %s not found.", task_id)
+            return
 
-    known_files = [row for row in sess.exec(select(Media.path)).all()]
+        task.status = "running"
+        sess.commit()
+
+        known_files = set([row for row in sess.exec(select(Media.path)).all()])
+
     media_paths = []
-    for root, dirs, files in tqdm(os.walk(MEDIA_DIR, topdown=True)):
+    for root, dirs, files in tqdm(
+        os.walk(MEDIA_DIR, topdown=True, followlinks=True)
+    ):
         if ".smol" in dirs:
             dirs.remove(".smol")
         if ".DAV" in dirs:
@@ -652,53 +661,60 @@ def _run_scan(task_id: str):
                 media_paths.append(rel)
 
     logger.info("Found %s new files", len(media_paths))
-    task.total = len(media_paths)
-    sess.add(task)
-    sess.commit()
 
-    if not media_paths:
-        task.status = "completed"
-        task.finished_at = datetime.now(timezone.utc)
-        sess.add(task)
+    with Session(engine) as sess:
+        sess.merge(task)
+        task.total = len(media_paths)
         sess.commit()
-        sess.close()
-        logger.info("No new files to process. Scan finished.")
-        return
 
-    medias: list[Media] = list()
-    for i, filepath in tqdm(enumerate(media_paths)):
-        media_obj = process_file(MEDIA_DIR / filepath)
-        if not media_obj:
-            continue
+        if not media_paths:
+            task.status = "completed"
+            task.finished_at = datetime.now(timezone.utc)
+            logger.info("No new files to process. Scan finished.")
+            safe_commit(sess)
+            return
 
-        medias.append(media_obj)
+    medias_to_add: list[Media] = list()
+    for i, filepath in tqdm(enumerate(media_paths, 1)):
+
         if i % 100 == 0:
-            task = sess.get(ProcessingTask, task_id)
-            assert task
-            if task.status == "cancelled":
-                break
-            task.processed += len(medias)
-            sess.add(task)
+            with Session(engine) as sess:
+                task = sess.get(ProcessingTask, task_id)
+                task.processed += 100
+                sess.merge(task)
+                if task and task.status == "cancelled":
+                    break
 
-    sess.add_all(medias)
-    sess.flush()
+        media_obj = process_file(MEDIA_DIR / filepath)
+        if media_obj:
+            medias_to_add.append(media_obj)
 
-    task.processed += len(medias)
-    sess.add(task)
-    for media in medias:
-        thumbnail = generate_thumbnail(media)
-        if not thumbnail:
-            sess.exec(delete(Media).where(Media.id == media.id))
-            continue
+    with Session(engine) as sess:
+        task = sess.merge(task)
+        task.processed = 0
+        if task.status == "cancelled":
+            medias_to_add.clear()
+        else:
+            sess.add_all(medias_to_add)
+            task.processed += len(medias_to_add)
+            sess.flush()
 
-        media.thumbnail_path = thumbnail
-        sess.add(media)
+            deletions: list[int] = []
+            media_objs_with_thumbnails = []
+            for media in medias_to_add:
+                thumbnail = generate_thumbnail(media)
+                if thumbnail:
+                    media.thumbnail_path = thumbnail
+                    media_objs_with_thumbnails.append(media)
+                else:
+                    deletions.append(media.id)
 
-    safe_commit(sess)
-    medias.clear()
+            sess.add_all(media_objs_with_thumbnails)
+            if deletions:
+                sess.exec(delete(Media).where(Media.id.in_(deletions)))
 
-    task.status = "completed" if task.status != "cancelled" else "cancelled"
-    task.finished_at = datetime.now(timezone.utc)
-    sess.add(task)
-    sess.commit()
-    sess.close()
+        task.status = (
+            "completed" if task.status != "cancelled" else "cancelled"
+        )
+        task.finished_at = datetime.now(timezone.utc)
+        sess.commit()
