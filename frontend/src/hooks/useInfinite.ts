@@ -11,7 +11,8 @@ export function useInfinite<T>(
     limit: number
   ) => Promise<CursorResponse<T>>,
   limit = 50,
-  resetDeps: any[] = []
+  resetDeps: any[] = [],
+  disabled: boolean = false
 ) {
   const [items, setItems] = useState<T[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
@@ -45,6 +46,7 @@ export function useInfinite<T>(
   }, resetDeps);
 
   useEffect(() => {
+    if (disabled) return;
     if (loading || !hasMore) return;
     const el = loaderRef.current;
     if (!el) return;
@@ -65,5 +67,5 @@ export function useInfinite<T>(
     };
   }, [hasMore, loading, loadMore]);
 
-  return { items, setItems, hasMore, loading, loaderRef };
+  return { items, setItems, hasMore, loading, loaderRef, disabled };
 }

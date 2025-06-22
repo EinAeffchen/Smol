@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useMemo } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useLocation } from "react-router-dom";
 import { Container, Typography, Box, CircularProgress } from "@mui/material";
 import Masonry from "react-masonry-css";
 import { useInfinite, CursorResponse } from "../hooks/useInfinite";
@@ -32,6 +32,11 @@ function isTag(item: any): item is Tag {
 export default function SearchResultsPage() {
   const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const preloadedState = location.state as {
+    items: Media[];
+    searchType: "image";
+  } | null;
   const category =
     (searchParams.get("category") as "media" | "person" | "tag") || "media";
   const query = searchParams.get("query") || "";
@@ -61,10 +66,18 @@ export default function SearchResultsPage() {
 
   const { items, hasMore, loading, loaderRef } = useInfinite<
     Media | Person | Tag
-  >(fetchPage, ITEMS_PER_PAGE, [category, query]);
+  >(
+    fetchPage,
+    ITEMS_PER_PAGE,
+    [category, query],
+    preloadedState?.searchType === "image"
+  );
+
+  const displayItems = preloadedState?.items || items;
+
   const visibleItems = useMemo(() => {
-    return items.filter((item) => !deletedItemIds.includes(item.id));
-  }, [items, deletedItemIds]);
+    return items.filter((item) => !displayItems.includes(item.id));
+  }, [items, displayItems]);
 
   const renderItem = (item: Media | Person | Tag) => {
     console.log(item);
@@ -80,7 +93,10 @@ export default function SearchResultsPage() {
     return null;
   };
 
-  const title = `Search Results for "${query}" in category: ${category}`;
+  const title =
+    preloadedState?.searchType === "image"
+      ? "Similar Image Results"
+      : `Search Results for "${query}"`;
 
   const handleTagDeleted = (tagId: number) => {
     setDeletedItemIds((prevIds) => [...prevIds, tagId]);
@@ -102,15 +118,16 @@ export default function SearchResultsPage() {
         ))}
       </Masonry>
 
-      {loading && (
+      {loading && !preloadedState && (
         <Box textAlign="center" py={4}>
           <CircularProgress />
         </Box>
       )}
-      {hasMore && <Box ref={loaderRef} sx={{ height: "1px" }} />}
-
-      {!loading && items.length === 0 && (
-        <Typography sx={{ mt: 4 }}>No results found for your query.</Typography>
+      {hasMore && !preloadedState && (
+        <Box ref={loaderRef} sx={{ height: "1px" }} />
+      )}
+      {!loading && visibleItems.length === 0 && (
+        <Typography sx={{ mt: 4 }}>No results found.</Typography>
       )}
     </Container>
   );

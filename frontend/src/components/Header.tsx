@@ -24,6 +24,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import TaskManager from "../components/TasksPanel";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { API, READ_ONLY, ENABLE_PEOPLE } from "../config";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 
 const StyledNavLink = styled(RouterNavLink)(({ theme }) => ({
   color: theme.palette.text.primary,
@@ -50,7 +51,6 @@ function MobileDrawer({
   onClose: () => void;
   navItems: [string, string][];
 }) {
-  // Removed theme context logic as it's no longer needed here
   return (
     <Drawer
       anchor="right"
@@ -86,7 +86,6 @@ function MobileDrawer({
             </ListItemButton>
           </ListItem>
         ))}
-        {/* The theme toggle has been removed from the drawer */}
       </List>
 
       {!READ_ONLY && (
@@ -115,6 +114,7 @@ export function Header() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<"media" | "person" | "tag">("media");
   const navigate = useNavigate();
+  const fileInputRef = React.useRef<HTMLInputElement>(null); // Ref for the hidden file input
 
   const allNavItems: [string, string][] = [
     ["Images", "/images"],
@@ -163,41 +163,12 @@ export function Header() {
         />
       </Link>
 
-      <Box
-        component="form"
-        onSubmit={onSearchSubmit}
-        sx={{
-          display: { xs: "none", md: "flex" },
-          alignItems: "center",
-          flexGrow: 1,
-          maxWidth: 600,
-        }}
-      >
-        <Select
-          variant="outlined"
-          size="small"
-          value={category}
-          onChange={(e) => setCategory(e.target.value as any)}
-        >
-          <MenuItem value="media">Media</MenuItem>
-          <MenuItem value="person">People</MenuItem>
-          <MenuItem value="tag">Tags</MenuItem>
-        </Select>
-        <TextField
-          variant="outlined"
-          size="small"
-          fullWidth
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search..."
-        />
-        <button type="submit" style={{ display: "none" }} />
+      <Box sx={{ display: { xs: "none", md: "flex" } /* ... */ }}>
+        {renderSearchInputs()}
       </Box>
 
-      {/* This Box pushes everything after it to the right */}
       <Box sx={{ flexGrow: 1 }} />
 
-      {/* Desktop Navigation & Actions */}
       <Box
         sx={{
           display: { xs: "none", md: "flex" },
@@ -222,12 +193,10 @@ export function Header() {
         )}
       </Box>
 
-      {/* Mobile Actions */}
       <Box sx={{ display: { xs: "flex", md: "none" }, alignItems: "center" }}>
         <IconButton color="primary" onClick={() => setIsSearchVisible(true)}>
           <SearchIcon />
         </IconButton>
-        {/* Theme toggle is now here on mobile */}
         <ThemeToggleButton />
         <IconButton color="primary" onClick={() => setIsDrawerOpen(true)}>
           <MenuIcon />
@@ -236,42 +205,101 @@ export function Header() {
     </>
   );
 
+  const renderSearchInputs = () => (
+    <Box
+      component="form"
+      onSubmit={onSearchSubmit}
+      sx={{ display: "flex", flexGrow: 1, alignItems: "center" }}
+    >
+      <Select
+        variant="outlined"
+        size="small"
+        value={category}
+        onChange={(e) => setCategory(e.target.value as any)}
+        sx={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+      >
+        <MenuItem value="media">Media</MenuItem>
+        <MenuItem value="person">People</MenuItem>
+        <MenuItem value="tag">Tags</MenuItem>
+      </Select>
+      <TextField
+        variant="outlined"
+        size="small"
+        fullWidth
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        placeholder="Search by text..."
+        sx={{
+          "& .MuiOutlinedInput-root": {
+            borderTopLeftRadius: 0,
+            borderBottomLeftRadius: 0,
+          },
+        }}
+      />
+      <IconButton
+        color="primary"
+        title="Search by image"
+        onClick={() => fileInputRef.current?.click()} // Trigger the hidden input
+        sx={{ ml: 1 }}
+      >
+        <PhotoCameraIcon />
+      </IconButton>
+      <button type="submit" style={{ display: "none" }} />
+    </Box>
+  );
+
   const renderSearchHeader = () => (
     <>
       <IconButton color="primary" onClick={() => setIsSearchVisible(false)}>
         <ArrowBackIcon />
       </IconButton>
-      <Box
-        component="form"
-        onSubmit={onSearchSubmit}
-        sx={{ display: "flex", flexGrow: 1, alignItems: "center" }}
-      >
-        <Select
-          variant="outlined"
-          size="small"
-          value={category}
-          onChange={(e) => setCategory(e.target.value as any)}
-        >
-          <MenuItem value="media">Media</MenuItem>
-          <MenuItem value="person">People</MenuItem>
-          <MenuItem value="tag">Tags</MenuItem>
-        </Select>
-        <TextField
-          variant="outlined"
-          size="small"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search…"
-          autoFocus
-          fullWidth
-        />
-        <button type="submit" style={{ display: "none" }} />
-      </Box>
+      {renderSearchInputs()}
     </>
   );
 
+  const handleImageSearch = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch(`${API}/api/search/by-image`, {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Image search failed");
+      }
+
+      const results = await response.json();
+
+      navigate("/searchresults?category=media&query=Image Search", {
+        state: {
+          items: results,
+          searchType: "image",
+        },
+      });
+    } catch (error) {
+      console.error("Image search failed:", error);
+    }
+
+    if (event.target) event.target.value = "";
+  };
+
   return (
     <>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleImageSearch}
+        accept="image/*"
+        style={{ display: "none" }}
+      />
       <AppBar
         position="sticky"
         sx={{

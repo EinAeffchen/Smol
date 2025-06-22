@@ -3,22 +3,50 @@ import json
 
 import numpy as np
 import torch
-from fastapi import APIRouter, Depends, Query, HTTPException
-from sqlalchemy import text, func, tuple_, desc
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
+from sqlalchemy import desc, func, text, tuple_
 from sqlmodel import Session, select
-
-from app.config import model, tokenizer, MIN_CLIP_SEARCH_SIMILARITY
+import io
+from PIL import Image
+from app.config import MIN_CLIP_SEARCH_SIMILARITY, model, tokenizer, preprocess
 from app.database import get_session
 from app.logger import logger
+
 from app.models import Media, Person, Tag
+from app.schemas.media import MediaPreview
+from app.schemas.person import PersonReadSimple
 from app.schemas.search import (
     CursorPage,
 )
 from app.schemas.tag import TagRead
-from app.schemas.person import PersonReadSimple
-from app.schemas.media import MediaPreview
 
 router = APIRouter()
+
+
+def encode_uploaded_image(image_bytes: bytes) -> np.ndarray:
+    """
+    Takes raw image bytes, preprocesses them for CLIP, and returns a
+    normalized vector embedding.
+    """
+    try:
+        # Open the image from in-memory bytes
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+    except Exception as e:
+        logger.error(f"Failed to open uploaded image: {e}")
+        raise HTTPException(
+            status_code=400, detail="Invalid or corrupt image file."
+        )
+
+    # Preprocess the image using the same transform your model was trained with
+    image_transformed = preprocess(image).unsqueeze(0)
+
+    with torch.no_grad():
+        # Encode the image to get the feature vector
+        image_feat = model.encode_image(image_transformed)
+        # Normalize the vector (essential for cosine similarity searches)
+        image_feat /= image_feat.norm(dim=-1, keepdim=True)
+
+    return image_feat.squeeze(0).cpu().numpy().tolist()
 
 
 def encode_text_query(query: str) -> np.ndarray:
@@ -27,6 +55,55 @@ def encode_text_query(query: str) -> np.ndarray:
         text_feat = model.encode_text(tokenized)
     text_feat /= text_feat.norm(dim=-1, keepdim=True)
     return text_feat.squeeze(0).cpu().numpy().tolist()
+
+
+@router.post(
+    "/by-image",
+    summary="Search for similar media by uploading an image",
+    response_model=list[MediaPreview],
+)
+def search_by_image(
+    file: UploadFile = File(...),
+    limit: int = 20,
+    session: Session = Depends(get_session),
+):
+    # 1. Read the uploaded file into memory
+    image_bytes = file.file.read()
+
+    # 2. Convert the image into a vector using our new helper function
+    query_vector = encode_uploaded_image(image_bytes)
+
+    # 3. Use the same sqlite-vec query as your other function
+    # Note: We don't add +1 to the limit, as there's no source image to exclude
+    max_dist = 2.0 - MIN_CLIP_SEARCH_SIMILARITY
+    sql = text(
+        """
+        SELECT media_id, distance
+        FROM media_embeddings
+        WHERE embedding MATCH :vec
+            AND k = :k
+            AND distance < :max_dist
+        ORDER BY distance
+        """
+    ).bindparams(vec=json.dumps(query_vector), max_dist=max_dist, k=limit)
+
+    # 4. Execute the query and get the resulting media IDs
+    rows = session.exec(sql).all()
+    media_ids = [row[0] for row in rows]
+
+    if not media_ids:
+        return []
+
+    # 5. Fetch the full Media objects
+    media_objs = session.exec(
+        select(Media).where(Media.id.in_(media_ids))
+    ).all()
+
+    # 6. Reorder them by similarity score and return
+    id_to_obj = {m.id: m for m in media_objs}
+    ordered_media = [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
+
+    return [MediaPreview.model_validate(m) for m in ordered_media]
 
 
 @router.get(
