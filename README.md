@@ -112,7 +112,7 @@ This is the easiest and most reliable way to run the application, as it includes
 3.  **Start the Container:**
     This command will build the Docker image (if it doesn't exist) and start the container.
     ```bash
-    make docker-start
+    ENV_FILE=smol.env make docker-start
     ```
 
 4.  **Access the Application:**
