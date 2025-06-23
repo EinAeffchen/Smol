@@ -415,7 +415,8 @@ def assign_to_existing_persons(
                         WHERE face_id   = :f_id
                     """
                 ).bindparams(p_id=person_id, f_id=face.id)
-
+                person = session.get(Person, person_id)
+                person.appearance_count+=1
                 session.exec(sql)
             else:
 

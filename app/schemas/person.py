@@ -36,6 +36,7 @@ class PersonMedia(SQLModel):
     filename: str
     width: int | None
     height: int | None
+    thumbnail_path: str | None
 
 
 class PersonMinimal(SQLModel):
