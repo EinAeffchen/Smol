@@ -1,4 +1,3 @@
-# app/processors/exif.py
 from pathlib import Path
 from datetime import datetime
 from PIL import ExifTags, ImageFile
@@ -26,7 +25,6 @@ def _decode_bytes(val: bytes) -> str:
 
 
 def _to_decimal(coord, ref):
-    # coord: tuple of 3 rationals or floats, ref: 'N','S','E','W'
     d, m, s = coord
     dec = float(d) + float(m) / 60 + float(s) / 3600
     return dec if ref in ("N", "E") else -dec
@@ -41,7 +39,6 @@ class ExifProcessor(MediaProcessor):
         try:
             raw = img._getexif() or {}
 
-            # 3) map tag IDs → names and decode byte‑strings
             exif = {}
             for tag_id, val in raw.items():
                 tag = ExifTags.TAGS.get(tag_id, tag_id)
@@ -49,7 +46,6 @@ class ExifProcessor(MediaProcessor):
                     val = _decode_bytes(val)
                 exif[tag] = val
 
-            # 4) pull out fields
             make = exif.get("Make")
             model = exif.get("Model")
             dt = exif.get("DateTimeOriginal") or exif.get("DateTime")
@@ -67,11 +63,9 @@ class ExifProcessor(MediaProcessor):
             foc35 = exif.get("FocalLengthIn35mmFilm")
             focal_length = float(foc35) if foc35 else None
 
-            # 5) decode GPSInfo sub‑tags
             gps = raw.get(ExifTags.GPSTAGS and 0x8825) or raw.get(34853) or {}
             lat = lon = None
             if isinstance(gps, dict):
-                # keys are ints; map to names
                 decoded = {
                     ExifTags.GPSTAGS.get(k, k): v for k, v in gps.items()
                 }
@@ -84,7 +78,6 @@ class ExifProcessor(MediaProcessor):
                 if lon_val and lon_ref:
                     lon = _to_decimal(lon_val, lon_ref)
 
-            # 6) persist
             rec = ExifData(
                 media_id=media.id,
                 make=make,
@@ -102,7 +95,6 @@ class ExifProcessor(MediaProcessor):
 
         except Exception as e:
             logger.error("EXIF FAILED: %s", e)
-            # on any decode error, skip silently
             pass
 
     def _process_video(self, media: Media, session: Session):
@@ -131,7 +123,6 @@ class ExifProcessor(MediaProcessor):
                 except ValueError:
                     lat = None
                     lon = None
-            # 6) persist
             rec = ExifData(
                 media_id=media.id,
                 model=model,
@@ -151,13 +142,11 @@ class ExifProcessor(MediaProcessor):
         session,
         scenes: list[tuple[Scene, MatLike]] | list[ImageFile] | list[Scene],
     ):
-        # 1) skip if already extracted
         if session.exec(
             select(ExifData).where(ExifData.media_id == media.id)
         ).first():
             return
 
-        # 2) only on JPEG/TIFF
         fn = Path(media.filename)
         suffix = fn.suffix.lower()
         if suffix in (".jpg", ".jpeg", ".tiff"):

@@ -1,4 +1,3 @@
-# app/api/processors.py
 import json
 
 import numpy as np
@@ -29,7 +28,6 @@ def encode_uploaded_image(image_bytes: bytes) -> np.ndarray:
     normalized vector embedding.
     """
     try:
-        # Open the image from in-memory bytes
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     except Exception as e:
         logger.error(f"Failed to open uploaded image: {e}")
@@ -37,13 +35,10 @@ def encode_uploaded_image(image_bytes: bytes) -> np.ndarray:
             status_code=400, detail="Invalid or corrupt image file."
         )
 
-    # Preprocess the image using the same transform your model was trained with
     image_transformed = preprocess(image).unsqueeze(0)
 
     with torch.no_grad():
-        # Encode the image to get the feature vector
         image_feat = model.encode_image(image_transformed)
-        # Normalize the vector (essential for cosine similarity searches)
         image_feat /= image_feat.norm(dim=-1, keepdim=True)
 
     return image_feat.squeeze(0).cpu().numpy().tolist()
@@ -67,14 +62,10 @@ def search_by_image(
     limit: int = 20,
     session: Session = Depends(get_session),
 ):
-    # 1. Read the uploaded file into memory
     image_bytes = file.file.read()
 
-    # 2. Convert the image into a vector using our new helper function
     query_vector = encode_uploaded_image(image_bytes)
 
-    # 3. Use the same sqlite-vec query as your other function
-    # Note: We don't add +1 to the limit, as there's no source image to exclude
     max_dist = 2.0 - MIN_CLIP_SEARCH_SIMILARITY
     sql = text(
         """
@@ -87,19 +78,16 @@ def search_by_image(
         """
     ).bindparams(vec=json.dumps(query_vector), max_dist=max_dist, k=limit)
 
-    # 4. Execute the query and get the resulting media IDs
     rows = session.exec(sql).all()
     media_ids = [row[0] for row in rows]
 
     if not media_ids:
         return []
 
-    # 5. Fetch the full Media objects
     media_objs = session.exec(
         select(Media).where(Media.id.in_(media_ids))
     ).all()
 
-    # 6. Reorder them by similarity score and return
     id_to_obj = {m.id: m for m in media_objs}
     ordered_media = [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
 
@@ -143,9 +131,8 @@ def search_media(
         min_dist=min_dist,
         k=limit * max_pages,
     )
-    rows = session.exec(sql).all()  # [(media_id, distance), ...]
+    rows = session.exec(sql).all() 
     media_ids = [row[0] for row in rows]
-    # 2) load & order Media
     medias = session.exec(select(Media).where(Media.id.in_(media_ids))).all()
     id_map = {m.id: m for m in medias}
     ordered = [id_map[mid] for mid in media_ids if mid in id_map]
@@ -177,7 +164,6 @@ def search_people(
 
     if cursor:
         try:
-            # Keyset pagination requires both the primary sort key and a unique tie-breaker
             cursor_count, cursor_id = map(int, cursor.split("_"))
             q = q.where(
                 tuple_(Person.appearance_count, Person.id)
@@ -218,28 +204,23 @@ def search_tags(
     if not query:
         return CursorPage(items=[], next_cursor=None)
 
-    # Simplified query without on-the-fly counting
     q = select(Tag).where(Tag.name.ilike(f"%{query}%"))
 
     if cursor:
         try:
-            # For simple sorting by ID, the cursor is just the ID.
             cursor_id = int(cursor)
-            # Find tags with an ID less than the cursor's ID (for DESC order)
             q = q.where(Tag.id < cursor_id)
         except (ValueError, TypeError):
             raise HTTPException(
                 status_code=400, detail="Invalid cursor format"
             )
 
-    # Order by ID descending (newest first) for stable pagination
     q = q.order_by(desc(Tag.id)).limit(limit)
 
     tags = session.exec(q).all()
 
     next_cursor = None
     if len(tags) == limit:
-        # The next cursor is the ID of the last tag on this page.
         next_cursor = str(tags[-1].id)
 
     return CursorPage(

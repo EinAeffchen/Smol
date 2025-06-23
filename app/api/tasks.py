@@ -389,8 +389,7 @@ def assign_to_existing_persons(
 
             if task.status == "cancelled":
                 break
-            # turn your float32 vector into JSON (or raw bytes,
-            # whichever your table expects)
+
             vec_param = json.dumps(emb.tolist())
             sql = text(
                 """
@@ -416,10 +415,10 @@ def assign_to_existing_persons(
                         WHERE face_id   = :f_id
                     """
                 ).bindparams(p_id=person_id, f_id=face.id)
-                # sync your face_embeddings table
+
                 session.exec(sql)
             else:
-                # not matched → keep for later clustering
+
                 unassigned.append(face_id)
 
             task.processed += 1

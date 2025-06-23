@@ -1,4 +1,3 @@
-# app/processors/base.py
 from abc import ABC, abstractmethod
 from sqlmodel import Session
 from app.models import Media, Scene

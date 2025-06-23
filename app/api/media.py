@@ -84,17 +84,13 @@ def list_media(
 
     if sort == "newest":
         sort_col = Media.created_at
-        # Type of the value in the cursor for 'newest'
         parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
     elif sort == "latest":
         sort_col = Media.inserted_at
-        # Type of the value in the cursor for 'latest'
         parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
     else:
-        # Handle invalid sort parameter, perhaps default or raise error
         raise ValueError(f"Unsupported sort option: {sort}")
 
-    # Apply consistent ordering
     q = q.order_by(sort_col.desc(), Media.id.desc())
 
     if cursor:
@@ -105,7 +101,6 @@ def list_media(
         except ValueError:
             logger.warning("Warning: Invalid cursor format: %s", cursor)
         else:
-            # Apply the cursor-based WHERE clause
             q = q.where(
                 or_(
                     sort_col < prev_cursor_val,
@@ -167,14 +162,11 @@ def list_images(
 
     if sort == "newest":
         sort_col = Media.created_at
-        # Type of the value in the cursor for 'newest'
         parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
     elif sort == "latest":
         sort_col = Media.inserted_at
-        # Type of the value in the cursor for 'latest'
         parse_val_from_cursor = lambda val_str: datetime.fromisoformat(val_str)
     else:
-        # Handle invalid sort parameter, perhaps default or raise error
         raise ValueError(f"Unsupported sort option: {sort}")
 
     stmt = stmt.order_by(sort_col.desc(), Media.id.desc())
@@ -187,7 +179,6 @@ def list_images(
         except ValueError:
             logger.warning("Warning: Invalid cursor format: %s", cursor)
         else:
-            # Apply the cursor-based WHERE clause
             stmt = stmt.where(
                 or_(
                     sort_col < prev_cursor_val,
@@ -223,7 +214,6 @@ def list_videos(
     stmt = stmt.order_by(Media.inserted_at.desc())
     if cursor:
         before_id = int(cursor)
-        # keyset predicate
         stmt = stmt.where(Media.id < before_id)
     results = session.exec(stmt.limit(limit)).all()
     next_cursor = str(results[-1].id) if len(results) == limit else None
@@ -304,10 +294,8 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
                 )
             )
     orphans = [f for f in media.faces if not f.person]
-    # 2) take tags straight off media.tags
     return MediaDetail(media=media, persons=persons, orphans=orphans)
 
-#TODO ADD handling of appearancecount at all relevant endpoints and tasks
 @router.get(
     "/{media_id}/scenes.vtt",
     response_class=PlainTextResponse,
@@ -327,11 +315,9 @@ def scenes_vtt(
         empty_vtt = "WEBVTT\n\n"
         return PlainTextResponse(empty_vtt, media_type="text/vtt")
 
-    # Build WebVTT text
     lines = ["WEBVTT", ""]
     for s in scenes:
         start = format_timestamp(s.start_time)
-        # pick a tiny epsilon if end_time is missing
         end_time = s.end_time or (s.start_time + 0.1)
         end = format_timestamp(end_time)
         lines += [
@@ -394,13 +380,10 @@ def delete_media_record(
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
 
-    # 1) delete all Face rows referencing this media
     session.exec(delete(Face).where(Face.media_id == media_id))
-    # 2) delete all tag links for this media
     session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
     session.exec(delete(ExifData).where(ExifData.media_id == media_id))
     session.exec(delete(Scene).where(Scene.media_id == media.id))
-    # 3) delete the Media row itself
     session.delete(media)
 
     safe_commit(session)
@@ -438,11 +421,9 @@ def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
     if not media_ids:
         return []
 
-    # 5) fetch the actual Media rows
     stmt = select(Media).where(Media.id.in_(media_ids))
     media_objs = session.exec(stmt).all()
 
-    # 6) reorder them by the original KNN order
     id_to_obj = {m.id: m for m in media_objs}
     return [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
 

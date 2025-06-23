@@ -5,6 +5,7 @@ import Masonry from "react-masonry-css";
 import ImportExportIcon from "@mui/icons-material/ImportExport";
 import { API } from "../config";
 import MediaCard from "../components/MediaCard";
+import { MediaIndex } from "../types";
 import {
   Box,
   CircularProgress,
@@ -39,7 +40,6 @@ export default function ImagesPage() {
       return fetch(`${API}/api/media/images?${params.toString()}`).then(
         (res) => {
           if (!res.ok) throw new Error(res.statusText);
-          // Ensure your API returns { items: [], next_cursor: "..." }
           return res.json() as Promise<CursorResponse<MediaIndex>>;
         }
       );
@@ -58,7 +58,6 @@ export default function ImagesPage() {
     setSortMenuAnchorEl(null);
   };
   const handleSortChange = (newSortOrder: "newest" | "latest") => {
-    // When changing sort, reset the scroll position memory
     setSortOrder(newSortOrder);
     handleSortMenuClose();
   };

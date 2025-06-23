@@ -138,7 +138,6 @@ def suggest_faces(
         )
         for f in ordered
     ]
-#TODO write function to properly calulcate appearance count on face changes
 
 @router.get("/{person_id}/faces", response_model=FaceCursorPage)
 def get_faces(
@@ -189,7 +188,6 @@ def get_appearances(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    # Base query: Select DISTINCT media items for this person
     q = (
         select(Media)
         .distinct()
@@ -239,10 +237,10 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         select(func.count(distinct(Media.id)))
         .join_from(
             Person, Face, Face.person_id == Person.id
-        )  # Joins Person to Face
+        ) 
         .join_from(
             Face, Media, Face.media_id == Media.id
-        )  # Joins Face to Media
+        )
         .where(Person.id == person_id)
     )
     media_count = session.scalar(stmt)
@@ -333,12 +331,11 @@ def merge_persons(
             status_code=404, detail="Source or target person not found"
         )
 
-    # Reassign all faces from source -> target
     session.exec(
         update(Face).where(Face.person_id == sid).values(person_id=tid)
     )
 
-    # Delete the now-empty source person
+
     session.delete(source)
     safe_commit(session)
     update_person_embedding(session, tid)
@@ -349,7 +346,7 @@ def merge_persons(
         """
     ).bindparams(p_id=sid)
     session.exec(sql)
-    # Return the updated target person
+
     session.refresh(target)
     safe_commit(session)
     return target
@@ -369,7 +366,7 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    # 1) delete all Face rows for this person (and remove thumbnails)
+
     faces = session.exec(select(Face).where(Face.person_id == person_id)).all()
     for face in faces:
         face.person_id = None
@@ -388,25 +385,22 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
         """
     ).bindparams(p_id=person.id)
     session.exec(sql)
-    # 2) remove any person–tag links
     session.exec(
         delete(PersonTagLink).where(PersonTagLink.person_id == person_id)
     )
 
-    # 3) delete the Person record itself
     session.delete(person)
     safe_commit(session)
 
 
 @router.get(
     "/{person_id}/similarities",
-    response_model=list[SimilarPerson],  # Uses the updated SimilarPerson model
+    response_model=list[SimilarPerson], 
     summary="Get stored similarity scores for a person including name and thumbnail",
 )
 def get_similarities(
     person_id: int,
     session: Session = Depends(get_session),
-    # k_neighbors: int = 20, # Optional: make 'k' a query parameter
 ):
     person = session.get(Person, person_id)
     if not person:
@@ -414,15 +408,14 @@ def get_similarities(
 
     vec = get_person_embedding(
         session, person_id
-    )  # Assuming this returns the embedding vector
+    )
     if (
         vec is None
-    ):  # If the target person has no embedding, no similarities can be found
+    ): 
         return []
 
-    k_val = 20  # Your desired number of neighbors
+    k_val = 20 
 
-    # Updated SQL query
     sql = text(
         """
         SELECT

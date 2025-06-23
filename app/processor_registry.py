@@ -1,4 +1,3 @@
-# app/processor_registry.py
 import pkgutil
 import importlib
 from pathlib import Path
@@ -6,7 +5,6 @@ from pathlib import Path
 from app.processors.base import MediaProcessor
 from app.logger import logger
 
-# this will hold instances of every MediaProcessor
 processors: list[MediaProcessor] = []
 
 

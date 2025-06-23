@@ -14,7 +14,6 @@ export const getTheme = (mode: ThemeMode) =>
             primary: { main: "#3f51b5" },
             background: { default: "#f5f5f5", paper: "#ffffff" },
             text: { primary: "#212121" },
-            // Your custom colors
             accent: { main: "#ff4081" },
           }
         : {
@@ -22,7 +21,6 @@ export const getTheme = (mode: ThemeMode) =>
             primary: { main: "#90caf9" },
             background: { default: "#212025", paper: "#2c2b30" },
             text: { primary: "#F8F8F8" },
-            // Your custom colors (from tailwind.config.js)
             accent: { main: "#FF007F" },
           }),
     },

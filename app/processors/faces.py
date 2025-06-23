@@ -1,4 +1,3 @@
-# app/processors/exif.py
 import json
 import time
 from pathlib import Path
@@ -6,7 +5,7 @@ from pathlib import Path
 import numpy as np
 from cv2.typing import MatLike
 from insightface.app import FaceAnalysis
-from config import MODELS_DIR
+from app.config import MODELS_DIR
 from PIL import Image
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text

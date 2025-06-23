@@ -1,4 +1,3 @@
-# app/api/processors.py
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlmodel import Session
 from app.models import Media, ProcessingTask
@@ -68,7 +67,6 @@ def start_conversion(
 def _run_conversion(task_id: str, media_path: str, media_id: int):
     with Session(engine) as session:
         task: ProcessingTask = session.get(ProcessingTask, task_id)
-        # mark running
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
         session.add(task)
@@ -114,15 +112,12 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
 
         for line in proc.stdout:
             # ffmpeg -progress emits lines like "out_time_ms=1234567" etc.
-            # you can parse 'out_time_ms' vs 'duration' to get percent.
             if line.startswith("out_time_ms="):
                 out_us: str = line.split("=")[1].strip()
                 if out_us.isnumeric():
                     out_us = int(out_us)
                 else:
                     continue
-                # (you’d have stored the total duration earlier, or probe it now)
-                # let’s assume `dur_ms` is known:
                 pct = min(100, int(out_us / dur_us * 100))
                 task.processed = pct
                 session.add(task)
@@ -131,7 +126,6 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
                 break
 
         proc.wait()
-        # mark complete
         task.processed = 100
         task.status = "completed"
         task.finished_at = datetime.now(timezone.utc)

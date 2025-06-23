@@ -39,10 +39,8 @@ export default function IndexPage() {
       tags.forEach((tag) => params.append("tags", tag));
       if (cursor) params.set("cursor", cursor);
 
-      // Ensure your API endpoint name is correct
       return fetch(`${API}/api/media/?${params.toString()}`).then((res) => {
         if (!res.ok) throw new Error(res.statusText);
-        // Ensure your API returns { items: [], next_cursor: "..." }
         return res.json() as Promise<CursorResponse<MediaIndex>>;
       });
     },

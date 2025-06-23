@@ -57,7 +57,6 @@ export default function SearchResultsPage() {
 
       return fetch(`${API}${endpointPath}?${params.toString()}`).then((res) => {
         if (!res.ok) throw new Error(res.statusText);
-        // The response is now a simple list of one type of item
         return res.json() as Promise<CursorResponse<Media | Person | Tag>>;
       });
     },

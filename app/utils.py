@@ -159,10 +159,8 @@ def get_person_embedding(
 
 
 def update_person_embedding(session: Session, person_id: int):
-    # Retrieve all embeddings associated with this person
     centroid = get_person_embedding(session, person_id, new=True)
 
-    # Update the embedding in your embeddings table
     sql = text(
         """
         INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
