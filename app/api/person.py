@@ -1,10 +1,7 @@
-import json
 from datetime import datetime
 
-import numpy as np
 from fastapi import (
     APIRouter,
-    BackgroundTasks,
     Depends,
     HTTPException,
     Query,
@@ -28,6 +25,7 @@ from app.schemas.person import (
     PersonRead,
     PersonUpdate,
     ProfileFace,
+    PersonReadSimple,
     SimilarPerson,
 )
 from app.utils import (
@@ -139,6 +137,7 @@ def suggest_faces(
         for f in ordered
     ]
 
+
 @router.get("/{person_id}/faces", response_model=FaceCursorPage)
 def get_faces(
     person_id: int,
@@ -174,9 +173,19 @@ def get_faces(
     return FaceCursorPage(next_cursor=next_cursor, items=faces)
 
 
+@router.get("/all-simple", response_model=list[PersonReadSimple])
+def get_all_persons_simple(session: Session = Depends(get_session)):
+    """Returns a lightweight list of all persons for filter selections."""
+    people = session.exec(select(Person).order_by(Person.name)).all()
+    return [PersonReadSimple.model_validate(p) for p in people]
+
+
 @router.get("/{person_id}/media-appearances", response_model=MediaCursorPage)
 def get_appearances(
     person_id: int,
+    with_person_ids: list[int] = Query(
+        [], description="Filter for media that also includes these person IDs"
+    ),
     limit: int = 30,
     cursor: str | None = Query(
         None,
@@ -188,11 +197,20 @@ def get_appearances(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    q = (
-        select(Media)
-        .distinct()
-        .join(Face, Face.media_id == Media.id)
-        .where(Face.person_id == person_id)
+    all_required_ids = list(set([person_id] + with_person_ids))
+    required_ids_count = len(all_required_ids)
+
+    media_id_subquery = (
+        select(Face.media_id)
+        .where(Face.person_id.in_(all_required_ids))
+        .group_by(Face.media_id)
+        .having(
+            func.count(func.distinct(Face.person_id)) == required_ids_count
+        )
+    ).subquery()
+
+    q = select(Media).join(
+        media_id_subquery, Media.id == media_id_subquery.c.media_id
     )
 
     if cursor:
@@ -235,12 +253,8 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         session.refresh(person)
     stmt = (
         select(func.count(distinct(Media.id)))
-        .join_from(
-            Person, Face, Face.person_id == Person.id
-        ) 
-        .join_from(
-            Face, Media, Face.media_id == Media.id
-        )
+        .join_from(Person, Face, Face.person_id == Person.id)
+        .join_from(Face, Media, Face.media_id == Media.id)
         .where(Person.id == person_id)
     )
     media_count = session.scalar(stmt)
@@ -335,7 +349,6 @@ def merge_persons(
         update(Face).where(Face.person_id == sid).values(person_id=tid)
     )
 
-
     session.delete(source)
     safe_commit(session)
     update_person_embedding(session, tid)
@@ -366,7 +379,6 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-
     faces = session.exec(select(Face).where(Face.person_id == person_id)).all()
     for face in faces:
         face.person_id = None
@@ -395,7 +407,7 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
 
 @router.get(
     "/{person_id}/similarities",
-    response_model=list[SimilarPerson], 
+    response_model=list[SimilarPerson],
     summary="Get stored similarity scores for a person including name and thumbnail",
 )
 def get_similarities(
@@ -406,15 +418,11 @@ def get_similarities(
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    vec = get_person_embedding(
-        session, person_id
-    )
-    if (
-        vec is None
-    ): 
+    vec = get_person_embedding(session, person_id)
+    if vec is None:
         return []
 
-    k_val = 20 
+    k_val = 20
 
     sql = text(
         """

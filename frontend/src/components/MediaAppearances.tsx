@@ -1,8 +1,8 @@
-import React, { useCallback } from "react";
-import { Box, CircularProgress } from "@mui/material";
+import React, { useCallback, useState, useEffect } from "react";
+import { Box, CircularProgress, Autocomplete, TextField } from "@mui/material";
 import Masonry from "react-masonry-css";
 import { useInfinite, CursorResponse } from "../hooks/useInfinite";
-import { Media, Person } from "../types";
+import { Media, Person, PersonReadSimple } from "../types";
 import MediaCard from "./MediaCard";
 import { API } from "../config";
 
@@ -21,6 +21,19 @@ interface MediaAppearancesProps {
   person: Person;
 }
 export default function MediaAppearances({ person }: MediaAppearancesProps) {
+  const [personOptions, setPersonOptions] = useState<PersonReadSimple[]>([]);
+  const [filterPeople, setFilterPeople] = useState<PersonReadSimple[]>([]);
+
+  useEffect(() => {
+    fetch(`${API}/api/persons/all-simple`)
+      .then((res) => res.json())
+      .then((data) => {
+        // Exclude the current person from the list of options
+        setPersonOptions(data.filter((p: Person) => p.id !== person.id));
+      })
+      .catch((err) => console.error("Failed to fetch person options:", err));
+  }, [person.id]);
+
   const fetchPage = useCallback(
     (cursor: string | null, limit: number) => {
       const params = new URLSearchParams();
@@ -28,6 +41,9 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
       if (cursor) {
         params.set("cursor", cursor);
       }
+      filterPeople.forEach((p) =>
+        params.append("with_person_ids", String(p.id))
+      );
 
       const url = `${API}/api/persons/${
         person.id
@@ -38,17 +54,37 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
         return res.json() as Promise<CursorResponse<Media>>;
       });
     },
-    [person.id] // Re-fetch if the person changes
+    [person.id, filterPeople]
   );
 
   const { items, hasMore, loading, loaderRef } = useInfinite<Media>(
     fetchPage,
     ITEMS_PER_PAGE,
-    [person.id] // Dependency array for useInfinite to reset on person change
+    [person.id, filterPeople]
   );
 
   return (
     <Box>
+      <Box sx={{ mb: 2, p: 2, bgcolor: "background.paper", borderRadius: 1 }}>
+        <Autocomplete
+          multiple
+          limitTags={3}
+          options={personOptions}
+          getOptionLabel={(option) => option.name || `Person ${option.id}`}
+          value={filterPeople}
+          onChange={(event, newValue) => {
+            setFilterPeople(newValue);
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              variant="standard"
+              label="Filter by photos also including..."
+              placeholder="Select people"
+            />
+          )}
+        />
+      </Box>
       <Masonry
         breakpointCols={breakpointColumnsObj}
         className="my-masonry-grid"
