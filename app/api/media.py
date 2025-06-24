@@ -288,7 +288,6 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
         .group_by(Person.id)
         .options(selectinload(Media.tags))
     )
-    logger.info(statement)
     rows = session.exec(statement).all()
     if not rows:
         raise HTTPException(404, "Media not found")

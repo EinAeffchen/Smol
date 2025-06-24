@@ -200,25 +200,26 @@ def get_appearances(
     all_required_ids = list(set([person_id] + with_person_ids))
     required_ids_count = len(all_required_ids)
 
-    media_id_subquery = (
+    media_id_q = (
         select(Face.media_id)
         .where(Face.person_id.in_(all_required_ids))
         .group_by(Face.media_id)
         .having(
             func.count(func.distinct(Face.person_id)) == required_ids_count
         )
-    ).subquery()
-
-    q = select(Media).join(
-        media_id_subquery, Media.id == media_id_subquery.c.media_id
     )
+    matching_media_ids = session.exec(media_id_q).all()
+
+    if not matching_media_ids:
+        return CursorPage(items=[], next_cursor=None)
+
+    q = select(Media).where(Media.id.in_(matching_media_ids))
 
     if cursor:
         try:
             created_at_str, media_id_str = cursor.rsplit("_", 1)
             cursor_created_at = datetime.fromisoformat(created_at_str)
             cursor_media_id = int(media_id_str)
-
             q = q.where(
                 tuple_(Media.created_at, Media.id)
                 < (cursor_created_at, cursor_media_id)
@@ -257,6 +258,7 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         .join_from(Face, Media, Face.media_id == Media.id)
         .where(Person.id == person_id)
     )
+    logger.info(stmt)
     media_count = session.scalar(stmt)
     return PersonDetail(
         id=person.id,
