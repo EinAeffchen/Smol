@@ -22,7 +22,18 @@ import { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import { Link } from "react-router-dom";
 import { API, READ_ONLY } from "../config";
-import { Face, Person } from "../types";
+import { Face, Person, FaceRead } from "../types";
+import { useNavigate, useLocation } from "react-router-dom";
+
+interface FaceCardProps {
+  face: Face;
+  isProfile: boolean;
+  onSetProfile: (faceId: number) => void;
+  onAssign: (personId: number) => void;
+  onCreate: (data: { name?: string }) => void;
+  onDelete: () => void;
+  onDetach: () => void;
+}
 
 export default function FaceCard({
   face,
@@ -32,15 +43,12 @@ export default function FaceCard({
   onCreate,
   onDelete,
   onDetach,
-}: {
-  face: Face;
-  isProfile: boolean;
-  onSetProfile: (faceId: number) => void;
-  onAssign: (personId: number) => void;
-  onCreate: (data: { name?: string }) => void;
-  onDelete: () => void;
-  onDetach: () => void;
-}) {
+}: FaceCardProps) {
+  const thumbUrl = `${API}/thumbnails/${face.thumbnail_path}`;
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const [mode, setMode] = useState<"none" | "search" | "new">("none");
   const cardRef = useRef<HTMLDivElement>(null);
   const [dropdownPosition, setDropdownPosition] = useState<{
@@ -80,6 +88,23 @@ export default function FaceCard({
       setDropdownPosition(null);
     }
   }, [mode]);
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    navigate(`/medium/${face.media_id}`, {
+      state: {
+        backgroundLocation: location,
+      },
+    });
+  };
+
+  const handleSetProfileClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (onSetProfile) {
+      onSetProfile(face.id);
+    }
+  };
 
   const renderDropdownContent = () => {
     if (!dropdownPosition) return null;
@@ -227,29 +252,31 @@ export default function FaceCard({
   return (
     <>
       <Card
+        elevation={2}
         ref={cardRef}
         sx={{
           width: 130,
           bgcolor: "background.paper",
           color: "text.primary",
           position: "relative",
+          overflow: "hidden",
+          cursor: "pointer",
           zIndex: mode !== "none" ? (theme) => theme.zIndex.modal : "auto",
           "&:hover .hover-actions": { opacity: 1 },
         }}
       >
         <Box sx={{ position: "relative" }}>
-          <CardActionArea component={Link} to={`/medium/${face.media_id}`}>
-            <Avatar
-              src={`${API}/thumbnails/${face.thumbnail_path}`}
-              variant="rounded"
-              sx={{
-                width: "100%",
-                height: 124,
-                border: isProfile ? "3px solid" : "none",
-                borderColor: "accent.main",
-              }}
-            />
-          </CardActionArea>
+          <Avatar
+            src={`${API}/thumbnails/${face.thumbnail_path}`}
+            variant="rounded"
+            sx={{
+              width: "100%",
+              height: 124,
+              border: isProfile ? "3px solid" : "none",
+              borderColor: "accent.main",
+            }}
+            onClick={handleCardClick}
+          />
           {!READ_ONLY && (
             <Box
               className="hover-actions"

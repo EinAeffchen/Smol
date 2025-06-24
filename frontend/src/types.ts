@@ -14,6 +14,18 @@ export interface Media {
   extracted_scenes: boolean;
 }
 
+export interface ProfileFace {
+  id: number;
+  thumbnail_path?: string;
+  media_id?: number;
+}
+
+export interface PersonReadSimple {
+  id: number;
+  name?: string;
+  profile_face: ProfileFace;
+}
+
 export interface Tag {
   id: number;
   name: string;
@@ -39,7 +51,6 @@ export interface Face {
   media_id: number;
   person_id?: number;
   thumbnail_path: string;
-  embedding?: number[];
   person?: Person;
 }
 export interface FaceRead {

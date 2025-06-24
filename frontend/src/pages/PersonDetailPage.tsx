@@ -14,7 +14,7 @@ import {
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
 import { useCallback, useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { PersonContentTabs } from "../components/PersonContentTabs";
 import { PersonHero } from "../components/PersonHero";
 import { API } from "../config";
@@ -30,6 +30,7 @@ import {
 
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
 
   const [person, setPerson] = useState<Person | null>(null);
@@ -118,20 +119,6 @@ export default function PersonDetailPage() {
     },
     [fetchMediaPage]
   );
-
-  const loadMoreMedia = useCallback(async () => {
-    if (!id || !mediaNextCursor || loadingMoreMedia || !hasMoreMedia) return;
-    setLoadingMoreMedia(true);
-    const pageData = await fetchMediaPage(id, mediaNextCursor);
-    if (pageData?.items) {
-      setMediaList((prev) => [...prev, ...pageData.items]);
-      setMediaNextCursor(pageData.next_cursor);
-      setHasMoreMedia(!!pageData.next_cursor);
-    } else {
-      setHasMoreMedia(false);
-    }
-    setLoadingMoreMedia(false);
-  }, [id, mediaNextCursor, loadingMoreMedia, hasMoreMedia, fetchMediaPage]);
 
   const loadDetail = useCallback(
     async (signal?: AbortSignal) => {
@@ -292,7 +279,7 @@ export default function PersonDetailPage() {
     return () => {
       controller.abort();
     };
-  }, [id]);
+  }, [id, location.key]);
 
   const handleAssignWrapper = async (
     faceId: number,

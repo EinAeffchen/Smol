@@ -225,6 +225,9 @@ def get_neighbors(
     media_id: int,
     session: Session = Depends(get_session),
     sort: Annotated[str, Query(enum=["newest", "latest"])] = "newest",
+    filter_people: list[int] | None = Query(
+        [], description="Provide a persons context for navigation"
+    ),
 ):
     if sort == "newest":
         sort_col = Media.created_at
@@ -240,19 +243,32 @@ def get_neighbors(
         raise HTTPException(404, "Media not found")
 
     original_sort_value = getattr(original, sort_col_name)
-    q = select(Media).order_by(sort_col.desc(), Media.id.desc())
+    q = select(Media)
 
-    previous_query = q.where(
-        tuple_(sort_col, Media.id) > (original_sort_value, original.id)
-    ).limit(1)
-    next_query = q.where(
-        tuple_(sort_col, Media.id) < (original_sort_value, original.id)
-    ).limit(1)
+    if filter_people:
+        q = q.join(Face, Face.media_id == Media.id).where(
+            Face.person_id.in_(filter_people)
+        )
+
+    previous_query = (
+        q.where(
+            tuple_(sort_col, Media.id) > (original_sort_value, original.id)
+        )
+        .order_by(sort_col.asc(), Media.id.asc())
+        .limit(1)
+    )
+    next_query = (
+        q.where(
+            tuple_(sort_col, Media.id) < (original_sort_value, original.id)
+        )
+        .order_by(sort_col.desc(), Media.id.desc())
+        .limit(1)
+    )
     prev_row = session.exec(previous_query).first()
     next_row = session.exec(next_query).first()
     return MediaNeighbors(
-        next_id=next_row.id if next_row else None,
-        previous_id=prev_row.id if prev_row else None,
+        next_media=MediaPreview.model_validate(next_row),
+        previous_media=MediaPreview.model_validate(prev_row),
     )
 
 
@@ -272,6 +288,7 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
         .group_by(Person.id)
         .options(selectinload(Media.tags))
     )
+    logger.info(statement)
     rows = session.exec(statement).all()
     if not rows:
         raise HTTPException(404, "Media not found")
@@ -295,6 +312,7 @@ def get_media(media_id: int, session: Session = Depends(get_session)):
             )
     orphans = [f for f in media.faces if not f.person]
     return MediaDetail(media=media, persons=persons, orphans=orphans)
+
 
 @router.get(
     "/{media_id}/scenes.vtt",
@@ -345,7 +363,7 @@ def delete_file(session: Session, media_id: int):
     if not media.thumbnail_path:
         thumb = THUMB_DIR / f"{media.id}.jpg"
     else:
-        thumb = THUMB_DIR/media.thumbnail_path
+        thumb = THUMB_DIR / media.thumbnail_path
     if thumb.exists():
         thumb.unlink()
 

@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
   Card,
   CardActionArea,
@@ -25,13 +25,20 @@ function formatDuration(d?: number): string {
 interface MediaCardProps {
   media: Media;
   sortOrder?: "newest" | "latest";
+  filterPeople?: Person[];
 }
 
 export default function MediaCard({
   media,
   sortOrder = "newest",
+  filterPeople
 }: MediaCardProps) {
   const theme = useTheme();
+  const [hovered, setHovered] = useState(false);
+
+  const navigate = useNavigate();
+  const location = useLocation();
+
   const isVideo = typeof media.duration === "number";
   const mediaUrl = `${API}/originals/${media.path}`;
   let thumbUrl;
@@ -40,8 +47,19 @@ export default function MediaCard({
   } else {
     thumbUrl = `${API}/thumbnails/${media.id}.jpg`;
   }
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    // Navigate to the detail URL, but pass the current location in the state.
+    // This tells our App.tsx router to open it as a modal.
+    navigate(`/medium/${media.id}`, {
+      state: {
+        backgroundLocation: location,
+        viewContext: { sort: sortOrder, filterPeople: filterPeople },
+        media: media
+      },
+    });
+  };
 
-  const [hovered, setHovered] = useState(false);
   return (
     <Card
       elevation={0}
@@ -58,13 +76,7 @@ export default function MediaCard({
       }}
     >
       <CardActionArea
-        component={Link}
-        to={`/medium/${media.id}`}
-        state={{
-          viewContext: {
-            sort: sortOrder,
-          },
-        }}
+        onClick={handleClick}
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
       >

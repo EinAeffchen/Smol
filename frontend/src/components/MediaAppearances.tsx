@@ -1,4 +1,4 @@
-import React, { useCallback, useState, useEffect } from "react";
+import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { Box, CircularProgress, Autocomplete, TextField } from "@mui/material";
 import Masonry from "react-masonry-css";
 import { useInfinite, CursorResponse } from "../hooks/useInfinite";
@@ -63,6 +63,13 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
     [person.id, filterPeople]
   );
 
+  const highlightPersonIds = useMemo(() => {
+    const filterIds = filterPeople.map((p) => p.id);
+
+    const uniqueIds = new Set([person.id, ...filterIds]);
+
+    return Array.from(uniqueIds);
+  }, [person.id, filterPeople]);
   return (
     <Box>
       <Box sx={{ mb: 2, p: 2, bgcolor: "background.paper", borderRadius: 1 }}>
@@ -92,7 +99,7 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
       >
         {items.map((media) => (
           <div key={media.id}>
-            <MediaCard media={media} />
+            <MediaCard media={media} filterPeople={highlightPersonIds} />
           </div>
         ))}
       </Masonry>

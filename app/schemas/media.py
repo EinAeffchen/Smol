@@ -65,8 +65,8 @@ class MediaDetail(SQLModel):
 
 
 class MediaNeighbors(SQLModel):
-    next_id: int | None
-    previous_id: int | None
+    next_media: MediaPreview | None
+    previous_media: MediaPreview | None
 
 
 class GeoUpdate(SQLModel):
