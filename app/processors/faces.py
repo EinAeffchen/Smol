@@ -6,7 +6,7 @@ import numpy as np
 from cv2.typing import MatLike
 from insightface.app import FaceAnalysis
 from app.config import MODELS_DIR
-from PIL import Image
+from PIL import Image, ImageOps
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text
 from tqdm import tqdm
@@ -106,6 +106,7 @@ class FaceProcessor(MediaProcessor):
                     scene = scene[1]
                 elif isinstance(scene, Scene):
                     scene = Image.open(THUMB_DIR / scene.thumbnail_path)
+                    scene = ImageOps.exif_transpose(scene)
                     scene = np.array(scene.convert("RGB"))
                 else:
                     scene = np.array(scene.convert("RGB"))

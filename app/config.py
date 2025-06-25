@@ -76,6 +76,12 @@ if ENABLE_PEOPLE.lower() == "true":
 else:
     ENABLE_PEOPLE = False
 
+AUTO_ROTATE = os.environ.get("AUTO_ROTATE", "True")
+if AUTO_ROTATE.lower() == "true":
+    AUTO_ROTATE = True
+else:
+    AUTO_ROTATE = False
+
 AUTO_CLUSTER = os.environ.get("AUTO_CLUSTER", "False")
 if AUTO_CLUSTER.lower() == "true":
     AUTO_CLUSTER = True

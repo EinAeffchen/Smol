@@ -22,6 +22,7 @@ from app.config import (
     THUMB_DIR,
     THUMB_DIR_FOLDER_SIZE,
     VIDEO_SUFFIXES,
+    AUTO_ROTATE,
 )
 from app.database import engine, safe_commit
 from app.logger import logger
@@ -88,11 +89,33 @@ def get_thumb_folder(path: Path) -> Path:
         return latest
 
 
+def fix_image_rotation(full_path: Path) -> None:
+    if not AUTO_ROTATE:
+        return
+
+    img = Image.open(full_path)
+    exif = img.getexif()
+    orientation = exif.get(274)
+    if not orientation or orientation == 1:
+        return
+    try:
+        transposed = ImageOps.exif_transpose(img)
+    except OSError:
+        logger.warning(
+            "Image: %s is truncated, you might want to delete it.", full_path
+        )
+        return
+    del exif[274]
+    exif_bytes = exif.tobytes()
+    transposed.save(full_path, format=img.format, exif=exif_bytes)
+
+
 def generate_thumbnail(media: Media) -> str | None:
     thumb_folder = get_thumb_folder(THUMB_DIR / "media")
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
     full_path = MEDIA_DIR / filepath
+    fix_image_rotation(full_path)
     if filepath.suffix.lower() in VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)
