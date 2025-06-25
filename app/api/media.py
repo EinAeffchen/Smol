@@ -8,6 +8,7 @@ from fastapi.responses import PlainTextResponse
 from sqlalchemy import and_, delete, or_, text, func, tuple_
 from sqlalchemy.orm import selectinload, aliased
 from sqlmodel import Session, select
+from pathlib import Path
 from app.config import (
     READ_ONLY,
     MEDIA_DIR,
@@ -250,6 +251,8 @@ def get_neighbors(
             Face.person_id.in_(filter_people)
         )
 
+    
+
     previous_query = (
         q.where(
             tuple_(sort_col, Media.id) > (original_sort_value, original.id)
@@ -266,9 +269,15 @@ def get_neighbors(
     )
     prev_row = session.exec(previous_query).first()
     next_row = session.exec(next_query).first()
+    next_media = None
+    previous_media = None
+    if next_row:
+        next_media = MediaPreview.model_validate(next_row)
+    if prev_row:
+        previous_media = MediaPreview.model_validate(prev_row)
     return MediaNeighbors(
-        next_media=MediaPreview.model_validate(next_row),
-        previous_media=MediaPreview.model_validate(prev_row),
+        next_media=next_media,
+        previous_media=previous_media,
     )
 
 
@@ -396,6 +405,31 @@ def delete_media_record(
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
+
+    thumbnail = media.thumbnail_path
+    thumb = Path(THUMB_DIR / thumbnail)
+    if thumb.is_file():
+        thumb.unlink()
+    faces = session.exec(select(Face).where(Face.media_id == media.id)).all()
+    for face in faces:
+        sql = text(
+            """
+            DELETE FROM face_embeddings
+            WHERE face_id=:f_id
+            """
+        ).bindparams(f_id=face.id)
+        session.exec(sql)
+        thumb = Path(THUMB_DIR / face.thumbnail_path)
+        if thumb.is_file():
+            thumb.unlink()
+
+    sql = text(
+        """
+        DELETE FROM media_embeddings
+        WHERE media_id=:m_id
+        """
+    ).bindparams(m_id=media.id)
+    session.exec(sql)
 
     session.exec(delete(Face).where(Face.media_id == media_id))
     session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
