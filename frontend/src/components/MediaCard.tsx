@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import {
   Card,
@@ -12,6 +12,7 @@ import { Media } from "../types";
 import { API } from "../config";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
+import { Person } from "../types";
 
 function formatDuration(d?: number): string {
   if (d == null) return "";
@@ -31,10 +32,11 @@ interface MediaCardProps {
 export default function MediaCard({
   media,
   sortOrder = "newest",
-  filterPeople
+  filterPeople,
 }: MediaCardProps) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -49,17 +51,37 @@ export default function MediaCard({
   }
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Navigate to the detail URL, but pass the current location in the state.
-    // This tells our App.tsx router to open it as a modal.
+
+    const isAlreadyInModal = !!location.state?.backgroundLocation;
+
     navigate(`/medium/${media.id}`, {
+      replace: isAlreadyInModal,
       state: {
-        backgroundLocation: location,
+        backgroundLocation: isAlreadyInModal
+          ? location.state.backgroundLocation
+          : location,
         viewContext: { sort: sortOrder, filterPeople: filterPeople },
-        media: media
+        media: media,
       },
     });
   };
 
+  const handleMouseEnter = () => {
+    setHovered(true);
+    if (videoRef.current) {
+      videoRef.current.play().catch((err) => {
+        console.error("Video play failed:", err);
+      });
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setHovered(false);
+    if (videoRef.current) {
+      videoRef.current.pause();
+      videoRef.current.currentTime = 0; // Rewind video
+    }
+  };
   return (
     <Card
       elevation={0}
@@ -77,24 +99,61 @@ export default function MediaCard({
     >
       <CardActionArea
         onClick={handleClick}
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        sx={{
+          // Use a pseudo-element for aspect ratio to prevent layout shift
+          position: "relative",
+          display: "block",
+          width: "100%",
+          paddingTop: "100%", // For 1:1 aspect ratio. Use '56.25%' for 16:9
+        }}
       >
-        <CardMedia
-          component={isVideo && hovered ? "video" : "img"}
-          src={isVideo && hovered ? mediaUrl : thumbUrl}
-          image={isVideo && hovered ? undefined : thumbUrl}
-          alt={media.filename}
-          autoPlay={isVideo && hovered}
-          muted
-          loop
-          playsInline
+        {/* Container for media elements that will fill the parent */}
+        <Box
           sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
             width: "100%",
-            height: "auto",
-            display: "block",
+            height: "100%",
           }}
-        />
+        >
+          {/* Thumbnail Image - Controls opacity */}
+          <CardMedia
+            component="img"
+            src={thumbUrl}
+            alt={media.filename}
+            sx={{
+              position: "absolute",
+              width: "100%",
+              height: "100%",
+              objectFit: "cover",
+              opacity: hovered && isVideo ? 0 : 1,
+              transition: "opacity 0.3s ease-in-out",
+            }}
+          />
+
+          {/* Video Player - Controls opacity */}
+          {isVideo && (
+            <CardMedia
+              ref={videoRef}
+              component="video"
+              src={mediaUrl}
+              muted
+              loop
+              playsInline
+              sx={{
+                position: "absolute",
+                width: "100%",
+                height: "100%",
+                objectFit: "cover",
+                opacity: hovered ? 1 : 0,
+                transition: "opacity 0.3s ease-in-out",
+              }}
+            />
+          )}
+        </Box>
 
         {isVideo && (
           <Box
@@ -111,15 +170,16 @@ export default function MediaCard({
               justifyContent: "center",
               width: 64,
               height: 64,
-              opacity: 0.8,
               pointerEvents: "none",
-              transition: "opacity 0.2s ease-in-out",
+              transition: "opacity 0.3s ease-in-out",
+              opacity: hovered ? 0 : 0.8, // Hide on hover
             }}
           >
             <PlayArrowIcon sx={{ fontSize: "3rem" }} />
           </Box>
         )}
 
+        {/* Gradient and Info overlay */}
         <Box
           sx={{
             position: "absolute",
@@ -129,10 +189,9 @@ export default function MediaCard({
             height: "100%",
             background:
               "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 50%)",
-            "& > div": {
-              opacity: hovered ? 1 : 0,
-              transition: "opacity 0.2s ease-in-out",
-            },
+            opacity: hovered ? 1 : 0, // Fade the whole overlay in on hover
+            transition: "opacity 0.3s ease-in-out",
+            pointerEvents: "none", // Allow clicks to pass through to the CardActionArea
           }}
         >
           <Box
