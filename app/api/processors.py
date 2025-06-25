@@ -72,16 +72,13 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
         session.add(task)
         session.commit()
         full_path = MEDIA_DIR / media_path
-        original_stem = full_path.stem
+        temp_output_path = full_path.with_name(full_path.stem + "_temp.mp4")
         try:
             info = ffmpeg.probe(str(full_path))
         except ffmpeg.Error as e:
             logger.error("stdout: %s", e.stdout.decode("utf8"))
             logger.error("stderr: %s", e.stderr.decode("utf8"))
             raise
-        full_path = full_path.rename(
-            full_path.with_stem("tmp_" + original_stem)
-        )
         dur_s = float(info["format"]["duration"])
         dur_us = dur_s * 1000000
         # run ffmpeg with stderr piped so we can parse “progress=…”
@@ -104,9 +101,7 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
             "-filter:v",
             "fps=30",
             "-y",
-            (MEDIA_DIR / f"{media_path}")
-            .with_stem(original_stem)
-            .with_suffix(".mp4"),
+            temp_output_path,
         ]
         proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
 
@@ -129,8 +124,8 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
         task.processed = 100
         task.status = "completed"
         task.finished_at = datetime.now(timezone.utc)
+        new_file = temp_output_path.rename(full_path)
         media = session.get(Media, media_id)
-        new_file = full_path.with_stem(original_stem).with_suffix(".mp4")
         media.path = str(new_file.relative_to(MEDIA_DIR))
         media.filename = new_file.name
         session.add(media)
