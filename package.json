@@ -10,6 +10,7 @@
     "react-masonry-css": "^1.0.16",
     "react-window": "^1.8.11",
     "sqlite-vec": "^0.1.7-alpha.2",
-    "use-resize-observer": "^9.1.0"
+    "use-resize-observer": "^9.1.0",
+    "zustand": "^5.0.5"
   }
 }
