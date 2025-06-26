@@ -125,26 +125,58 @@ def list_media(
 
 
 @router.get("/locations", response_model=list[MediaLocation])
-def list_locations(session: Session = Depends(get_session)):
+def list_locations(
+    session: Session = Depends(get_session),
+    north: float | None = None,
+    south: float | None = None,
+    east: float | None = None,
+    west: float | None = None,
+):
+    """
+    Lists media locations. If bounding box parameters (north, south, east, west)
+    are provided, it returns only locations within that box.
+    """
     stmt = (
         select(
             Media.id,
+            Media.thumbnail_path,
             ExifData.lat.label("latitude"),
             ExifData.lon.label("longitude"),
         )
         .join(ExifData, ExifData.media_id == Media.id)
         .where(ExifData.lat.is_not(None), ExifData.lon.is_not(None))
     )
-    rows = session.exec(stmt).all()
-    return [
-        MediaLocation(
-            id=row.id,
-            latitude=row.latitude,
-            longitude=row.longitude,
-            thumbnail=f"/thumbnails/{row.id}.jpg",
+
+    # Check if all bounding box parameters are present
+    if all(p is not None for p in [north, south, east, west]):
+        stmt = stmt.where(
+            ExifData.lat >= south,
+            ExifData.lat <= north,
+            ExifData.lon >= west,
+            ExifData.lon <= east,
         )
-        for row in rows
-    ]
+
+    # Add a reasonable limit to prevent sending overwhelming amounts of data
+    # for very dense areas, even within the viewport.
+    stmt = stmt.limit(5000)
+
+    rows = session.exec(stmt).all()
+    results = []
+    for row in rows:
+        thumbnail_path = (
+            f"/{row.id}.jpg"
+            if not row.thumbnail_path
+            else row.thumbnail_path
+        )
+        results.append(
+            MediaLocation(
+                id=row.id,
+                latitude=row.latitude,
+                longitude=row.longitude,
+                thumbnail=thumbnail_path,
+            )
+        )
+    return results
 
 
 @router.get("/images", response_model=CursorPage, summary="List all images")
@@ -250,8 +282,6 @@ def get_neighbors(
         q = q.join(Face, Face.media_id == Media.id).where(
             Face.person_id.in_(filter_people)
         )
-
-    
 
     previous_query = (
         q.where(

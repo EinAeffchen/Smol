@@ -1,46 +1,66 @@
-import React, { useState, useEffect } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
-import { useSearchParams, Link as RouterLink } from "react-router-dom";
+import React, { useState, useCallback, useEffect } from "react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Popup,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
+import { Link as RouterLink } from "react-router-dom";
 import { Box, useTheme } from "@mui/material";
 import { API } from "../config";
 import type { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-interface MediaLocation {
+// Import our new custom components/hooks
+import { useGridClustering } from "../hooks/useGridClustering";
+import { ClusterMarker } from "../components/ClusterMarker";
+
+export interface MediaLocation {
   id: number;
   latitude: number;
   longitude: number;
   thumbnail: string;
 }
 
-function FocusHandler({ locations }: { locations: MediaLocation[] }) {
+function MapController({
+  onLocationsChange,
+  onMapChange,
+}: {
+  onLocationsChange: (locs: MediaLocation[]) => void;
+  onMapChange: (map: L.Map) => void;
+}) {
   const map = useMap();
-  const [params] = useSearchParams();
-  const focusId = params.get("focus");
 
   useEffect(() => {
-    if (!focusId) return;
-    const id = Number(focusId);
-    const loc = locations.find((l) => l.id === id);
-    if (loc) {
-      const center: LatLngExpression = [loc.latitude, loc.longitude];
-      map.setView(center, 15, { animate: true });
-    }
-  }, [focusId, locations, map]);
+    onMapChange(map);
+  }, [map, onMapChange]);
+
+  const fetchLocationsForView = useCallback(() => {
+    const bounds = map.getBounds();
+    const url = `${API}/api/media/locations?north=${bounds.getNorth()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&west=${bounds.getWest()}`;
+    fetch(url)
+      .then((res) => res.json())
+      .then(onLocationsChange)
+      .catch(console.error);
+  }, [map, onLocationsChange]);
+
+  useMapEvents({
+    load: fetchLocationsForView,
+    moveend: fetchLocationsForView,
+  });
 
   return null;
 }
 
 export default function MapPage() {
   const [locations, setLocations] = useState<MediaLocation[]>([]);
-  const theme = useTheme(); // 1. Get the current theme
+  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  const theme = useTheme();
 
-  useEffect(() => {
-    fetch(`${API}/api/media/locations`)
-      .then((res) => res.json())
-      .then(setLocations)
-      .catch(console.error);
-  }, []);
+  // Our custom hook processes the raw locations into clusters
+  const clusters = useGridClustering({ locations, map: mapInstance });
 
   const center: LatLngExpression = [20, 0];
 
@@ -53,11 +73,9 @@ export default function MapPage() {
         style={{
           height: "100%",
           width: "100%",
-          // 2. Set background color to match the theme and avoid flashes
           backgroundColor: theme.palette.background.default,
         }}
       >
-        {/* 3. Conditionally render the map tiles based on theme */}
         <TileLayer
           url={
             theme.palette.mode === "dark"
@@ -67,39 +85,36 @@ export default function MapPage() {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
         />
 
-        <FocusHandler locations={locations} />
+        <MapController
+          onLocationsChange={setLocations}
+          onMapChange={setMapInstance}
+        />
 
-        {locations.map((loc) => (
-          <Marker
-            key={loc.id}
-            position={[loc.latitude, loc.longitude] as LatLngExpression}
-          >
-            <Popup>
-              <Box
-                component={RouterLink}
-                to={`/medium/${loc.id}`}
-                sx={{
-                  display: "block",
-                  width: 96,
-                  height: 96,
-                  textDecoration: "none",
-                }}
-              >
-                <Box
-                  component="img"
-                  src={`${API}/thumbnails/${loc.id}.jpg`}
-                  alt=""
-                  sx={{
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
-                    borderRadius: 1,
-                  }}
-                />
-              </Box>
-            </Popup>
-          </Marker>
-        ))}
+        {clusters.map((point) => {
+          console.log(point);
+          if (point.count > 1) {
+            return <ClusterMarker key={point.id} cluster={point} />;
+          }
+          return (
+            <Marker key={point.id} position={[point.lat, point.lon]}>
+              <Popup>
+                <RouterLink to={`/medium/${point.baseId}`}>
+                  <Box
+                    component="img"
+                    src={`${API}/thumbnails/${point.thumbnail}`}
+                    alt=""
+                    sx={{
+                      width: 96,
+                      height: 96,
+                      objectFit: "cover",
+                      borderRadius: 1,
+                    }}
+                  />
+                </RouterLink>
+              </Popup>
+            </Marker>
+          );
+        })}
       </MapContainer>
     </Box>
   );
