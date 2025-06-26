@@ -26,13 +26,13 @@ function formatDuration(d?: number): string {
 interface MediaCardProps {
   media: Media;
   sortOrder?: "newest" | "latest";
-  filterPeople?: Person[];
+  mediaListKey?: string;
 }
 
 export default function MediaCard({
   media,
   sortOrder = "newest",
-  filterPeople,
+  mediaListKey,
 }: MediaCardProps) {
   const theme = useTheme();
   const [hovered, setHovered] = useState(false);
@@ -60,7 +60,8 @@ export default function MediaCard({
         backgroundLocation: isAlreadyInModal
           ? location.state.backgroundLocation
           : location,
-        viewContext: { sort: sortOrder, filterPeople: filterPeople },
+        viewContext: { sort: sortOrder },
+        mediaListKey: mediaListKey,
         media: media,
       },
     });

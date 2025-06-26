@@ -13,10 +13,11 @@ import {
 } from "@mui/material";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { PersonContentTabs } from "../components/PersonContentTabs";
 import { PersonHero } from "../components/PersonHero";
+import { useMediaStore, defaultListState } from "../stores/useMediaStore"; // Import the store
 import { API } from "../config";
 import { useFaceActions } from "../hooks/useFaceActions";
 import { CursorResponse } from "../hooks/useInfinite";
@@ -44,12 +45,6 @@ export default function PersonDetailPage() {
   const [loadingMoreFaces, setLoadingMoreFaces] = useState<boolean>(false);
   const [hasMoreFaces, setHasMoreFaces] = useState<boolean>(true);
 
-  // States for paginated media appearances
-  const [mediaList, setMediaList] = useState<Media[]>([]);
-  const [mediaNextCursor, setMediaNextCursor] = useState<string | null>(null);
-  const [loadingMoreMedia, setLoadingMoreMedia] = useState<boolean>(false);
-  const [hasMoreMedia, setHasMoreMedia] = useState<boolean>(true);
-
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<{
     id: number;
@@ -61,6 +56,11 @@ export default function PersonDetailPage() {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
   const [similarPersons, setSimilarPersons] = useState<SimilarPerson[]>([]);
   const [suggestedFaces, setSuggestedFaces] = useState<FaceRead[]>([]);
+
+  const baseUrl = useMemo(() => {
+    if (!id) return "";
+    return `${API}/api/persons/${id}/media-appearances?`;
+  }, [id]);
 
   const {
     assignFace,
@@ -82,43 +82,6 @@ export default function PersonDetailPage() {
   ) => {
     setSnackbar({ open: true, message, severity });
   };
-
-  const fetchMediaPage = useCallback(
-    async (
-      personId: string,
-      cursor: string | null,
-      limit: number = 30,
-      signal?: AbortSignal
-    ): Promise<CursorResponse<Media> | null> => {
-      // Assumes new paginated endpoint exists
-      let url = `${API}/api/persons/${personId}/media-appearances?limit=${limit}`;
-      if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
-      try {
-        const res = await fetch(url, { ...(signal && { signal }) });
-        if (!res.ok) return null;
-        return await res.json();
-      } catch (error) {
-        return null;
-      }
-    },
-    []
-  );
-
-  const loadInitialMedia = useCallback(
-    async (personId: string, signal?: AbortSignal) => {
-      if (!personId) return;
-      setMediaList([]);
-      setMediaNextCursor(null);
-      setHasMoreMedia(true);
-      const pageData = await fetchMediaPage(personId, null, 30, signal);
-      if (pageData) {
-        setMediaList(pageData.items);
-        setMediaNextCursor(pageData.next_cursor);
-        setHasMoreMedia(!!pageData.next_cursor);
-      }
-    },
-    [fetchMediaPage]
-  );
 
   const loadDetail = useCallback(
     async (signal?: AbortSignal) => {
@@ -255,7 +218,6 @@ export default function PersonDetailPage() {
           // Pass the signal to each fetch call
           await Promise.all([
             loadDetail(signal),
-            loadInitialMedia(id, signal),
             loadInitialDetectedFaces(id, signal),
             loadSuggestedFaces(signal),
             loadSimilar(signal),
@@ -387,7 +349,6 @@ export default function PersonDetailPage() {
       setDebouncedSearchTerm(searchTerm);
     }, 500); // Wait 500ms after the user stops typing
 
-    // Cleanup: If the user types again, clear the previous timeout
     return () => {
       clearTimeout(handler);
     };

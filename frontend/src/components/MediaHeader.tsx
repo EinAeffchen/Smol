@@ -43,10 +43,6 @@ export function MediaHeader({
     onOpenDialog(type);
     handleMenuClose();
   };
-  const handleExifToggle = () => {
-    onToggleExif();
-    handleMenuClose();
-  };
 
   return (
     <Box
@@ -59,7 +55,7 @@ export function MediaHeader({
         width: "100%",
       }}
     >
-      <Box sx={{ width: { xs: "100%", sm: "auto" }, textAlign: "left" }}>
+      <Box sx={{ width: { xs: "80%", sm: "auto" }, textAlign: "left" }}>
         <Typography
           variant="h4"
           component="h1"

@@ -89,7 +89,9 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
 
       <TabPanel value={tabValue} index={0}>
         <Suspense fallback={<CircularProgress />}>
-          <MediaAppearances person={props.person} />
+          <MediaAppearances
+            person={props.person}
+          />
         </Suspense>
       </TabPanel>
 

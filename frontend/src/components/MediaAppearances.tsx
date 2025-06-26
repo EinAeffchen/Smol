@@ -1,12 +1,12 @@
 import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { Box, CircularProgress, Autocomplete, TextField } from "@mui/material";
 import Masonry from "react-masonry-css";
-import { useInfinite, CursorResponse } from "../hooks/useInfinite";
+import { useInView } from "react-intersection-observer";
+
 import { Media, Person, PersonReadSimple } from "../types";
 import MediaCard from "./MediaCard";
 import { API } from "../config";
-
-const ITEMS_PER_PAGE = 30;
+import { useMediaStore, defaultListState } from "../stores/useMediaStore";
 
 const breakpointColumnsObj = {
   default: 6,
@@ -21,55 +21,43 @@ interface MediaAppearancesProps {
   person: Person;
 }
 export default function MediaAppearances({ person }: MediaAppearancesProps) {
-  const [personOptions, setPersonOptions] = useState<PersonReadSimple[]>([]);
   const [filterPeople, setFilterPeople] = useState<PersonReadSimple[]>([]);
+  const [personOptions, setPersonOptions] = useState<PersonReadSimple[]>([]);
+
+  const baseUrl = useMemo(() => {
+    const params = new URLSearchParams();
+    filterPeople.forEach((p) => params.append("with_person_ids", String(p.id)));
+    return `${API}/api/persons/${
+      person.id
+    }/media-appearances?${params.toString()}`;
+  }, [person.id, filterPeople]);
+
+  const { items, hasMore, isLoading } = useMediaStore(
+    (state) => state.lists[baseUrl] || defaultListState
+  );
+  const { fetchInitial, loadMore } = useMediaStore();
+
+  const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
 
   useEffect(() => {
     fetch(`${API}/api/persons/all-simple`)
       .then((res) => res.json())
       .then((data) => {
-        // Exclude the current person from the list of options
         setPersonOptions(data.filter((p: Person) => p.id !== person.id));
       })
       .catch((err) => console.error("Failed to fetch person options:", err));
   }, [person.id]);
 
-  const fetchPage = useCallback(
-    (cursor: string | null, limit: number) => {
-      const params = new URLSearchParams();
-      params.set("limit", limit.toString());
-      if (cursor) {
-        params.set("cursor", cursor);
-      }
-      filterPeople.forEach((p) =>
-        params.append("with_person_ids", String(p.id))
-      );
+  useEffect(() => {
+    fetchInitial(baseUrl);
+  }, [baseUrl, fetchInitial]);
 
-      const url = `${API}/api/persons/${
-        person.id
-      }/media-appearances?${params.toString()}`;
+  useEffect(() => {
+    if (inView && hasMore && !isLoading) {
+      loadMore(baseUrl);
+    }
+  }, [inView, hasMore, isLoading, loadMore, baseUrl]);
 
-      return fetch(url).then((res) => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.json() as Promise<CursorResponse<Media>>;
-      });
-    },
-    [person.id, filterPeople]
-  );
-
-  const { items, hasMore, loading, loaderRef } = useInfinite<Media>(
-    fetchPage,
-    ITEMS_PER_PAGE,
-    [person.id, filterPeople]
-  );
-
-  const highlightPersonIds = useMemo(() => {
-    const filterIds = filterPeople.map((p) => p.id);
-
-    const uniqueIds = new Set([person.id, ...filterIds]);
-
-    return Array.from(uniqueIds);
-  }, [person.id, filterPeople]);
   return (
     <Box>
       <Box sx={{ mb: 2, p: 2, bgcolor: "background.paper", borderRadius: 1 }}>
@@ -99,14 +87,14 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
       >
         {items.map((media) => (
           <div key={media.id}>
-            <MediaCard media={media} filterPeople={highlightPersonIds} />
+            <MediaCard media={media} mediaListKey={baseUrl} />
           </div>
         ))}
       </Masonry>
 
       <Box ref={loaderRef} sx={{ height: "1px" }} />
 
-      {loading && (
+      {isLoading && (
         <Box display="flex" justifyContent="center" py={4}>
           <CircularProgress />
         </Box>

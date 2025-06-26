@@ -1,13 +1,15 @@
-import React, { useCallback, useState, useMemo } from "react";
-import { useSearchParams, useLocation } from "react-router-dom";
-import { Container, Typography, Box, CircularProgress } from "@mui/material";
+import { Box, CircularProgress, Container, Typography } from "@mui/material";
+import { useCallback, useEffect, useMemo } from "react";
+import { useInView } from "react-intersection-observer";
 import Masonry from "react-masonry-css";
-import { useInfinite, CursorResponse } from "../hooks/useInfinite";
-import { API } from "../config";
-import { Media, Person, Tag } from "../types";
+import { useLocation, useSearchParams } from "react-router-dom";
 import MediaCard from "../components/MediaCard";
 import PersonCard from "../components/PersonCard";
 import TagCard from "../components/TagCard";
+import { API } from "../config";
+import { CursorResponse, useInfinite } from "../hooks/useInfinite";
+import { defaultListState, useMediaStore } from "../stores/useMediaStore";
+import { Media, Person, Tag } from "../types";
 
 const ITEMS_PER_PAGE = 30;
 
@@ -26,30 +28,54 @@ function isPerson(item: any): item is Person {
   return item && "profile_face" in item;
 }
 function isTag(item: any): item is Tag {
-  return item && !("tags" in item) && "name" in item;
+  return (
+    item && !("tags" in item) && "name" in item && !("profile_face" in item)
+  );
 }
 
 export default function SearchResultsPage() {
-  const [deletedItemIds, setDeletedItemIds] = useState<number[]>([]);
   const [searchParams] = useSearchParams();
+  const category =
+    (searchParams.get("category") as "media" | "person" | "tag") || "media";
+  const query = searchParams.get("query") || "";
+
   const location = useLocation();
   const preloadedState = location.state as {
     items: Media[];
     searchType: "image";
   } | null;
-  const category =
-    (searchParams.get("category") as "media" | "person" | "tag") || "media";
-  const query = searchParams.get("query") || "";
 
-  const fetchPage = useCallback(
+  const mediaListKey = useMemo(() => {
+    if (category !== "media" || !query) return "";
+    const params = new URLSearchParams({ query });
+    return `${API}/api/search/media?${params.toString()}`;
+  }, [category, query]);
+
+  const {
+    items: mediaItems,
+    hasMore: mediaHasMore,
+    isLoading: mediaIsLoading,
+  } = useMediaStore((state) => state.lists[mediaListKey] || defaultListState);
+
+  const { fetchInitial, loadMore } = useMediaStore();
+  const { ref: inViewRef, inView } = useInView({ threshold: 0.5 });
+
+  useEffect(() => {
+    if (category === "media" && mediaListKey) {
+      fetchInitial(mediaListKey);
+    }
+  }, [mediaListKey, fetchInitial, category]);
+
+  useEffect(() => {
+    if (inView && category === "media" && mediaHasMore && !mediaIsLoading) {
+      loadMore(mediaListKey);
+    }
+  }, [inView, category, mediaHasMore, mediaIsLoading, loadMore, mediaListKey]);
+
+  const fetchOtherPage = useCallback(
     (cursor: string | null, limit: number) => {
-      // --- UPDATED LOGIC TO CHOOSE THE CORRECT ENDPOINT ---
-      let endpointPath = "/api/search/media";
-      if (category === "person") {
-        endpointPath = "/api/search/people";
-      } else if (category === "tag") {
-        endpointPath = "/api/search/tags";
-      }
+      let endpointPath =
+        category === "person" ? "/api/search/people" : "/api/search/tags";
 
       const params = new URLSearchParams({ query });
       params.set("limit", String(limit));
@@ -57,20 +83,23 @@ export default function SearchResultsPage() {
 
       return fetch(`${API}${endpointPath}?${params.toString()}`).then((res) => {
         if (!res.ok) throw new Error(res.statusText);
-        return res.json() as Promise<CursorResponse<Media | Person | Tag>>;
+        return res.json() as Promise<CursorResponse<Person | Tag>>;
       });
     },
     [category, query]
   );
 
-  const { items, hasMore, loading, loaderRef } = useInfinite<
-    Media | Person | Tag
-  >(
-    fetchPage,
-    ITEMS_PER_PAGE,
-    [category, query],
-    preloadedState?.searchType === "image"
-  );
+  const {
+    items: otherItems,
+    hasMore: otherHasMore,
+    loading: otherIsLoading,
+    loaderRef: otherLoaderRef,
+  } = useInfinite<Person | Tag>(fetchOtherPage, 30, [category, query]);
+
+  const items = category === "media" ? mediaItems : otherItems;
+  const isLoading = category === "media" ? mediaIsLoading : otherIsLoading;
+  const hasMore = category === "media" ? mediaHasMore : otherHasMore;
+  const loaderRef = category === "media" ? inViewRef : otherLoaderRef;
 
   const displayItems = preloadedState?.items || items;
 
@@ -79,9 +108,8 @@ export default function SearchResultsPage() {
   }, [items, displayItems]);
 
   const renderItem = (item: Media | Person | Tag) => {
-    console.log(item);
     if (isMedia(item)) {
-      return <MediaCard media={item} />;
+      return <MediaCard media={item} mediaListKey={mediaListKey} />;
     }
     if (isPerson(item)) {
       return <PersonCard person={item} />;
@@ -117,7 +145,7 @@ export default function SearchResultsPage() {
         ))}
       </Masonry>
 
-      {loading && !preloadedState && (
+      {isLoading && !preloadedState && (
         <Box textAlign="center" py={4}>
           <CircularProgress />
         </Box>
@@ -125,7 +153,7 @@ export default function SearchResultsPage() {
       {hasMore && !preloadedState && (
         <Box ref={loaderRef} sx={{ height: "1px" }} />
       )}
-      {!loading && visibleItems.length === 0 && (
+      {!isLoading && visibleItems.length === 0 && (
         <Typography sx={{ mt: 4 }}>No results found.</Typography>
       )}
     </Container>

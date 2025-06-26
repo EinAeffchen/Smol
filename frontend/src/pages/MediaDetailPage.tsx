@@ -15,33 +15,54 @@ import {
   useMediaQuery,
   Fade,
 } from "@mui/material";
-import { useFaceActions } from "../hooks/useFaceActions";
 import { ArrowBackIosNew, ArrowForwardIos } from "@mui/icons-material";
+import CloseIcon from "@mui/icons-material/Close";
+
+import { useMediaStore, defaultListState } from "../stores/useMediaStore";
+import { useFaceActions } from "../hooks/useFaceActions";
+
 import { ActionDialogs } from "../components/ActionDialogs";
 import { MediaDisplay } from "../components/MediaDisplay";
 import { MediaHeader } from "../components/MediaHeader";
-import { Media, MediaDetail, MediaPreview, Task } from "../types";
-import { API } from "../config";
 import { MediaContentTabs } from "../components/MediaContentTabs";
-import CloseIcon from "@mui/icons-material/Close";
+
+import { Media, MediaDetail, Task, Person } from "../types";
+import { API } from "../config";
 
 export default function MediaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
-
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
   const faceActions = useFaceActions();
 
+  // --- 1. STATE MANAGEMENT ---
+  const mediaListKey = location.state?.mediaListKey as string | undefined;
+
+  // A. Global state from Zustand for the list context
+  const {
+    items,
+    hasMore,
+    isLoading: isListLoading,
+  } = useMediaStore((state) => {
+    if (!mediaListKey) {
+      return { ...defaultListState, hasMore: false };
+    }
+    // Otherwise, use the list from the store or the default.
+    return state.lists[mediaListKey] || defaultListState;
+  });
+  const { loadMore } = useMediaStore();
+
+  // B. Local state for this specific modal's content
   const preloadedMedia = location.state?.media as Media | null;
   const [detail, setDetail] = useState<MediaDetail | null>(
     preloadedMedia ? { media: preloadedMedia, persons: [], orphans: [] } : null
   );
-  const [loading, setLoading] = useState(!preloadedMedia);
-  const [neighborLoading, setNeighborLoading] = useState(!preloadedMedia);
+  const [isDetailLoading, setIsDetailLoading] = useState(!preloadedMedia);
+  const [isWaitingForMore, setIsWaitingForMore] = useState(false);
 
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-
+  // C. Local state for all other UI and features
   const [task, setTask] = useState<Task | null>(null);
   const [dialogType, setDialogType] = useState<
     "convert" | "deleteRecord" | "deleteFile" | null
@@ -52,126 +73,120 @@ export default function MediaDetailPage() {
     severity: "success" | "error";
   }>({ open: false, message: "", severity: "success" });
   const [tabValue, setTabValue] = useState(0);
-
-  const [neighbors, setNeighbors] = useState<{
-    previousMedia: MediaPreview | null;
-    nextMedia: MediaPreview | null;
-  }>({ previousMedia: null, nextMedia: null });
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
-
   const [showSwipeHint, setShowSwipeHint] = useState(false);
 
+  // --- 2. DERIVED DATA & CONTEXT ---
+
+  const allMediaIdsInView = useMemo(() => items.map((m) => m.id), [items]);
   const viewContext = useMemo(
     () => location.state?.viewContext || { sort: "newest" },
     [location.state]
   );
-  const queryParams = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set("sort", viewContext.sort || "newest");
-    if (viewContext.filterPeople && viewContext.filterPeople.length > 0) {
-      viewContext.filterPeople.forEach((personId) => {
-        params.append("filter_people", String(personId));
-      });
-    }
-    return params.toString();
-  }, [viewContext]);
 
-  // Load media detail
-  const loadDetail = useCallback(
+  const neighbors = useMemo(() => {
+    if (!id || !allMediaIdsInView) return { previousId: null, nextId: null };
+    const currentIndex = allMediaIdsInView.findIndex(
+      (mediaId) => mediaId === Number(id)
+    );
+    if (currentIndex === -1) return { previousId: null, nextId: null };
+
+    const previousId =
+      currentIndex > 0 ? allMediaIdsInView[currentIndex - 1] : null;
+    const nextId =
+      currentIndex < allMediaIdsInView.length - 1
+        ? allMediaIdsInView[currentIndex + 1]
+        : null;
+    return { previousId, nextId };
+  }, [id, allMediaIdsInView]);
+
+  // --- 3. DATA FETCHING & NAVIGATION ---
+
+  const fetchDetail = useCallback(
     async (signal?: AbortSignal) => {
       if (!id) return;
+      setIsDetailLoading(true);
       try {
-        const res = await fetch(`${API}/api/media/${id}`);
-        if (!res.ok) throw new Error("Failed to fetch");
-        const data = await res.json();
-        setDetail(data);
+        const res = await fetch(`${API}/api/media/${id}`, { signal });
+        if (res.ok) setDetail(await res.json());
+        else throw new Error("Failed to fetch media details");
       } catch (err) {
-        if (signal?.aborted !== true) {
-          setSnackbar({
-            open: true,
-            message: "Failed to load media",
-            severity: "error",
-          });
-        }
+        if (!signal?.aborted)
+          console.error("Failed to fetch media detail:", err);
+      } finally {
+        if (!signal?.aborted) setIsDetailLoading(false);
       }
     },
     [id]
   );
 
   useEffect(() => {
-    if (!id) return;
-
     const controller = new AbortController();
-    const signal = controller.signal;
-
-    const fetchData = async () => {
-      // Use preloaded data for an instant UI update, but still fetch full data
-      const currentPreloaded = location.state?.media as Media | null;
-      if (currentPreloaded && String(currentPreloaded.id) === id) {
-        setDetail({ media: currentPreloaded, persons: [], orphans: [] });
-      } else {
-        setDetail(null);
-      }
-
-      setNeighborLoading(true);
-      try {
-        const [neighborsRes] = await Promise.all([
-          fetch(`${API}/api/media/${id}/neighbors?${queryParams}`, { signal }),
-        ]);
-        if (neighborsRes.ok) {
-          const neighborsData = await neighborsRes.json();
-          setNeighbors({
-            previousMedia: neighborsData.previous_media,
-            nextMedia: neighborsData.next_media,
-          });
-          setNeighborLoading(false);
-        }
-      } catch (err) {
-        if (signal.aborted !== true) {
-          console.error("Failed to load page data:", err);
-          setSnackbar({
-            open: true,
-            message: "Failed to load media",
-            severity: "error",
-          });
-        }
-      } finally {
-        if (signal.aborted !== true) {
-          setNeighborLoading(false);
-        }
-      }
-
-      try {
-        // Fetch detail and neighbors in parallel
-        const [detailRes] = await Promise.all([
-          fetch(`${API}/api/media/${id}`, { signal }),
-        ]);
-
-        if (!detailRes.ok) throw new Error("Failed to fetch media detail");
-        const detailData = await detailRes.json();
-        setDetail(detailData);
-      } catch (err) {
-        if (signal.aborted !== true) {
-          console.error("Failed to load page data:", err);
-          setSnackbar({
-            open: true,
-            message: "Failed to load media",
-            severity: "error",
-          });
-        }
-      } finally {
-        if (signal.aborted !== true) {
-          setLoading(false);
-        }
-      }
-    };
-    fetchData();
-
+    const currentPreloaded = location.state?.media as Media | null;
+    if (currentPreloaded && String(currentPreloaded.id) === id) {
+      setDetail({ media: currentPreloaded, persons: [], orphans: [] });
+    }
+    fetchDetail(controller.signal);
     return () => controller.abort();
-  }, [id, location.key, queryParams]);
+  }, [id, location.key, fetchDetail]);
 
   useEffect(() => {
-    if (isMobile && (neighbors.nextMedia || neighbors.previousMedia)) {
+    if (isWaitingForMore && !isListLoading) {
+      setIsWaitingForMore(false);
+      const newCurrentIndex = allMediaIdsInView.findIndex(
+        (mediaId) => mediaId === Number(id)
+      );
+      const newNextId =
+        newCurrentIndex < allMediaIdsInView.length - 1
+          ? allMediaIdsInView[newCurrentIndex + 1]
+          : null;
+      if (newNextId) {
+        navigate(`/medium/${newNextId}`, {
+          replace: true,
+          state: { ...location.state, media: null },
+        });
+      }
+    }
+  }, [
+    isWaitingForMore,
+    isListLoading,
+    allMediaIdsInView,
+    id,
+    navigate,
+    location.state,
+  ]);
+
+  const handleNavigate = useCallback(
+    async (direction: "prev" | "next") => {
+      const targetId =
+        direction === "prev" ? neighbors.previousId : neighbors.nextId;
+      if (targetId) {
+        navigate(`/medium/${targetId}`, {
+          replace: true,
+          state: { ...location.state, media: null },
+        });
+      } else if (direction === "next" && hasMore && !isListLoading) {
+        if (mediaListKey) {
+          setIsWaitingForMore(true);
+          await loadMore(mediaListKey);
+        }
+      }
+    },
+    [
+      navigate,
+      neighbors,
+      location.state,
+      hasMore,
+      isListLoading,
+      loadMore,
+      viewContext,
+    ]
+  );
+
+  // --- 4. OTHER EFFECTS & HANDLERS (Complete) ---
+
+  useEffect(() => {
+    if (isMobile && (neighbors.nextId || neighbors.previousId)) {
       const hintShown = sessionStorage.getItem("swipeHintShown");
       if (!hintShown) {
         setShowSwipeHint(true);
@@ -182,62 +197,7 @@ export default function MediaDetailPage() {
         return () => clearTimeout(timer);
       }
     }
-  }, [isMobile, neighbors.nextMedia, neighbors.previousMedia]);
-
-  useEffect(() => {
-    if (!task?.id || ["completed", "failed"].includes(task.status)) {
-      return;
-    }
-
-    const intervalId = setInterval(async () => {
-      try {
-        const res = await fetch(`${API}/api/tasks/${task.id}`);
-        if (!res.ok) {
-          // Stop polling on server errors
-          console.warn("Task polling failed with server error.");
-          clearInterval(intervalId);
-          return;
-        }
-        const updatedTask = await res.json();
-
-        if (["completed", "cancelled"].includes(updatedTask.status)) {
-          clearInterval(intervalId);
-          setTask(updatedTask);
-          if (updatedTask.status === "completed") {
-            console.log("Task completed, reloading details...");
-            loadDetail();
-          }
-        } else {
-          setTask(updatedTask);
-        }
-      } catch {
-        console.warn("Failed to update task progress");
-      }
-    }, 1500);
-
-    return () => clearInterval(intervalId);
-  }, [task?.id, task?.status, loadDetail]);
-
-  const handleNavigate = useCallback(
-    (direction: "prev" | "next") => {
-      const target =
-        direction === "prev" ? neighbors.previousMedia : neighbors.nextMedia;
-      console.log(`Target: ${target}`);
-      if (target) {
-        const backgroundLocation = location.state?.backgroundLocation;
-
-        navigate(`/medium/${target.id}/?${queryParams}`, {
-          replace: true,
-          state: {
-            backgroundLocation: backgroundLocation,
-            viewContext,
-            media: target,
-          },
-        });
-      }
-    },
-    [navigate, neighbors, viewContext, location, queryParams]
-  );
+  }, [isMobile, neighbors.nextId, neighbors.previousId]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -248,27 +208,34 @@ export default function MediaDetailPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleNavigate]);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
+  useEffect(() => {
+    if (!task?.id || ["completed", "failed"].includes(task.status)) return;
+    const intervalId = setInterval(async () => {
+      const res = await fetch(`${API}/api/tasks/${task.id}`);
+      if (res.ok) {
+        const updatedTask = await res.json();
+        if (["completed", "cancelled"].includes(updatedTask.status)) {
+          clearInterval(intervalId);
+          if (updatedTask.status === "completed") fetchDetail();
+        }
+        setTask(updatedTask);
+      }
+    }, 1500);
+    return () => clearInterval(intervalId);
+  }, [task?.id, task?.status, fetchDetail]);
+
+  const handleTouchStart = (e: React.TouchEvent) =>
     setTouchStartX(e.targetTouches[0].clientX);
-  };
   const handleTouchEnd = (e: React.TouchEvent) => {
     const touchEndX = e.changedTouches[0].clientX;
     if (touchStartX === null) return;
     const distance = touchStartX - touchEndX;
-    const minSwipeDistance = 50;
-
-    if (distance > minSwipeDistance) {
-      handleNavigate("next");
-    } else if (distance < -minSwipeDistance) {
-      handleNavigate("prev");
-    }
+    if (distance > 50) handleNavigate("next");
+    else if (distance < -50) handleNavigate("prev");
     setTouchStartX(null);
   };
 
-  // Dialog controls
   const closeDialog = () => setDialogType(null);
-
-  // Confirm actions
   const confirmConvert = async () => {
     if (!detail || !detail.media) return;
     try {
@@ -293,7 +260,6 @@ export default function MediaDetailPage() {
       closeDialog();
     }
   };
-
   const confirmDeleteRecord = async () => {
     if (!detail || !detail.media) return;
     try {
@@ -313,7 +279,6 @@ export default function MediaDetailPage() {
       closeDialog();
     }
   };
-
   const confirmDeleteFile = async () => {
     if (!detail || !detail.media) return;
     try {
@@ -336,44 +301,29 @@ export default function MediaDetailPage() {
   {
     console.log(showSwipeHint);
   }
-  const handleAssignFace = async (faceId: number, personId: number) => {
-    await faceActions.assignFace(faceId, personId);
-    loadDetail(); // This is the refresh trigger
-  };
 
-  const handleDeleteFace = async (faceId: number) => {
-    await faceActions.deleteFace(faceId);
-    loadDetail();
-  };
+  const handleClose = () => navigate(-1);
+  const isLoading = !detail && isDetailLoading;
 
-  const handleDetachFace = async (faceId: number) => {
-    await faceActions.detachFace(faceId);
-    loadDetail();
-  };
-
-  const handleCreateFace = async (
-    faceId: number,
-    data: any
-  ): Promise<Person> => {
-    const newPerson = await faceActions.createPersonFromFace(faceId, data);
-    loadDetail(); // Refresh to update all counts and lists
-    return newPerson;
-  };
-
-  const handleToggleExif = () => {
-    setTabValue(3);
-  };
-  const handleClose = () => {
-    navigate(-1); // This is equivalent to clicking the browser's back button
-  };
+  // --- 5. RENDER LOGIC ---
   return (
     <Dialog
       open={true}
       onClose={handleClose}
       fullWidth
-      maxWidth="xl" // Use a large max-width for the detail view
+      maxWidth="xl"
       slotProps={{
         backdrop: { sx: { backgroundColor: "rgba(0, 0, 0, 0.8)" } },
+        paper: {
+          sx: {
+            mt: { xs: 2, sm: 4, md: 8 }, // Use responsive margin-top
+          },
+        },
+      }}
+      sx={{
+        "& .MuiDialog-container": {
+          alignItems: "flex-start",
+        },
       }}
     >
       <IconButton
@@ -382,17 +332,14 @@ export default function MediaDetailPage() {
           position: "absolute",
           right: 8,
           top: 8,
+          zIndex: 1000,
           color: "grey.500",
-          zIndex: 1,
         }}
       >
         <CloseIcon />
       </IconButton>
-
-      {/* You can use DialogContent to wrap your page's content */}
-      <DialogContent sx={{ p: { xs: 1, sm: 2, md: 3 } }}>
-        {!detail ? (
-          // This now acts as the loading state for the very first render if no preloaded data exists
+      <DialogContent sx={{ p: { xs: 0.8, sm: 2, md: 3 } }}>
+        {isLoading ? (
           <Box
             sx={{
               display: "flex",
@@ -404,133 +351,156 @@ export default function MediaDetailPage() {
             <CircularProgress />
           </Box>
         ) : (
-          <Container maxWidth="xl" sx={{ pt: 2, pb: 6 }}>
-            <MediaHeader
-              media={detail.media}
-              showExif={tabValue === 3}
-              onToggleExif={handleToggleExif}
-              onOpenDialog={setDialogType}
-            />
-            {task &&
-              (task.status === "running" || task.status === "pending") && (
-                <Box mb={2}>
-                  <Typography variant="body2" gutterBottom>
-                    Converting… {task.processed}%
-                  </Typography>
-                  <LinearProgress
-                    variant="determinate"
-                    value={task.processed}
-                    sx={{ height: 8, borderRadius: 1 }}
-                  />
-                </Box>
-              )}
-            <Box
-              sx={{
-                position: "relative",
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              {!isMobile && (
-                <IconButton
-                  onClick={() => handleNavigate("prev")}
-                  disabled={!neighbors.previousMedia || neighborLoading}
-                  sx={{
-                    position: "absolute",
-                    left: -60,
-                    zIndex: 1,
-                    "&.Mui-disabled": { opacity: 0.2 },
-                  }}
-                >
-                  <ArrowBackIosNew fontSize="large" />
-                </IconButton>
-              )}
+          detail && (
+            <Container maxWidth="xl" sx={{ pt: 2, pb: 6 }}>
+              <MediaHeader
+                media={detail.media}
+                onOpenDialog={setDialogType}
+                onToggleExif={() => setTabValue(3)}
+                showExif={tabValue === 3}
+              />
+              {task &&
+                (task.status === "running" || task.status === "pending") && (
+                  <Box mb={2}>
+                    <Typography variant="body2" gutterBottom>
+                      Converting… {task.processed}%
+                    </Typography>
+                    <LinearProgress
+                      variant="determinate"
+                      value={task.processed}
+                      sx={{ height: 8, borderRadius: 1 }}
+                    />
+                  </Box>
+                )}
               <Box
-                onTouchStart={handleTouchStart}
-                onTouchEnd={handleTouchEnd}
-                sx={{ width: "100%" }}
+                sx={{
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
               >
-                <MediaDisplay media={detail.media} />
-              </Box>
-              <Fade in={showSwipeHint}>
-                <Box
-                  sx={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    px: 2,
-                    color: "white",
-                    pointerEvents: "none", // Allow swipes to pass through
-                    zIndex: 100,
-                  }}
-                >
-                  <ArrowBackIosNew sx={{ fontSize: "2.5rem", opacity: 0.6 }} />
-                  <Typography
+                {!isMobile && (
+                  <IconButton
+                    onClick={() => handleNavigate("prev")}
+                    disabled={isDetailLoading || !neighbors.previousId}
                     sx={{
-                      bgcolor: "rgba(0,0,0,0.6)",
-                      px: 2,
-                      py: 1,
-                      borderRadius: 2,
-                      userSelect: "none",
+                      position: "absolute",
+                      left: -60,
+                      zIndex: 1,
+                      "&.Mui-disabled": { opacity: 0.2 },
                     }}
                   >
-                    Swipe to navigate
-                  </Typography>
-                  <ArrowForwardIos sx={{ fontSize: "2.5rem", opacity: 0.6 }} />
+                    <ArrowBackIosNew fontSize="large" />
+                  </IconButton>
+                )}
+                <Box
+                  onTouchStart={handleTouchStart}
+                  onTouchEnd={handleTouchEnd}
+                  sx={{ width: "100%" }}
+                >
+                  <MediaDisplay media={detail.media} />
                 </Box>
-              </Fade>
-              {!isMobile && (
-                <IconButton
-                  onClick={() => handleNavigate("next")}
-                  disabled={!neighbors.nextMedia || neighborLoading}
+                <Fade in={showSwipeHint}>
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      top: 0,
+                      left: 0,
+                      width: "100%",
+                      height: "100%",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      px: 2,
+                      color: "white",
+                      pointerEvents: "none", // Allow swipes to pass through
+                      zIndex: 100,
+                    }}
+                  >
+                    <ArrowBackIosNew
+                      sx={{ fontSize: "2.5rem", opacity: 0.6 }}
+                    />
+                    <Typography
+                      sx={{
+                        bgcolor: "rgba(0,0,0,0.6)",
+                        px: 2,
+                        py: 1,
+                        borderRadius: 2,
+                        userSelect: "none",
+                      }}
+                    >
+                      Swipe to navigate
+                    </Typography>
+                    <ArrowForwardIos
+                      sx={{ fontSize: "2.5rem", opacity: 0.6 }}
+                    />
+                  </Box>
+                </Fade>
+                {!isMobile && (
+                  <IconButton
+                    onClick={() => handleNavigate("next")}
+                    disabled={
+                      isDetailLoading || (!neighbors.nextId && !hasMore)
+                    }
+                    sx={{
+                      position: "absolute",
+                      right: -60,
+                      zIndex: 1,
+                      "&.Mui-disabled": { opacity: 0.2 },
+                    }}
+                  >
+                    {isWaitingForMore ? (
+                      <CircularProgress size={24} />
+                    ) : (
+                      <ArrowForwardIos fontSize="large" />
+                    )}
+                  </IconButton>
+                )}
+              </Box>
+              <ActionDialogs
+                dialogType={dialogType}
+                onClose={closeDialog}
+                onConfirmConvert={confirmConvert}
+                onConfirmDeleteRecord={confirmDeleteRecord}
+                onConfirmDeleteFile={confirmDeleteFile}
+              />
+              {isDetailLoading ? (
+                <Box
                   sx={{
-                    position: "absolute",
-                    right: -60,
-                    zIndex: 1,
-                    "&.Mui-disabled": { opacity: 0.2 },
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    flexGrow: 1, // Allow the box to grow and fill the minHeight
                   }}
                 >
-                  <ArrowForwardIos fontSize="large" />
-                </IconButton>
+                  <CircularProgress />
+                </Box>
+              ) : (
+                <MediaContentTabs
+                  detail={detail}
+                  onDetailReload={fetchDetail}
+                  onTagUpdate={(updatedMedia) =>
+                    setDetail((d) => (d ? { ...d, media: updatedMedia } : null))
+                  }
+                />
               )}
-            </Box>
-            <ActionDialogs
-              dialogType={dialogType}
-              onClose={() => setDialogType(null)}
-              onConfirmConvert={confirmConvert}
-              onConfirmDeleteRecord={confirmDeleteRecord}
-              onConfirmDeleteFile={confirmDeleteFile}
-            />
-            {/* --- Tabbed Content Area --- */}
-            <MediaContentTabs
-              detail={detail}
-              onDetailReload={loadDetail}
-              onTagUpdate={(updatedMedia) =>
-                setDetail((d) => (d ? { ...d, media: updatedMedia } : null))
-              }
-            />
-            {/* Snackbar */}
-            <Snackbar
-              open={snackbar.open}
-              autoHideDuration={3000}
-              onClose={() => setSnackbar({ ...snackbar, open: false })}
-              anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-            >
-              <Alert
-                severity={snackbar.severity}
-                sx={{ width: "100%" }}
+              <Snackbar
+                open={snackbar.open}
+                autoHideDuration={3000}
                 onClose={() => setSnackbar({ ...snackbar, open: false })}
+                anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
               >
-                {snackbar.message}
-              </Alert>
-            </Snackbar>
-          </Container>
+                <Alert
+                  severity={snackbar.severity}
+                  sx={{ width: "100%" }}
+                  onClose={() => setSnackbar({ ...snackbar, open: false })}
+                >
+                  {snackbar.message}
+                </Alert>
+              </Snackbar>
+            </Container>
+          )
         )}
       </DialogContent>
     </Dialog>
