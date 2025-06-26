@@ -98,14 +98,6 @@ export default function FaceCard({
     });
   };
 
-  const handleSetProfileClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (onSetProfile) {
-      onSetProfile(face.id);
-    }
-  };
-
   const renderDropdownContent = () => {
     if (!dropdownPosition) return null;
 
