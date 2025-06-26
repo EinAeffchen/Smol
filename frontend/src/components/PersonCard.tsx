@@ -34,7 +34,7 @@ export default function PersonCard({ person }: { person: Person }) {
         color: "white",
         transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
         background: thumbUrl
-          ? `url(${thumbUrl})`
+          ? `url("${thumbUrl}")`
           : "linear-gradient(135deg, primary.main, primary.dark)",
         backgroundSize: "cover",
         backgroundPosition: "center",
