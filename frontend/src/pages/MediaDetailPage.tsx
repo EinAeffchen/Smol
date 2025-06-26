@@ -18,40 +18,39 @@ import {
 import { ArrowBackIosNew, ArrowForwardIos } from "@mui/icons-material";
 import CloseIcon from "@mui/icons-material/Close";
 
-import { useMediaStore, defaultListState } from "../stores/useMediaStore";
-import { useFaceActions } from "../hooks/useFaceActions";
+import {
+  useMediaStore,
+  defaultListState,
+  noContextListState,
+} from "../stores/useMediaStore";
 
 import { ActionDialogs } from "../components/ActionDialogs";
 import { MediaDisplay } from "../components/MediaDisplay";
 import { MediaHeader } from "../components/MediaHeader";
 import { MediaContentTabs } from "../components/MediaContentTabs";
 
-import { Media, MediaDetail, Task, Person } from "../types";
+import { Media, MediaDetail, Task } from "../types";
 import { API } from "../config";
 
 export default function MediaDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const location = useLocation();
+  const backgroundLocation = location.state?.backgroundLocation;
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
-  const faceActions = useFaceActions();
 
   // --- 1. STATE MANAGEMENT ---
   const mediaListKey = location.state?.mediaListKey as string | undefined;
-
+  const listFromStore = useMediaStore((state) =>
+    mediaListKey ? state.lists[mediaListKey] : undefined
+  );
   // A. Global state from Zustand for the list context
   const {
     items,
     hasMore,
     isLoading: isListLoading,
-  } = useMediaStore((state) => {
-    if (!mediaListKey) {
-      return { ...defaultListState, hasMore: false };
-    }
-    // Otherwise, use the list from the store or the default.
-    return state.lists[mediaListKey] || defaultListState;
-  });
+  } = listFromStore || (mediaListKey ? defaultListState : noContextListState);
   const { loadMore } = useMediaStore();
 
   // B. Local state for this specific modal's content
@@ -142,7 +141,6 @@ export default function MediaDetailPage() {
           : null;
       if (newNextId) {
         navigate(`/medium/${newNextId}`, {
-          replace: true,
           state: { ...location.state, media: null },
         });
       }
@@ -162,7 +160,6 @@ export default function MediaDetailPage() {
         direction === "prev" ? neighbors.previousId : neighbors.nextId;
       if (targetId) {
         navigate(`/medium/${targetId}`, {
-          replace: true,
           state: { ...location.state, media: null },
         });
       } else if (direction === "next" && hasMore && !isListLoading) {
@@ -182,8 +179,6 @@ export default function MediaDetailPage() {
       viewContext,
     ]
   );
-
-  // --- 4. OTHER EFFECTS & HANDLERS (Complete) ---
 
   useEffect(() => {
     if (isMobile && (neighbors.nextId || neighbors.previousId)) {
@@ -302,10 +297,15 @@ export default function MediaDetailPage() {
     console.log(showSwipeHint);
   }
 
-  const handleClose = () => navigate(-1);
+  const handleClose = () => {
+    if (backgroundLocation) {
+      navigate(backgroundLocation.pathname + backgroundLocation.search);
+    } else {
+      navigate("/");
+    }
+  };
   const isLoading = !detail && isDetailLoading;
 
-  // --- 5. RENDER LOGIC ---
   return (
     <Dialog
       open={true}
@@ -316,7 +316,7 @@ export default function MediaDetailPage() {
         backdrop: { sx: { backgroundColor: "rgba(0, 0, 0, 0.8)" } },
         paper: {
           sx: {
-            mt: { xs: 2, sm: 4, md: 8 }, // Use responsive margin-top
+            mt: { xs: 2, sm: 4, md: 8 },
           },
         },
       }}
@@ -353,12 +353,6 @@ export default function MediaDetailPage() {
         ) : (
           detail && (
             <Container maxWidth="xl" sx={{ pt: 2, pb: 6 }}>
-              <MediaHeader
-                media={detail.media}
-                onOpenDialog={setDialogType}
-                onToggleExif={() => setTabValue(3)}
-                showExif={tabValue === 3}
-              />
               {task &&
                 (task.status === "running" || task.status === "pending") && (
                   <Box mb={2}>
@@ -386,7 +380,7 @@ export default function MediaDetailPage() {
                     disabled={isDetailLoading || !neighbors.previousId}
                     sx={{
                       position: "absolute",
-                      left: -60,
+                      left: -40,
                       zIndex: 1,
                       "&.Mui-disabled": { opacity: 0.2 },
                     }}
@@ -397,8 +391,14 @@ export default function MediaDetailPage() {
                 <Box
                   onTouchStart={handleTouchStart}
                   onTouchEnd={handleTouchEnd}
-                  sx={{ width: "100%" }}
+                  sx={{ width: "90%" }}
                 >
+                  <MediaHeader
+                    media={detail.media}
+                    onOpenDialog={setDialogType}
+                    onToggleExif={() => setTabValue(3)}
+                    showExif={tabValue === 3}
+                  />
                   <MediaDisplay media={detail.media} />
                 </Box>
                 <Fade in={showSwipeHint}>
@@ -445,7 +445,7 @@ export default function MediaDetailPage() {
                     }
                     sx={{
                       position: "absolute",
-                      right: -60,
+                      right: -40,
                       zIndex: 1,
                       "&.Mui-disabled": { opacity: 0.2 },
                     }}

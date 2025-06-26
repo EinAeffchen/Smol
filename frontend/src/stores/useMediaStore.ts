@@ -26,6 +26,11 @@ const initialListState: MediaListState = {
   isLoading: false,
 };
 
+export const noContextListState: MediaListState = {
+  ...initialListState,
+  hasMore: false,
+};
+
 export const useMediaStore = create<MediaStoreState>((set, get) => ({
   lists: {}, // Initial state is an empty object
 
@@ -105,9 +110,4 @@ export const useMediaStore = create<MediaStoreState>((set, get) => ({
 }));
 
 // A default empty state to prevent errors before data is loaded
-export const defaultListState: MediaListState = {
-  items: [],
-  nextCursor: null,
-  hasMore: true,
-  isLoading: false,
-};
+export const defaultListState: MediaListState = initialListState;

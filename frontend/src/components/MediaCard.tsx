@@ -1,5 +1,5 @@
 import React, { useState, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Link } from "react-router-dom";
 import {
   Card,
   CardActionArea,
@@ -12,7 +12,6 @@ import { Media } from "../types";
 import { API } from "../config";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
-import { Person } from "../types";
 
 function formatDuration(d?: number): string {
   if (d == null) return "";
@@ -49,22 +48,17 @@ export default function MediaCard({
   } else {
     thumbUrl = `${API}/thumbnails/${media.id}.jpg`;
   }
-  const handleClick = (e: React.MouseEvent) => {
-    e.preventDefault();
+  const isAlreadyInModal = !!location.state?.backgroundLocation;
 
-    const isAlreadyInModal = !!location.state?.backgroundLocation;
+  const background = isAlreadyInModal
+    ? location.state.backgroundLocation
+    : { pathname: location.pathname, search: location.search };
 
-    navigate(`/medium/${media.id}`, {
-      replace: isAlreadyInModal,
-      state: {
-        backgroundLocation: isAlreadyInModal
-          ? location.state.backgroundLocation
-          : location,
-        viewContext: { sort: sortOrder },
-        mediaListKey: mediaListKey,
-        media: media,
-      },
-    });
+  const linkState = {
+    backgroundLocation: background,
+    viewContext: { sort: sortOrder },
+    mediaListKey: isAlreadyInModal ? undefined : mediaListKey,
+    media: media,
   };
 
   const handleMouseEnter = () => {
@@ -98,139 +92,145 @@ export default function MediaCard({
         },
       }}
     >
-      <CardActionArea
-        onClick={handleClick}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        sx={{
-          // Use a pseudo-element for aspect ratio to prevent layout shift
-          position: "relative",
-          display: "block",
-          width: "100%",
-          paddingTop: "100%", // For 1:1 aspect ratio. Use '56.25%' for 16:9
-        }}
+      <Link
+        to={`/medium/${media.id}`}
+        state={linkState}
+        // replace={isAlreadyInModal}
+        style={{ textDecoration: "none", color: "inherit" }} // Prevent default link styles
       >
-        {/* Container for media elements that will fill the parent */}
-        <Box
+        <CardActionArea
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
           sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
+            // Use a pseudo-element for aspect ratio to prevent layout shift
+            position: "relative",
+            display: "block",
             width: "100%",
-            height: "100%",
+            paddingTop: "100%", // For 1:1 aspect ratio. Use '56.25%' for 16:9
           }}
         >
-          {/* Thumbnail Image - Controls opacity */}
-          <CardMedia
-            component="img"
-            src={thumbUrl}
-            alt={media.filename}
+          {/* Container for media elements that will fill the parent */}
+          <Box
             sx={{
               position: "absolute",
+              top: 0,
+              left: 0,
               width: "100%",
               height: "100%",
-              objectFit: "cover",
-              opacity: hovered && isVideo ? 0 : 1,
-              transition: "opacity 0.3s ease-in-out",
             }}
-          />
-
-          {/* Video Player - Controls opacity */}
-          {isVideo && (
+          >
+            {/* Thumbnail Image - Controls opacity */}
             <CardMedia
-              ref={videoRef}
-              component="video"
-              src={mediaUrl}
-              muted
-              loop
-              playsInline
+              component="img"
+              src={thumbUrl}
+              alt={media.filename}
               sx={{
                 position: "absolute",
                 width: "100%",
                 height: "100%",
                 objectFit: "cover",
-                opacity: hovered ? 1 : 0,
+                opacity: hovered && isVideo ? 0 : 1,
                 transition: "opacity 0.3s ease-in-out",
               }}
             />
-          )}
-        </Box>
 
-        {isVideo && (
+            {/* Video Player - Controls opacity */}
+            {isVideo && (
+              <CardMedia
+                ref={videoRef}
+                component="video"
+                src={mediaUrl}
+                muted
+                loop
+                playsInline
+                sx={{
+                  position: "absolute",
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  opacity: hovered ? 1 : 0,
+                  transition: "opacity 0.3s ease-in-out",
+                }}
+              />
+            )}
+          </Box>
+
+          {isVideo && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: "50%",
+                left: "50%",
+                transform: "translate(-50%, -50%)",
+                color: "white",
+                backgroundColor: "rgba(0, 0, 0, 0.3)",
+                borderRadius: "50%",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 64,
+                height: 64,
+                pointerEvents: "none",
+                transition: "opacity 0.3s ease-in-out",
+                opacity: hovered ? 0 : 0.8, // Hide on hover
+              }}
+            >
+              <PlayArrowIcon sx={{ fontSize: "3rem" }} />
+            </Box>
+          )}
+
+          {/* Gradient and Info overlay */}
           <Box
             sx={{
               position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              color: "white",
-              backgroundColor: "rgba(0, 0, 0, 0.3)",
-              borderRadius: "50%",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 64,
-              height: 64,
-              pointerEvents: "none",
-              transition: "opacity 0.3s ease-in-out",
-              opacity: hovered ? 0 : 0.8, // Hide on hover
-            }}
-          >
-            <PlayArrowIcon sx={{ fontSize: "3rem" }} />
-          </Box>
-        )}
-
-        {/* Gradient and Info overlay */}
-        <Box
-          sx={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            width: "100%",
-            height: "100%",
-            background:
-              "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 50%)",
-            opacity: hovered ? 1 : 0, // Fade the whole overlay in on hover
-            transition: "opacity 0.3s ease-in-out",
-            pointerEvents: "none", // Allow clicks to pass through to the CardActionArea
-          }}
-        >
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "flex-end",
-              flexDirection: "column",
+              top: 0,
+              left: 0,
+              width: "100%",
               height: "100%",
+              background:
+                "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 50%)",
+              opacity: hovered ? 1 : 0, // Fade the whole overlay in on hover
+              transition: "opacity 0.3s ease-in-out",
+              pointerEvents: "none", // Allow clicks to pass through to the CardActionArea
             }}
           >
             <Box
               sx={{
                 display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                p: 1.5,
-                color: "white",
+                justifyContent: "flex-end",
+                flexDirection: "column",
+                height: "100%",
               }}
             >
-              {isVideo ? (
-                <Box display="flex" alignItems="center" gap={0.5}>
-                  <PlayCircleOutlineIcon sx={{ fontSize: "1rem" }} />
-                  <Typography variant="caption" lineHeight={1}>
-                    {formatDuration(media.duration)}
-                  </Typography>
-                </Box>
-              ) : (
-                <div />
-              )}
-              <Typography variant="caption" lineHeight={1}>
-                {media.width && media.height
-                  ? `${media.width}×${media.height}`
-                  : ""}
-              </Typography>
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  p: 1.5,
+                  color: "white",
+                }}
+              >
+                {isVideo ? (
+                  <Box display="flex" alignItems="center" gap={0.5}>
+                    <PlayCircleOutlineIcon sx={{ fontSize: "1rem" }} />
+                    <Typography variant="caption" lineHeight={1}>
+                      {formatDuration(media.duration)}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <div />
+                )}
+                <Typography variant="caption" lineHeight={1}>
+                  {media.width && media.height
+                    ? `${media.width}×${media.height}`
+                    : ""}
+                </Typography>
+              </Box>
             </Box>
           </Box>
-        </Box>
-      </CardActionArea>
+        </CardActionArea>
+      </Link>
     </Card>
   );
 }
