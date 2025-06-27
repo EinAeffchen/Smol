@@ -66,70 +66,87 @@ def start_conversion(
 
 def _run_conversion(task_id: str, media_path: str, media_id: int):
     with Session(engine) as session:
-        task: ProcessingTask = session.get(ProcessingTask, task_id)
+        task = session.get(ProcessingTask, task_id)
+        if not task:
+            logger.error(f"Task {task_id} not found.")
+            return
+
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
         session.add(task)
         session.commit()
+
         full_path = MEDIA_DIR / media_path
         temp_output_path = full_path.with_name(full_path.stem + "_temp.mp4")
+
         try:
             info = ffmpeg.probe(str(full_path))
-        except ffmpeg.Error as e:
-            logger.error("stdout: %s", e.stdout.decode("utf8"))
-            logger.error("stderr: %s", e.stderr.decode("utf8"))
-            raise
-        dur_s = float(info["format"]["duration"])
-        dur_us = dur_s * 1000000
-        # run ffmpeg with stderr piped so we can parse “progress=…”
-        # Here’s one way using the “-progress” flag:
-        cmd = [
-            "ffmpeg",
-            "-i",
-            full_path,
-            "-movflags",
-            "use_metadata_tags",
-            "-c:v",
-            "libx264",
-            "-c:a",
-            "aac",
-            "-preset",
-            "fast",
-            "-progress",
-            "pipe:1",  # emits key=value pairs on stdout
-            "-nostats",
-            "-filter:v",
-            "fps=30",
-            "-y",
-            temp_output_path,
-        ]
-        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+            dur_s = float(info["format"]["duration"])
+            dur_us = dur_s * 1000000
+            # run ffmpeg with stderr piped so we can parse “progress=…”
+            # Here’s one way using the “-progress” flag:
+            cmd = [
+                "ffmpeg",
+                "-i",
+                str(full_path),
+                "-c:v",
+                "libx264",
+                "-filter:v",
+                "fps=30",
+                "-pix_fmt",
+                "yuv420p",
+                "-c:a",
+                "aac",
+                "-movflags",
+                "use_metadata_tags+faststart",
+                "-progress",
+                "pipe:1",  # emits key=value pairs on stdout
+                "-nostats",
+                "-y",
+                str(temp_output_path),
+            ]
+            logger.info(f"Running FFmpeg command: {' '.join(cmd)}")
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
 
-        for line in proc.stdout:
-            # ffmpeg -progress emits lines like "out_time_ms=1234567" etc.
-            if line.startswith("out_time_ms="):
-                out_us: str = line.split("=")[1].strip()
-                if out_us.isnumeric():
-                    out_us = int(out_us)
-                else:
-                    continue
-                pct = min(100, int(out_us / dur_us * 100))
-                task.processed = pct
-                session.add(task)
-                session.commit()
-            if line.startswith("progress=end"):
-                break
+            for line in proc.stdout:
+                if line.startswith("out_time_ms="):
+                    out_us: str = line.split("=")[1].strip()
+                    if out_us.isnumeric():
+                        out_us = int(out_us)
+                        pct = min(100, int(out_us / dur_us * 100))
+                        if pct > task.processed:
+                            task.processed = pct
+                            session.add(task)
+                            session.commit()
+                if line.startswith("progress=end"):
+                    break
 
-        proc.wait()
-        task.processed = 100
-        task.status = "completed"
-        task.finished_at = datetime.now(timezone.utc)
-        new_file = temp_output_path.rename(full_path)
-        media = session.get(Media, media_id)
-        media.path = str(new_file.relative_to(MEDIA_DIR))
-        media.filename = new_file.name
-        session.add(media)
-        if new_file.exists():
-            full_path.unlink()
-        session.add(task)
-        session.commit()
+            stdout, stderr = proc.communicate()
+            if proc.returncode != 0:
+                logger.error(
+                    f"FFmpeg failed for {media_path} with exit code {proc.returncode}"
+                )
+                logger.error(f"FFmpeg stderr: {stderr}")
+                raise Exception(f"FFmpeg conversion failed: {stderr}")
+
+            task.processed = 100
+            task.status = "completed"
+            task.finished_at = datetime.now(timezone.utc)
+
+            media = session.get(Media, media_id)
+            if media and temp_output_path.exists():
+                full_path.unlink()
+                new_file = temp_output_path.rename(full_path)
+                media.path = str(new_file.relative_to(MEDIA_DIR))
+                media.filename = new_file.name
+                session.add(media)
+            session.add(task)
+            session.commit()
+        except Exception as e:
+            logger.error(f"Conversion task {task_id} failed: {e}")
+            task.status = "failed"
+            task.error = str(e)
+            session.add(task)
+            session.commit()
+            if temp_output_path.exists():
+                temp_output_path.unlink()  # Clean up temp file on failure

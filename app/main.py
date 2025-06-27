@@ -3,11 +3,12 @@ import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
+import mimetypes
 
 from app.api import face, media, person, search, tags, tasks
 from app.api.processors import router as proc_router
@@ -130,11 +131,33 @@ app.mount(
     StaticFiles(directory=str(THUMB_DIR), html=True),
     name="thumbnails",
 )
-app.mount(
-    "/originals",
-    StaticFiles(directory=str(MEDIA_DIR)),
-    name="originals",
-)
+
+
+@app.get("/originals/{file_path:path}", include_in_schema=False)
+async def serve_original_media(file_path: str):
+    full_path = MEDIA_DIR.joinpath(file_path)
+
+    # Security check to prevent accessing files outside the MEDIA_DIR
+    if not full_path.is_file() or not str(full_path).startswith(
+        str(MEDIA_DIR)
+    ):
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Guess the MIME type from the file extension
+    mime_type, _ = mimetypes.guess_type(full_path)
+    if mime_type is None:
+        # Fallback if MIME type can't be guessed
+        mime_type = "application/octet-stream"
+
+    # Create a FileResponse, which handles byte-range requests correctly
+    response = FileResponse(full_path, media_type=mime_type)
+
+    # Manually add the header that Firefox requires
+    response.headers["Accept-Ranges"] = "bytes"
+
+    return response
+
+
 app.mount(
     "/static",
     StaticFiles(directory=str(STATIC_DIR), html=True),
