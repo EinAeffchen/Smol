@@ -1,11 +1,10 @@
-import React, { useState, useCallback } from "react";
-import { useInfinite, CursorResponse } from "../hooks/useInfinite";
-import { MediaPreview } from "../types";
+import React, { useState, useMemo, useEffect } from "react";
 import Masonry from "react-masonry-css";
 import ImportExportIcon from "@mui/icons-material/ImportExport";
 import { API } from "../config";
+import { useInView } from "react-intersection-observer";
+
 import MediaCard from "../components/MediaCard";
-import { MediaIndex } from "../types";
 import {
   Box,
   CircularProgress,
@@ -14,6 +13,7 @@ import {
   MenuItem,
   Container,
 } from "@mui/material";
+import { useMediaStore, defaultListState } from "../stores/useMediaStore";
 
 const breakpointColumnsObj = {
   default: 5,
@@ -24,33 +24,30 @@ const breakpointColumnsObj = {
 };
 
 export default function ImagesPage() {
+  const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
   const [sortOrder, setSortOrder] = useState<"newest" | "latest">("newest");
   const [sortMenuAnchorEl, setSortMenuAnchorEl] = useState<null | HTMLElement>(
     null
   );
 
-  const pageSize = 20;
-  const fetchImages = useCallback(
-    (cursor: string | null, limit: number) => {
-      const params = new URLSearchParams();
-      params.set("limit", limit.toString());
-      params.set("sort", sortOrder);
-      if (cursor) params.set("cursor", cursor);
+  const baseUrl = useMemo(() => {
+    const params = new URLSearchParams({ sort: sortOrder });
+    return `${API}/api/media/images?${params.toString()}`;
+  }, [sortOrder]);
+  const { items, hasMore, isLoading } = useMediaStore(
+    (state) => state.lists[baseUrl] || defaultListState
+  );
+  const { fetchInitial, loadMore } = useMediaStore();
 
-      return fetch(`${API}/api/media/images?${params.toString()}`).then(
-        (res) => {
-          if (!res.ok) throw new Error(res.statusText);
-          return res.json() as Promise<CursorResponse<MediaIndex>>;
-        }
-      );
-    },
-    [sortOrder]
-  );
-  const { items, hasMore, loading, loaderRef } = useInfinite<MediaPreview>(
-    fetchImages,
-    pageSize,
-    [sortOrder]
-  );
+  useEffect(() => {
+    fetchInitial(baseUrl);
+  }, [baseUrl, fetchInitial]);
+
+  useEffect(() => {
+    if (inView && hasMore && !isLoading) {
+      loadMore(baseUrl);
+    }
+  }, [inView, hasMore, isLoading, loadMore, baseUrl]);
   const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setSortMenuAnchorEl(event.currentTarget);
   };
@@ -108,18 +105,22 @@ export default function ImagesPage() {
         >
           {items.map((media) => (
             <div key={media.id}>
-              <MediaCard media={media} />
+              <MediaCard
+                media={media}
+                mediaListKey={baseUrl}
+                sortOrder={sortOrder}
+              />
             </div>
           ))}
         </Masonry>
 
         {/* Loading / Sentinel */}
-        {loading && (
+        {isLoading && (
           <Box textAlign="center" py={3}>
             <CircularProgress sx={{ color: "accent.main" }} />
           </Box>
         )}
-        {hasMore && <Box ref={loaderRef} />}
+        {hasMore && <Box ref={loaderRef} sx={{ height: "10px" }} />}
       </Container>
     </>
   );
