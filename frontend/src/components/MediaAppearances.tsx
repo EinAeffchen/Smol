@@ -5,8 +5,8 @@ import { useInView } from "react-intersection-observer";
 
 import { Media, Person, PersonReadSimple } from "../types";
 import MediaCard from "./MediaCard";
-import { API } from "../config";
 import { useMediaStore, defaultListState } from "../stores/useMediaStore";
+import { getPeople, getPersonMediaAppearances } from "../services/person";
 
 const breakpointColumnsObj = {
   default: 6,
@@ -24,24 +24,20 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
   const [filterPeople, setFilterPeople] = useState<PersonReadSimple[]>([]);
   const [personOptions, setPersonOptions] = useState<PersonReadSimple[]>([]);
 
-  const baseUrl = useMemo(() => {
-    const params = new URLSearchParams();
-    filterPeople.forEach((p) => params.append("with_person_ids", String(p.id)));
-    return `${API}/api/persons/${
-      person.id
-    }/media-appearances?${params.toString()}`;
+  const mediaListKey = useMemo(() => {
+    const filterIds = filterPeople.map((p) => p.id).sort().join(",");
+    return `person-${person.id}-media-appearances-${filterIds}`;
   }, [person.id, filterPeople]);
 
   const { items, hasMore, isLoading } = useMediaStore(
-    (state) => state.lists[baseUrl] || defaultListState
+    (state) => state.lists[mediaListKey] || defaultListState
   );
   const { fetchInitial, loadMore } = useMediaStore();
 
   const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
 
   useEffect(() => {
-    fetch(`${API}/api/persons/all-simple`)
-      .then((res) => res.json())
+    getPeople(1) // Assuming getPeople can fetch all simple people or takes a page parameter
       .then((data) => {
         setPersonOptions(data.filter((p: Person) => p.id !== person.id));
       })
@@ -49,14 +45,18 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
   }, [person.id]);
 
   useEffect(() => {
-    fetchInitial(baseUrl);
-  }, [baseUrl, fetchInitial]);
+    fetchInitial(mediaListKey, () =>
+      getPersonMediaAppearances(person.id, 1, filterPeople.map((p) => p.id))
+    );
+  }, [mediaListKey, fetchInitial, person.id, filterPeople]);
 
   useEffect(() => {
     if (inView && hasMore && !isLoading) {
-      loadMore(baseUrl);
+      loadMore(mediaListKey, (page) =>
+        getPersonMediaAppearances(person.id, page, filterPeople.map((p) => p.id))
+      );
     }
-  }, [inView, hasMore, isLoading, loadMore, baseUrl]);
+  }, [inView, hasMore, isLoading, loadMore, mediaListKey, person.id, filterPeople]);
 
   return (
     <Box>
@@ -87,7 +87,7 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
       >
         {items.map((media) => (
           <div key={media.id}>
-            <MediaCard media={media} mediaListKey={baseUrl} />
+            <MediaCard media={media} mediaListKey={mediaListKey} />
           </div>
         ))}
       </Masonry>

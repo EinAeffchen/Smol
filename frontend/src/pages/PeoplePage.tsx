@@ -1,7 +1,7 @@
 import React, { useCallback } from "react";
-import { useInfinite, CursorResponse } from "../hooks/useInfinite";
+import { useInfinite, PageResponse } from "../hooks/useInfinite";
 import PersonCard from "../components/PersonCard";
-import { Person } from "../types";
+import { PersonReadSimple } from "../types";
 import {
   Container,
   Box,
@@ -10,23 +10,17 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { ENABLE_PEOPLE } from "../config";
-import { API } from "../config";
+import { getPeople } from "../services/person";
 
 const ITEMS_PER_PAGE = 12;
 
 export default function PeoplePage() {
   const fetchPeople = useCallback(
-    (cursor: string | null, limit: number, signal: AbortSignal) =>
-      fetch(
-        `${API}/api/persons/${
-          cursor ? `?cursor=${cursor}&` : "?"
-        }limit=${limit}`,
-        { signal }
-      ).then((res) => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.json() as Promise<CursorResponse<Person>>;
-      }),
-    [API]
+    async (cursor?: string): Promise<PageResponse<PersonReadSimple>> => {
+      const data = await getPeople(cursor);
+      return { items: data.items, next_cursor: data.next_cursor };
+    },
+    []
   );
 
   const {
@@ -35,7 +29,7 @@ export default function PeoplePage() {
     hasMore,
     loading,
     loaderRef,
-  } = useInfinite<Person>(fetchPeople, ITEMS_PER_PAGE, []);
+  } = useInfinite<PersonReadSimple>(fetchPeople, []);
 
   if (loading && people.length === 0) {
     return (

@@ -36,6 +36,8 @@ export default function MediaCard({ media, mediaListKey }: MediaCardProps) {
   const location = useLocation();
 
   const isVideo = typeof media.duration === "number";
+
+
   const mediaUrl = `${API}/originals/${media.path}`;
   const thumbUrl = media.thumbnail_path
     ? `${API}/thumbnails/${media.thumbnail_path}`
@@ -43,7 +45,7 @@ export default function MediaCard({ media, mediaListKey }: MediaCardProps) {
 
   const linkState = {
     backgroundLocation: location.state?.backgroundLocation || location,
-    mediaListKey: location.state?.backgroundLocation ? undefined : mediaListKey,
+    mediaListKey: mediaListKey,
     media: media,
   };
 

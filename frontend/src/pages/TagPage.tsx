@@ -7,21 +7,18 @@ import {
   CircularProgress,
 } from "@mui/material";
 import TagCard from "../components/TagCard";
-import { useInfinite, CursorResponse } from "../hooks/useInfinite";
+import { useInfinite, PageResponse } from "../hooks/useInfinite";
 import { Tag } from "../types";
-import { API } from "../config";
+import { getTags } from "../services/tag";
 const ITEMS_PER_PAGE = 20;
 
 export default function TagsPage() {
   const fetchTags = useCallback(
-    (cursor: string | null, limit: number) =>
-      fetch(
-        `${API}/api/tags/${cursor ? `?cursor=${cursor}&` : "?"}limit=${limit}`
-      ).then((res) => {
-        if (!res.ok) throw new Error(`Failed to fetch tags: ${res.statusText}`);
-        return res.json() as Promise<CursorResponse<Tag>>;
-      }),
-    [API]
+    async (page: number, limit: number): Promise<PageResponse<Tag>> => {
+      const data = await getTags(page);
+      return { items: data, next_page: data.length === 0 ? null : page + 1 };
+    },
+    []
   );
 
   const {

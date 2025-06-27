@@ -133,3 +133,8 @@ export interface MediaIndex {
   views: number;
   inserted_at: string; // ISO date
 }
+
+export interface CursorPage<T> {
+  items: T[];
+  next_cursor: string | null;
+}

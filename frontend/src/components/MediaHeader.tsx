@@ -9,10 +9,9 @@ import {
   IconButton,
   Divider,
 } from "@mui/material";
-import { MoreVert, Visibility, Vrpano, Delete } from "@mui/icons-material";
+import { MoreVert, Vrpano, Delete } from "@mui/icons-material";
 import { Media } from "../types";
 import { READ_ONLY } from "../config";
-
 const ERROR_COLOR = "error.main";
 
 interface MediaHeaderProps {

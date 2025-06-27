@@ -13,7 +13,7 @@ import ImportExportIcon from "@mui/icons-material/ImportExport";
 
 import { useMediaStore, defaultListState } from "../stores/useMediaStore";
 import MediaCard from "../components/MediaCard";
-import { API } from "../config";
+import { getMediaList } from "../services/media";
 
 const breakpointColumnsObj = {
   default: 5,
@@ -31,26 +31,28 @@ export default function IndexPage() {
     null
   );
 
-  const baseUrl = useMemo(() => {
-    const params = new URLSearchParams({ sort: sortOrder });
-    tags.forEach((tag) => params.append("tags", tag));
-    return `${API}/api/media/?${params.toString()}`;
+  const mediaListKey = useMemo(() => {
+    const tagString = tags.sort().join(",");
+    return `all-media-${sortOrder}-${tagString}`;
   }, [sortOrder, tags]);
 
-  const { items, hasMore, isLoading } = useMediaStore(
-    (state) => state.lists[baseUrl] || defaultListState
+  const listState = useMediaStore(
+    (state) => state.lists[mediaListKey]
   );
+  const items = listState?.items || [];
+  const hasMore = listState?.hasMore || defaultListState.hasMore;
+  const isLoading = listState?.isLoading || defaultListState.isLoading;
   const { fetchInitial, loadMore } = useMediaStore();
 
   useEffect(() => {
-    fetchInitial(baseUrl);
-  }, [baseUrl, fetchInitial]);
+    fetchInitial(mediaListKey, () => getMediaList(null, sortOrder, tags));
+  }, [mediaListKey, fetchInitial, sortOrder, tags]);
 
   useEffect(() => {
     if (inView && hasMore && !isLoading) {
-      loadMore(baseUrl);
+      loadMore(mediaListKey, (cursor) => getMediaList(cursor, sortOrder, tags));
     }
-  }, [inView, hasMore, isLoading, loadMore, baseUrl]);
+  }, [inView, hasMore, isLoading, loadMore, mediaListKey, sortOrder, tags]);
 
   const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setSortMenuAnchorEl(event.currentTarget);
@@ -101,8 +103,7 @@ export default function IndexPage() {
           <div key={media.id}>
             <MediaCard
               media={media}
-              mediaListKey={baseUrl}
-              sortOrder={sortOrder}
+              mediaListKey={mediaListKey}
             />
           </div>
         ))}

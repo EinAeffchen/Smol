@@ -36,26 +36,27 @@ function TabPanel(props: TabPanelProps) {
 }
 
 interface PersonContentTabsProps {
-  onLoadSimilar: () => void;
   person: Person;
   detectedFacesList: FaceRead[];
   hasMoreFaces: boolean;
   loadingMoreFaces: boolean;
-  onTagAdded: (tag: any) => void;
+  onTagAdded: (updatedPerson: Person) => void;
   loadMoreDetectedFaces: () => void;
   handleProfileAssignmentWrapper: (faceId: number, personId: number) => void;
-  handleAssignWrapper: (faceId: number, personId: number) => void;
-  handleCreateWrapper: (faceId: number, data: any) => Promise<Person>;
-  handleDeleteWrapper: (faceId: number) => void;
-  handleDetachWrapper: (faceId: number) => void;
+  handleAssignWrapper: (faceIds: number[], personId: number) => void;
+  handleCreateWrapper: (faceIds: number[], name: string) => Promise<Person>;
+  handleDeleteWrapper: (faceIds: number[]) => void;
+  handleDetachWrapper: (faceIds: number[]) => void;
   suggestedFaces: FaceRead[];
   similarPersons: SimilarPerson[];
   onTagUpdate: () => void;
   onRefreshSuggestions: () => void;
+  onLoadSimilar: () => void;
 }
 
 export function PersonContentTabs(props: PersonContentTabsProps) {
   const [tabValue, setTabValue] = useState(0);
+  const [faceTabValue, setFaceTabValue] = useState(0);
   const [hasLoadedSimilar, setHasLoadedSimilar] = useState(false);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
@@ -64,6 +65,13 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
       props.onLoadSimilar();
       setHasLoadedSimilar(true);
     }
+  };
+
+  const handleFaceTabChange = (
+    event: React.SyntheticEvent,
+    newValue: number
+  ) => {
+    setFaceTabValue(newValue);
   };
   useEffect(() => {
     setHasLoadedSimilar(false);
@@ -82,6 +90,7 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
         >
           <Tab label={`Media Appearances (${props.person.appearance_count})`} />
           <Tab label="Faces" />
+          <Tab label="Suggested Faces" />
           <Tab label="Similar People" />
           <Tab label="Tags" />
         </Tabs>
@@ -96,52 +105,68 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
       </TabPanel>
 
       <TabPanel value={tabValue} index={1}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 2,
-          }}
-        >
-          <Typography variant="h6">Suggestions</Typography>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => props.onRefreshSuggestions()}
+        <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+          <Tabs
+            value={faceTabValue}
+            onChange={handleFaceTabChange}
+            aria-label="Faces content tabs"
           >
-            Refresh Suggestions
-          </Button>
+            <Tab label="Confirmed" />
+            <Tab label="Suggested" />
+          </Tabs>
         </Box>
-        <Suspense fallback={<CircularProgress />}>
-          <DetectedFaces
-            title="All Detected Faces"
-            faces={props.detectedFacesList}
-            profileFaceId={props.person.profile_face_id}
-            onSetProfile={(faceId) =>
-              props.handleProfileAssignmentWrapper(faceId, props.person.id)
-            }
-            onAssign={props.handleAssignWrapper}
-            onCreate={props.handleCreateWrapper}
-            onDelete={props.handleDeleteWrapper}
-            onDetach={props.handleDetachWrapper}
-            onLoadMore={props.loadMoreDetectedFaces}
-            hasMore={props.hasMoreFaces}
-            isLoadingMore={props.loadingMoreFaces}
-          />
-          {props.suggestedFaces.length > 0 && (
-            <Box mt={4}>
-              <DetectedFaces
-                faces={props.suggestedFaces}
-                title="Is this the same person?"
-                onAssign={props.handleAssignWrapper}
-                onCreate={props.handleCreateWrapper}
-                onDelete={props.handleDeleteWrapper}
-                onDetach={props.handleDetachWrapper}
-              />
-            </Box>
-          )}
-        </Suspense>
+        <TabPanel value={faceTabValue} index={0}>
+          <Suspense fallback={<CircularProgress />}>
+            <DetectedFaces
+              title="Confirmed Faces"
+              faces={props.detectedFacesList}
+              profileFaceId={props.person.profile_face_id}
+              onSetProfile={(faceId) =>
+                props.handleProfileAssignmentWrapper(faceId, props.person.id)
+              }
+              onAssign={(faceIds, personId) => props.handleAssignWrapper(faceIds, personId)}
+              onCreate={props.handleCreateWrapper}
+              onDelete={(faceIds) => props.handleDeleteWrapper(faceIds)}
+              onDetach={(faceIds) => props.handleDetachWrapper(faceIds)}
+              onLoadMore={props.loadMoreDetectedFaces}
+              hasMore={props.hasMoreFaces}
+              isLoadingMore={props.loadingMoreFaces}
+              personId={props.person.id}
+              onCreateMultiple={props.handleCreateWrapper}
+            />
+          </Suspense>
+        </TabPanel>
+        <TabPanel value={faceTabValue} index={1}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 2,
+            }}
+          >
+            <Typography variant="h6">Suggestions</Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => props.onRefreshSuggestions()}
+            >
+              Refresh Suggestions
+            </Button>
+          </Box>
+          <Suspense fallback={<CircularProgress />}>
+            <DetectedFaces
+              title="Suggested Faces"
+              faces={props.suggestedFaces}
+              onAssign={(faceIds, personId) => props.handleAssignWrapper(faceIds, personId)}
+              onCreate={props.handleCreateWrapper}
+              onDelete={(faceIds) => props.handleDeleteWrapper(faceIds)}
+              onDetach={(faceIds) => props.handleDetachWrapper(faceIds)}
+              personId={props.person.id}
+              onCreateMultiple={props.handleCreateWrapper}
+            />
+          </Suspense>
+        </TabPanel>
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>

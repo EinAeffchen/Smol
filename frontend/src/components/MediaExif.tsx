@@ -36,8 +36,7 @@ export function MediaExif({ mediaId }: MediaExifProps) {
     let isCancelled = false;
     setStatus("loading");
 
-    fetch(`${API}/api/media/${mediaId}/processors/exif`)
-      .then((res) => (res.ok ? res.json() : Promise.reject("Failed to fetch")))
+    getExifData(mediaId)
       .then((body) => {
         if (!isCancelled) {
           setExif(body);

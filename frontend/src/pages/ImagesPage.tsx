@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import Masonry from "react-masonry-css";
 import ImportExportIcon from "@mui/icons-material/ImportExport";
-import { API } from "../config";
 import { useInView } from "react-intersection-observer";
 
 import MediaCard from "../components/MediaCard";
@@ -14,6 +13,7 @@ import {
   Container,
 } from "@mui/material";
 import { useMediaStore, defaultListState } from "../stores/useMediaStore";
+import { getImages } from "../services/media";
 
 const breakpointColumnsObj = {
   default: 5,
@@ -30,24 +30,23 @@ export default function ImagesPage() {
     null
   );
 
-  const baseUrl = useMemo(() => {
-    const params = new URLSearchParams({ sort: sortOrder });
-    return `${API}/api/media/images?${params.toString()}`;
-  }, [sortOrder]);
-  const { items, hasMore, isLoading } = useMediaStore(
-    (state) => state.lists[baseUrl] || defaultListState
+  const listState = useMediaStore(
+    (state) => state.lists["images"]
   );
+  const items = listState?.items || [];
+  const hasMore = listState?.hasMore || defaultListState.hasMore;
+  const isLoading = listState?.isLoading || defaultListState.isLoading;
   const { fetchInitial, loadMore } = useMediaStore();
 
   useEffect(() => {
-    fetchInitial(baseUrl);
-  }, [baseUrl, fetchInitial]);
+    fetchInitial("images", () => getImages(null));
+  }, [fetchInitial]);
 
   useEffect(() => {
     if (inView && hasMore && !isLoading) {
-      loadMore(baseUrl);
+      loadMore("images", (cursor) => getImages(cursor));
     }
-  }, [inView, hasMore, isLoading, loadMore, baseUrl]);
+  }, [inView, hasMore, isLoading, loadMore]);
   const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setSortMenuAnchorEl(event.currentTarget);
   };
@@ -107,7 +106,7 @@ export default function ImagesPage() {
             <div key={media.id}>
               <MediaCard
                 media={media}
-                mediaListKey={baseUrl}
+                mediaListKey="images"
                 sortOrder={sortOrder}
               />
             </div>

@@ -1,13 +1,14 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { Media, Tag } from "../types";
-import { API } from "../config";
 import { Person } from "../types";
 import { Chip, Box, Typography } from "@mui/material";
+import { removeTagFromMedia, removeTagFromPerson } from "../services/tagActions";
+
 export interface TagsProps {
   media?: Media;
   person?: Person;
-  onUpdate: (updated: Media) => void;
+  onUpdate: (updated: Media | Person) => void;
 }
 
 export function Tags({ media, person, onUpdate }: Readonly<TagsProps>) {
@@ -17,13 +18,23 @@ export function Tags({ media, person, onUpdate }: Readonly<TagsProps>) {
   }
 
   const handleRemove = async (tagToRemove: Tag) => {
-    await fetch(`${API}/api/tags/media/${owner.id}/${tagToRemove.id}`, {
-      method: "DELETE",
-    });
-    onUpdate({
-      ...owner,
-      tags: owner.tags.filter((t) => t.id !== tag.id),
-    });
+    try {
+      if (media) {
+        await removeTagFromMedia(media.id, tagToRemove.id);
+        onUpdate({
+          ...media,
+          tags: media.tags.filter((t) => t.id !== tagToRemove.id),
+        });
+      } else if (person) {
+        await removeTagFromPerson(person.id, tagToRemove.id);
+        onUpdate({
+          ...person,
+          tags: person.tags.filter((t) => t.id !== tagToRemove.id),
+        });
+      }
+    } catch (error) {
+      console.error("Failed to remove tag:", error);
+    }
   };
   return (
     <Box component="section" sx={{ mt: 2 }}>

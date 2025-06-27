@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { PeopleSection } from "./PeopleSection";
-import { useFaceActions } from "../hooks/useFaceActions";
+import {
+  assignFace,
+  createPersonFromFaces,
+  deleteFace,
+  detachFace,
+} from "../services/faceActions";
 import { Person, Face } from "../types";
 
 interface PeopleTabContentProps {
@@ -16,7 +21,6 @@ export function PeopleTabContent({
 }: PeopleTabContentProps) {
   const [persons, setPersons] = useState(initialPersons);
   const [orphans, setOrphans] = useState(initialOrphans);
-  const faceActions = useFaceActions();
 
   useEffect(() => {
     setPersons(initialPersons);
@@ -24,24 +28,24 @@ export function PeopleTabContent({
   }, [initialPersons, initialOrphans]);
 
   const handleDeleteFace = async (faceId: number) => {
-    await faceActions.deleteFace(faceId);
+    await deleteFace(faceId);
     setOrphans((prev) => prev.filter((f) => f.id !== faceId));
     onDataChanged();
   };
 
   const handleAssignFace = async (faceId: number, personId: number) => {
-    await faceActions.assignFace(faceId, personId);
+    await assignFace(faceId, personId);
     setOrphans((prev) => prev.filter((f) => f.id !== faceId));
     onDataChanged();
   };
 
   const handleDetachFace = async (faceId: number) => {
-    await faceActions.detachFace(faceId);
+    await detachFace(faceId);
     onDataChanged();
   };
 
   const handleCreateFace = async (faceId: number, data: any) => {
-    const newPerson = await faceActions.createPersonFromFace(faceId, data);
+    const newPerson = await createPersonFromFaces([faceId], data);
     setOrphans((prev) => prev.filter((f) => f.id !== faceId));
     onDataChanged();
     return newPerson;

@@ -13,7 +13,7 @@ import {
   Divider,
 } from "@mui/material";
 import { Task, TaskType } from "../types";
-import { API } from "../config";
+import { getActiveTasks, startTask as startTaskService, cancelTask as cancelTaskService } from "../services/taskActions";
 
 import SyncIcon from "@mui/icons-material/Sync";
 import MovieIcon from "@mui/icons-material/Movie";
@@ -31,8 +31,7 @@ export default function TaskManager() {
 
   const fetchTasks = async () => {
     try {
-      const res = await fetch(`${API}/api/tasks/active`);
-      const data: Task[] = await res.json();
+      const data = await getActiveTasks();
       setTasks(data);
     } catch (err) {
       console.error("Could not load tasks:", err);
@@ -41,12 +40,8 @@ export default function TaskManager() {
 
   const startTask = async (type: TaskType) => {
     try {
-      const res = await fetch(`${API}/api/tasks/${type}`, { method: "POST" });
-      if (res.ok) {
-        await fetchTasks();
-      } else {
-        console.error("Failed to start task", type);
-      }
+      await startTaskService(type);
+      await fetchTasks();
     } catch (err) {
       console.error("Error starting task", type, err);
     }
@@ -54,14 +49,8 @@ export default function TaskManager() {
 
   const cancelTask = async (id: string) => {
     try {
-      const res = await fetch(`${API}/api/tasks/${id}/cancel`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        fetchTasks();
-      } else {
-        console.error("Failed to cancel task", id);
-      }
+      await cancelTaskService(id);
+      fetchTasks();
     } catch (err) {
       console.error("Error cancelling task", id, err);
     }

@@ -18,9 +18,15 @@ import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { PersonContentTabs } from "../components/PersonContentTabs";
 import { PersonHero } from "../components/PersonHero";
 import { useMediaStore, defaultListState } from "../stores/useMediaStore"; // Import the store
-import { API } from "../config";
-import { useFaceActions } from "../hooks/useFaceActions";
-import { CursorResponse } from "../hooks/useInfinite";
+import { getPerson } from "../services/person";
+import {
+  assignFace,
+  createPersonFromFaces,
+  deleteFace,
+  detachFace,
+} from "../services/faceActions";
+import { PageResponse } from "../hooks/useInfinite";
+import { setProfileFace } from "../services/personActions";
 import {
   FaceRead,
   Person,
@@ -28,6 +34,15 @@ import {
   Media,
   SimilarPersonWithDetails,
 } from "../types";
+import {
+  updatePerson,
+  deletePerson as deletePersonService,
+  mergePersons,
+  searchPersonsByName,
+  getSuggestedFaces,
+  getSimilarPersons,
+  getPersonFaces,
+} from "../services/personActions";
 
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -59,16 +74,9 @@ export default function PersonDetailPage() {
 
   const baseUrl = useMemo(() => {
     if (!id) return "";
-    return `${API}/api/persons/${id}/media-appearances?`;
+    return `/api/persons/${id}/media-appearances?`;
   }, [id]);
 
-  const {
-    assignFace,
-    createPersonFromFace,
-    deleteFace,
-    detachFace,
-    setProfileFace,
-  } = useFaceActions();
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -87,14 +95,10 @@ export default function PersonDetailPage() {
     async (signal?: AbortSignal) => {
       if (!id) return;
       try {
-        const res = await fetch(`${API}/api/persons/${id}`, {
-          ...(signal && { signal }),
-        });
-        if (!res.ok) throw new Error("Failed to fetch person details");
-        const person: Person = await res.json();
-        setPerson(person);
+        const personData = await getPerson(id);
+        setPerson(personData);
         setForm({
-          name: person.name ?? "",
+          name: personData.name ?? "",
         });
       } catch (err) {
         if (signal?.aborted !== true) {
@@ -111,18 +115,10 @@ export default function PersonDetailPage() {
       cursor: string | null,
       limit: number = 20,
       signal?: AbortSignal
-    ): Promise<CursorResponse<FaceRead> | null> => {
-      let url = `${API}/api/persons/${personId}/faces?limit=${limit}`;
-      if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`;
+    ): Promise<PageResponse<FaceRead> | null> => {
       try {
-        const res = await fetch(url, { ...(signal && { signal }) });
-        if (!res.ok) {
-          console.error(
-            `Failed to fetch faces for person ${personId}: ${res.status}`
-          );
-          return null;
-        }
-        return await res.json();
+        const data = await getPersonFaces(Number(personId), cursor, limit);
+        return { items: data.items, next_page: data.next_cursor };
       } catch (error) {
         console.error(`Error fetching faces for person ${personId}:`, error);
         return null;
@@ -142,8 +138,8 @@ export default function PersonDetailPage() {
       const pageData = await fetchFacesPage(personId, null, 20, signal);
       if (pageData) {
         setDetectedFacesList(pageData.items);
-        setFacesNextCursor(pageData.next_cursor);
-        setHasMoreFaces(!!pageData.next_cursor && pageData.items.length > 0);
+        setFacesNextCursor(pageData.next_page);
+        setHasMoreFaces(!!pageData.next_page && pageData.items.length > 0);
       } else {
         setHasMoreFaces(false);
       }
@@ -153,15 +149,15 @@ export default function PersonDetailPage() {
   );
 
   const loadMoreDetectedFaces = useCallback(
-    async (signal?: AbortSignal) => {
+    async () => {
       if (!id || !facesNextCursor || loadingMoreFaces || !hasMoreFaces) return;
       setLoadingMoreFaces(true);
 
-      const pageData = await fetchFacesPage(id, facesNextCursor, 20, signal);
+      const pageData = await fetchFacesPage(id, facesNextCursor, 20);
       if (pageData?.items) {
         setDetectedFacesList((prevFaces) => [...prevFaces, ...pageData.items]);
-        setFacesNextCursor(pageData.next_cursor);
-        setHasMoreFaces(!!pageData.next_cursor && pageData.items.length > 0);
+        setFacesNextCursor(pageData.next_page);
+        setHasMoreFaces(!!pageData.next_page && pageData.items.length > 0);
       } else {
         setHasMoreFaces(false);
       }
@@ -174,11 +170,8 @@ export default function PersonDetailPage() {
     async (signal?: AbortSignal) => {
       if (!id) return;
       try {
-        const res = await fetch(`${API}/api/persons/${id}/suggest-faces`, {
-          ...(signal && { signal }),
-        });
-        if (!res.ok) return;
-        setSuggestedFaces(await res.json());
+        const data = await getSuggestedFaces(Number(id));
+        setSuggestedFaces(data);
       } catch (err) {
         console.error(err);
       }
@@ -191,14 +184,9 @@ export default function PersonDetailPage() {
       if (!id) return;
       setSimilarPersons([]);
       try {
-        const res = await fetch(`${API}/api/persons/${id}/similarities`, {
-          ...(signal && { signal }),
-        });
-        if (!res.ok) {
-          console.error("Failed to fetch similarities:", res.status);
-          return;
-        }
-        const data: SimilarPersonWithDetails[] = await res.json();
+        const data: SimilarPersonWithDetails[] = await getSimilarPersons(
+          Number(id)
+        );
         setSimilarPersons(data);
       } catch (error) {
         console.error("Error loading similarities:", error);
@@ -244,10 +232,10 @@ export default function PersonDetailPage() {
   }, [id]);
 
   const handleAssignWrapper = async (
-    faceId: number,
+    faceIds: number[],
     assignedToPersonId: number
   ) => {
-    await assignFace(faceId, assignedToPersonId);
+    await assignFace(faceIds, assignedToPersonId);
     if (id) {
       loadInitialDetectedFaces(id);
       loadSuggestedFaces();
@@ -255,25 +243,27 @@ export default function PersonDetailPage() {
     }
   };
 
-  const handleDeleteWrapper = async (faceId: number) => {
-    await deleteFace(faceId);
-    setDetectedFacesList((prev) => prev.filter((f) => f.id !== faceId));
-    setSuggestedFaces((prev) => prev.filter((f) => f.id !== faceId));
+  const handleDeleteWrapper = async (faceIds: number[]) => {
+    await deleteFace(faceIds);
+    // Filter out all deleted faces from both lists
+    setDetectedFacesList((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+    setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
     loadDetail();
   };
 
-  const handleDetachWrapper = async (faceId: number) => {
-    await detachFace(faceId);
-    setDetectedFacesList((prev) => prev.filter((f) => f.id !== faceId));
-    setSuggestedFaces((prev) => prev.filter((f) => f.id !== faceId));
+  const handleDetachWrapper = async (faceIds: number[]) => {
+    await detachFace(faceIds);
+    // Filter out all detached faces from both lists
+    setDetectedFacesList((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+    setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
     loadDetail();
   };
 
   const handleCreateWrapper = async (
-    faceId: number,
-    data: any
+    faceIds: number[],
+    name: string
   ): Promise<Person> => {
-    const newPerson = await createPersonFromFace(faceId, data);
+    const newPerson = await createPersonFromFaces(faceIds, name);
     setSuggestedFaces((prev) => prev.filter((f) => f.id !== faceId));
     setDetectedFacesList((prev) => prev.filter((f) => f.id !== faceId));
     navigate(`/person/${newPerson.id}`);
@@ -289,15 +279,13 @@ export default function PersonDetailPage() {
     loadDetail(signal);
   };
 
-  async function deletePerson() {
+  async function handleDeletePerson() {
     if (!id || !person) return;
-    const res = await fetch(`${API}/api/persons/${person.id}`, {
-      method: "DELETE",
-    });
-    if (res.ok) {
+    try {
+      await deletePersonService(person.id);
       showMessage("Person deleted", "success");
       navigate("/", { replace: true });
-    } else {
+    } catch (error) {
       showMessage("Failed to delete person", "error");
     }
     setConfirmDelete(false);
@@ -307,15 +295,7 @@ export default function PersonDetailPage() {
     if (!id) return;
     setSaving(true);
     try {
-      const payload: any = {
-        name: formDataFromChild.name,
-      };
-      const res = await fetch(`${API}/api/persons/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(await res.text());
+      await updatePerson(Number(id), { name: formDataFromChild.name });
       await loadDetail();
       showMessage("Saved successfully", "success");
     } catch (err) {
@@ -335,13 +315,13 @@ export default function PersonDetailPage() {
     setMergeOpen(false);
     console.log(`SOURCE: ${Number(id)}`);
     console.log(`TARGET: ${targetId}`);
-    await fetch(`${API}/api/persons/merge`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source_id: Number(id), target_id: targetId }),
-    });
-
-    navigate(`/person/${targetId}`, { replace: true });
+    try {
+      await mergePersons(Number(id), targetId);
+      navigate(`/person/${targetId}`, { replace: true });
+    } catch (error) {
+      console.error("Merge failed:", error);
+      showMessage("Merge failed", "error");
+    }
   }
 
   useEffect(() => {
@@ -361,18 +341,10 @@ export default function PersonDetailPage() {
     }
 
     const controller = new AbortController();
-    fetch(
-      `${API}/api/persons/?name=${encodeURIComponent(debouncedSearchTerm)}`,
-      { signal: controller.signal }
-    )
-      .then((r) => r.json())
+    searchPersonsByName(debouncedSearchTerm)
       .then((response) => {
-        if (response.items) {
-          const filtered = response.items.filter(
-            (p: Person) => p.id !== Number(id)
-          );
-          setCandidates(filtered);
-        }
+        const filtered = response.filter((p: Person) => p.id !== Number(id));
+        setCandidates(filtered);
       })
       .catch((err) => {
         if (err.name !== "AbortError") {
@@ -414,7 +386,7 @@ export default function PersonDetailPage() {
       <PersonContentTabs
         person={person}
         onTagUpdate={loadDetail}
-        onTagAdded={loadDetail}
+        onTagAdded={(updatedPerson: Person) => setPerson(updatedPerson)}
         detectedFacesList={detectedFacesList}
         hasMoreFaces={hasMoreFaces}
         loadingMoreFaces={loadingMoreFaces}
@@ -453,7 +425,11 @@ export default function PersonDetailPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setConfirmDelete(false)}>Cancel</Button>
-          <Button onClick={deletePerson} color="error" variant="contained">
+          <Button
+            onClick={handleDeletePerson}
+            color="error"
+            variant="contained"
+          >
             Delete
           </Button>
         </DialogActions>

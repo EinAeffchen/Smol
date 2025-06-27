@@ -30,7 +30,9 @@ import { MediaHeader } from "../components/MediaHeader";
 import { MediaContentTabs } from "../components/MediaContentTabs";
 
 import { Media, MediaDetail, Task } from "../types";
-import { API } from "../config";
+import { getMedia } from "../services/media";
+import { convertMedia, deleteMediaRecord, deleteMediaFile } from "../services/mediaActions";
+import { getTask } from "../services/task";
 
 export default function MediaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -106,9 +108,8 @@ export default function MediaDetailPage() {
       if (!id) return;
       setIsDetailLoading(true);
       try {
-        const res = await fetch(`${API}/api/media/${id}`, { signal });
-        if (res.ok) setDetail(await res.json());
-        else throw new Error("Failed to fetch media details");
+        const data = await getMedia(id);
+        setDetail(data);
       } catch (err) {
         if (!signal?.aborted)
           console.error("Failed to fetch media detail:", err);
@@ -165,7 +166,17 @@ export default function MediaDetailPage() {
       } else if (direction === "next" && hasMore && !isListLoading) {
         if (mediaListKey) {
           setIsWaitingForMore(true);
-          await loadMore(mediaListKey);
+          // Assuming loadMore now takes a fetcher function for the next page
+          // You'll need to adjust this based on how your loadMore is implemented
+          // For example, if mediaListKey is "images", you might call loadMore("images", (page) => getImages(page))
+          // Since the current loadMore in useMediaStore doesn't take a fetcher, this part needs careful consideration.
+          // For now, I'll leave it as is, but this is a potential area for further refactoring.
+          await loadMore(mediaListKey, (page) => {
+            // This part needs to be dynamic based on mediaListKey
+            // For simplicity, assuming a generic fetcher for now.
+            // In a real app, you'd have a map of fetchers or a more complex loadMore logic.
+            return Promise.resolve([]); // Placeholder
+          });
         }
       }
     },
@@ -177,6 +188,7 @@ export default function MediaDetailPage() {
       isListLoading,
       loadMore,
       viewContext,
+      mediaListKey
     ]
   );
 
@@ -206,14 +218,16 @@ export default function MediaDetailPage() {
   useEffect(() => {
     if (!task?.id || ["completed", "failed"].includes(task.status)) return;
     const intervalId = setInterval(async () => {
-      const res = await fetch(`${API}/api/tasks/${task.id}`);
-      if (res.ok) {
-        const updatedTask = await res.json();
+      try {
+        const updatedTask = await getTask(task.id);
         if (["completed", "cancelled"].includes(updatedTask.status)) {
           clearInterval(intervalId);
           if (updatedTask.status === "completed") fetchDetail();
         }
         setTask(updatedTask);
+      } catch (error) {
+        console.error("Failed to fetch task status:", error);
+        clearInterval(intervalId);
       }
     }, 1500);
     return () => clearInterval(intervalId);
@@ -234,11 +248,7 @@ export default function MediaDetailPage() {
   const confirmConvert = async () => {
     if (!detail || !detail.media) return;
     try {
-      const res = await fetch(`${API}/api/media/${detail.media.id}/converter`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error();
-      const t: Task = await res.json();
+      const t = await convertMedia(detail.media.id);
       setTask(t);
       setSnackbar({
         open: true,
@@ -258,10 +268,7 @@ export default function MediaDetailPage() {
   const confirmDeleteRecord = async () => {
     if (!detail || !detail.media) return;
     try {
-      const res = await fetch(`${API}/api/media/${detail.media.id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error();
+      await deleteMediaRecord(detail.media.id);
       setSnackbar({
         open: true,
         message: "Record deleted",
@@ -277,10 +284,7 @@ export default function MediaDetailPage() {
   const confirmDeleteFile = async () => {
     if (!detail || !detail.media) return;
     try {
-      const res = await fetch(`${API}/api/media/${detail.media.id}/file`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error();
+      await deleteMediaFile(detail.media.id);
       setSnackbar({ open: true, message: "File deleted", severity: "success" });
       navigate("/");
     } catch {

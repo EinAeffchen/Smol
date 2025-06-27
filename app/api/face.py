@@ -23,79 +23,86 @@ router = APIRouter()
 
 
 @router.post(
-    "/{face_id}/assign",
-    summary="Assign an existing face to a person",
-    response_model=FaceAssignReturn,
+    "/assign",
+    summary="Assign existing faces to a person",
+    status_code=status.HTTP_200_OK,
 )
-async def assign_face(
-    face_id: int,
+async def assign_faces(
     body: FaceAssign = Body(...),
     session: Session = Depends(get_session),
 ):
     if READ_ONLY:
-        return HTTPException(
+        raise HTTPException(
             status_code=403, detail="Not allowed in READ_ONLY mode."
         )
     new_person_id = body.person_id
-    face = session.get(Face, face_id)
-    if not face:
-        raise HTTPException(status_code=404, detail="Face not found")
-
     new_person = session.get(Person, new_person_id)
     if not new_person:
         raise HTTPException(status_code=404, detail="Person not found")
 
-    original_person_object = face.person
-    original_person_id: int | None = None
-    if original_person_object:
-        original_person_id = original_person_object.id
-        original_person_object.appearance_count -= 1
-        session.add(original_person_object)
+    for face_id in body.face_ids:
+        face = session.get(Face, face_id)
+        if not face:
+            logger.warning(f"Face with ID {face_id} not found, skipping assignment.")
+            continue
 
-    face.person = new_person
-    new_person.appearance_count += 1
+        original_person_object = face.person
+        original_person_id: int | None = None
+        if original_person_object:
+            original_person_id = original_person_object.id
+            original_person_object.appearance_count -= 1
+            session.add(original_person_object)
 
-    session.add(new_person)
-    session.add(face)
+        face.person = new_person
+        new_person.appearance_count += 1
 
-    if original_person_id and original_person_id != body.person_id:
-        old_person_can_be_deleted(session, original_person_id)
-    update_face_embedding(session, face_id, new_person_id)
+        session.add(new_person)
+        session.add(face)
+
+        if original_person_id and original_person_id != body.person_id:
+            old_person_can_be_deleted(session, original_person_id)
+        update_face_embedding(session, face_id, new_person_id)
+    
     safe_commit(session)
-    return FaceAssignReturn(face_id=face_id, person_id=new_person_id)
+    return {"message": "Faces assigned successfully"}
 
 
 @router.post(
-    "/{face_id}/detach",
-    summary="Detaches an existing face from a person",
-    response_model=FaceAssignReturn,
+    "/detach",
+    summary="Detaches existing faces from their persons",
+    status_code=status.HTTP_200_OK,
 )
-async def detach_face(
-    face_id: int,
+async def detach_faces(
+    face_ids: list[int] = Body(..., embed=True),
     session: Session = Depends(get_session),
 ):
     if READ_ONLY:
-        return HTTPException(
+        raise HTTPException(
             status_code=403, detail="Not allowed in READ_ONLY mode."
         )
 
-    face = session.get(Face, face_id)
-    if not face:
-        raise HTTPException(status_code=404, detail="Face not found")
+    for face_id in face_ids:
+        face = session.get(Face, face_id)
+        if not face:
+            logger.warning(f"Face with ID {face_id} not found, skipping detachment.")
+            continue
 
-    person_id = face.person_id
-    person = face.person
-    person.appearance_count-=1
-    session.add(person)
-    face.person_id = None
-    session.add(face)
+        person_id = face.person_id
+        if person_id:
+            person = face.person
+            person.appearance_count -= 1
+            session.add(person)
 
-    old_person_can_be_deleted(session, person_id)
-    update_face_embedding(
-        session, face_id, -1
-    )  # -1 detaches face from person in embedding table
+        face.person_id = None
+        session.add(face)
+
+        if person_id:
+            old_person_can_be_deleted(session, person_id)
+        update_face_embedding(
+            session, face_id, -1
+        )  # -1 detaches face from person in embedding table
     safe_commit(session)
-    return FaceAssignReturn(face_id=face_id, person_id=-1)
+    return {"message": "Faces detached successfully"}
 
 
 def update_face_embedding(
@@ -127,38 +134,39 @@ def update_face_embedding(
 
 
 @router.delete(
-    "/{face_id}",
-    summary="Delete a face record (and its thumbnail file)",
-    status_code=status.HTTP_204_NO_CONTENT,
+    "/",
+    summary="Delete multiple face records (and their thumbnail files)",
+    status_code=status.HTTP_200_OK,
 )
-def delete_face(face_id: int, session: Session = Depends(get_session)):
+def delete_faces(face_ids: list[int] = Query(..., alias="face_ids"), session: Session = Depends(get_session)):
     if READ_ONLY:
-        return HTTPException(
+        raise HTTPException(
             status_code=403, detail="Not allowed in READ_ONLY mode."
         )
-    face = session.get(Face, face_id)
-    if not face:
-        raise HTTPException(404, "Face not found")
+    for face_id in face_ids:
+        face = session.get(Face, face_id)
+        if not face:
+            logger.warning(f"Face with ID {face_id} not found, skipping deletion.")
+            continue
 
-    # remove thumbnail from disk
-    thumb = THUMB_DIR / face.thumbnail_path
-    if thumb.exists():
-        thumb.unlink()
+        # remove thumbnail from disk
+        thumb = THUMB_DIR / face.thumbnail_path
+        if thumb.exists():
+            thumb.unlink()
 
-    face_id = face.id
-    if person:=face.person:
-        person_id = face.person.id
-        person.appearance_count -=1
-        session.add(person)
-    else:
-        person_id = None
-    session.delete(face)
+        if person:=face.person:
+            person_id = face.person.id
+            person.appearance_count -=1
+            session.add(person)
+        else:
+            person_id = None
+        session.delete(face)
 
-    update_face_embedding(session, face_id, person_id, delete_face=True)
-    if person_id:
-        old_person_can_be_deleted(session, person_id)
+        update_face_embedding(session, face_id, person_id, delete_face=True)
+        if person_id:
+            old_person_can_be_deleted(session, person_id)
     safe_commit(session)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return {"message": "Faces deleted successfully"}
 
 
 class FaceCreatePerson(BaseModel):
@@ -192,6 +200,60 @@ def get_orphans(
     else:
         next_cursor = None
     return CursorPage(next_cursor=next_cursor, items=orphans)
+
+
+@router.post(
+    "/create_person",
+    summary="Create a new person from multiple faces and assign",
+    response_model=PersonMinimal,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_person_from_faces(
+    face_ids: list[int] = Body(..., embed=True),
+    name: str | None = Body(None),
+    session: Session = Depends(get_session),
+):
+    if READ_ONLY:
+        raise HTTPException(
+            status_code=403, detail="Not allowed in READ_ONLY mode."
+        )
+    if not face_ids:
+        raise HTTPException(status_code=400, detail="No face IDs provided")
+
+    faces = []
+    for face_id in face_ids:
+        face = session.get(Face, face_id)
+        if not face:
+            logger.warning(f"Face with ID {face_id} not found, skipping.")
+            continue
+        faces.append(face)
+
+    if not faces:
+        raise HTTPException(status_code=404, detail="No valid faces found")
+
+    # Create the Person
+    person = Person(
+        name=name,
+        profile_face_id=faces[0].id,  # Set profile to the first face
+        appearance_count=len(faces)
+    )
+    session.add(person)
+    session.flush()
+    person_id = person.id
+
+    for face in faces:
+        previous_person = face.person
+        face.person_id = person_id
+        session.add(face)
+        if previous_person and previous_person.id != person_id:
+            previous_person.appearance_count -= 1
+            session.add(previous_person)
+            old_person_can_be_deleted(session, previous_person.id)
+        update_face_embedding(session, face.id, person_id)
+    
+    safe_commit(session)
+    session.close()
+    return PersonMinimal(id=person_id)
 
 
 @router.post(

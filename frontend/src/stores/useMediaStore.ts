@@ -2,6 +2,10 @@ import { create } from "zustand";
 import { Media } from "../types";
 
 // Define the shape of the state for a SINGLE paginated list
+import { create } from "zustand";
+import { Media, CursorPage } from "../types";
+
+// Define the shape of the state for a SINGLE paginated list
 export interface MediaListState {
   items: Media[];
   nextCursor: string | null;
@@ -15,8 +19,14 @@ interface MediaStoreState {
   lists: Record<string, MediaListState>;
 
   // Actions now take a `listKey` to know which list to operate on
-  fetchInitial: (listKey: string) => Promise<void>;
-  loadMore: (listKey: string) => Promise<void>;
+  fetchInitial: (
+    listKey: string,
+    fetcher: () => Promise<CursorPage<Media>>
+  ) => Promise<void>;
+  loadMore: (
+    listKey: string,
+    fetcher: (cursor: string | null) => Promise<CursorPage<Media>>
+  ) => Promise<void>;
 }
 
 const initialListState: MediaListState = {
@@ -25,16 +35,20 @@ const initialListState: MediaListState = {
   hasMore: true,
   isLoading: false,
 };
-
 export const noContextListState: MediaListState = {
   ...initialListState,
   hasMore: false,
 };
 
+export const defaultListState: MediaListState = initialListState;
+
 export const useMediaStore = create<MediaStoreState>((set, get) => ({
   lists: {}, // Initial state is an empty object
 
-  fetchInitial: async (listKey: string) => {
+  fetchInitial: async (
+    listKey: string,
+    fetcher: () => Promise<CursorPage<Media>>
+  ) => {
     // Prevent refetch if already loading this specific list
     if (get().lists[listKey]?.isLoading) return;
 
@@ -47,16 +61,14 @@ export const useMediaStore = create<MediaStoreState>((set, get) => ({
     }));
 
     try {
-      // The listKey is the actual URL to fetch (without limit/cursor)
-      const res = await fetch(`${listKey}&limit=30`);
-      const data = await res.json();
+      const response = await fetcher();
       set((state) => ({
         lists: {
           ...state.lists,
           [listKey]: {
-            items: data.items,
-            nextCursor: data.next_cursor,
-            hasMore: !!data.next_cursor,
+            items: response.items,
+            nextCursor: response.next_cursor,
+            hasMore: response.next_cursor !== null,
             isLoading: false,
           },
         },
@@ -72,7 +84,10 @@ export const useMediaStore = create<MediaStoreState>((set, get) => ({
     }
   },
 
-  loadMore: async (listKey: string) => {
+  loadMore: async (
+    listKey: string,
+    fetcher: (cursor: string | null) => Promise<CursorPage<Media>>
+  ) => {
     const currentList = get().lists[listKey];
     if (!currentList || currentList.isLoading || !currentList.hasMore) return;
 
@@ -81,18 +96,15 @@ export const useMediaStore = create<MediaStoreState>((set, get) => ({
     }));
 
     try {
-      const res = await fetch(
-        `${listKey}&limit=30&cursor=${currentList.nextCursor}`
-      );
-      const data = await res.json();
+      const response = await fetcher(currentList.nextCursor);
       set((state) => ({
         lists: {
           ...state.lists,
           [listKey]: {
             ...currentList,
-            items: [...currentList.items, ...data.items],
-            nextCursor: data.next_cursor,
-            hasMore: !!data.next_cursor,
+            items: [...currentList.items, ...response.items],
+            nextCursor: response.next_cursor,
+            hasMore: response.next_cursor !== null,
             isLoading: false,
           },
         },
@@ -108,6 +120,3 @@ export const useMediaStore = create<MediaStoreState>((set, get) => ({
     }
   },
 }));
-
-// A default empty state to prevent errors before data is loaded
-export const defaultListState: MediaListState = initialListState;

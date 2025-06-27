@@ -1,13 +1,13 @@
 import { Box, CircularProgress, Container, Typography } from "@mui/material";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useInView } from "react-intersection-observer";
 import Masonry from "react-masonry-css";
 import { useLocation, useSearchParams } from "react-router-dom";
 import MediaCard from "../components/MediaCard";
 import PersonCard from "../components/PersonCard";
 import TagCard from "../components/TagCard";
-import { API } from "../config";
-import { CursorResponse, useInfinite } from "../hooks/useInfinite";
+import { search } from "../services/search";
+import { PageResponse, useInfinite } from "../hooks/useInfinite";
 import { defaultListState, useMediaStore } from "../stores/useMediaStore";
 import { Media, Person, Tag } from "../types";
 
@@ -47,8 +47,7 @@ export default function SearchResultsPage() {
 
   const mediaListKey = useMemo(() => {
     if (category !== "media" || !query) return "";
-    const params = new URLSearchParams({ query });
-    return `${API}/api/search/media?${params.toString()}`;
+    return `search-media-${query}`;
   }, [category, query]);
 
   const {
@@ -62,29 +61,31 @@ export default function SearchResultsPage() {
 
   useEffect(() => {
     if (category === "media" && mediaListKey) {
-      fetchInitial(mediaListKey);
+      fetchInitial(mediaListKey, async () => {
+        const result = await search(query);
+        return result.media;
+      });
     }
-  }, [mediaListKey, fetchInitial, category]);
+  }, [mediaListKey, fetchInitial, category, query]);
 
   useEffect(() => {
     if (inView && category === "media" && mediaHasMore && !mediaIsLoading) {
-      loadMore(mediaListKey);
+      loadMore(mediaListKey, async (page) => {
+        const result = await search(query);
+        return result.media;
+      });
     }
-  }, [inView, category, mediaHasMore, mediaIsLoading, loadMore, mediaListKey]);
+  }, [inView, category, mediaHasMore, mediaIsLoading, loadMore, mediaListKey, query]);
 
   const fetchOtherPage = useCallback(
-    (cursor: string | null, limit: number) => {
-      let endpointPath =
-        category === "person" ? "/api/search/people" : "/api/search/tags";
-
-      const params = new URLSearchParams({ query });
-      params.set("limit", String(limit));
-      if (cursor) params.set("cursor", cursor);
-
-      return fetch(`${API}${endpointPath}?${params.toString()}`).then((res) => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.json() as Promise<CursorResponse<Person | Tag>>;
-      });
+    async (page: number, limit: number): Promise<PageResponse<Person | Tag>> => {
+      const result = await search(query);
+      if (category === "person") {
+        return { items: result.persons, next_page: null };
+      } else if (category === "tag") {
+        return { items: result.tags, next_page: null };
+      }
+      return { items: [], next_page: null };
     },
     [category, query]
   );
@@ -94,7 +95,7 @@ export default function SearchResultsPage() {
     hasMore: otherHasMore,
     loading: otherIsLoading,
     loaderRef: otherLoaderRef,
-  } = useInfinite<Person | Tag>(fetchOtherPage, 30, [category, query]);
+  } = useInfinite<Person | Tag>(fetchOtherPage, ITEMS_PER_PAGE, [category, query]);
 
   const items = category === "media" ? mediaItems : otherItems;
   const isLoading = category === "media" ? mediaIsLoading : otherIsLoading;
@@ -109,13 +110,13 @@ export default function SearchResultsPage() {
 
   const renderItem = (item: Media | Person | Tag) => {
     if (isMedia(item)) {
-      return <MediaCard media={item} mediaListKey={mediaListKey} />;
+      return <MediaCard media={item} />;
     }
     if (isPerson(item)) {
       return <PersonCard person={item} />;
     }
     if (isTag(item)) {
-      return <TagCard onTagDeleted={handleTagDeleted} tag={item} />;
+      return <TagCard tag={item} />;
     }
     return null;
   };
@@ -124,10 +125,6 @@ export default function SearchResultsPage() {
     preloadedState?.searchType === "image"
       ? "Similar Image Results"
       : `Search Results for "${query}"`;
-
-  const handleTagDeleted = (tagId: number) => {
-    setDeletedItemIds((prevIds) => [...prevIds, tagId]);
-  };
 
   return (
     <Container maxWidth="xl" sx={{ pt: 4, pb: 6 }}>

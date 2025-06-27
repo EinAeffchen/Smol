@@ -30,7 +30,7 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { MediaPreview } from "../types";
-import { API } from "../config";
+import { getMissingGeoMedia, updateMediaGeolocation } from "../services/mapEditor";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import L from "leaflet";
@@ -86,8 +86,7 @@ export default function MapEditorPage() {
   const theme = useTheme();
 
   useEffect(() => {
-    fetch(`${API}/api/media/missing_geo`)
-      .then((res) => res.json())
+    getMissingGeoMedia()
       .then(setOrphans)
       .catch(console.error);
   }, []);
@@ -126,18 +125,7 @@ export default function MapEditorPage() {
     if (!selectedMedia || !newPosition) return;
     setSaving(true);
     try {
-      const res = await fetch(
-        `${API}/api/media/${selectedMedia.id}/geolocation`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            latitude: newPosition.lat,
-            longitude: newPosition.lng,
-          }),
-        }
-      );
-      if (!res.ok) throw new Error("Save failed");
+      await updateMediaGeolocation(selectedMedia.id, newPosition.lat, newPosition.lng);
       setOrphans((prev) => prev.filter((m) => m.id !== selectedMedia.id));
       setSnackbar({
         open: true,

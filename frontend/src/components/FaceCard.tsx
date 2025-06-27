@@ -25,14 +25,20 @@ import { API, READ_ONLY } from "../config";
 import { Face, Person, FaceRead } from "../types";
 import { useNavigate, useLocation } from "react-router-dom";
 
+import Checkbox from "@mui/material/Checkbox";
+
 interface FaceCardProps {
   face: Face;
   isProfile: boolean;
-  onSetProfile: (faceId: number) => void;
-  onAssign: (personId: number) => void;
-  onCreate: (data: { name?: string }) => void;
-  onDelete: () => void;
-  onDetach: () => void;
+  onSetProfile?: (faceId: number) => void;
+  onAssign?: (personId: number) => void;
+  onCreate?: (data: { name?: string }) => void;
+  onDelete?: () => void;
+  onDetach?: () => void;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (faceId: number) => void;
+  showActions?: boolean;
 }
 
 export default function FaceCard({
@@ -43,6 +49,10 @@ export default function FaceCard({
   onCreate,
   onDelete,
   onDetach,
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+  showActions = true,
 }: FaceCardProps) {
   const thumbUrl = `${API}/thumbnails/${face.thumbnail_path}`;
 
@@ -269,7 +279,23 @@ export default function FaceCard({
             }}
             onClick={handleCardClick}
           />
-          {!READ_ONLY && (
+          {selectable && onToggleSelect && (
+            <Checkbox
+              checked={selected}
+              onChange={() => onToggleSelect(face.id)}
+              sx={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                color: "white",
+                "&.Mui-checked": {
+                  color: "white",
+                },
+                p: 0.5,
+              }}
+            />
+          )}
+          {!READ_ONLY && showActions && (
             <Box
               className="hover-actions"
               sx={{
@@ -316,7 +342,7 @@ export default function FaceCard({
           )}
         </Box>
 
-        {!READ_ONLY && (
+        {!READ_ONLY && showActions && (
           <CardContent sx={{ px: 1, py: 1, textAlign: "center" }}>
             {face.person ? (
               <Typography variant="caption" color="primary" display="block">

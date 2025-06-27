@@ -23,8 +23,9 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SettingsIcon from "@mui/icons-material/Settings";
 import TaskManager from "../components/TasksPanel";
 import ThemeToggleButton from "../components/ThemeToggleButton";
-import { API, READ_ONLY, ENABLE_PEOPLE } from "../config";
+import { searchByImage } from "../services/searchActions";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import { READ_ONLY, ENABLE_PEOPLE } from "../config";
 
 const StyledNavLink = styled(RouterNavLink)(({ theme }) => ({
   color: theme.palette.text.primary,
@@ -70,7 +71,7 @@ function MobileDrawer({
         <Link to="/" onClick={onClose}>
           <Box
             component="img"
-            src={`${API}/static/logo.png`}
+            src="/static/logo.png"
             alt="SMOL logo"
             sx={{ height: 40 }}
           />
@@ -151,13 +152,13 @@ export function Header() {
       <Link to="/">
         <Box
           component="img"
-          src={`${API}/static/logo.png`}
+          src="/static/logo.png"
           alt="SMOL logo"
           sx={{ height: 48, display: { xs: "none", sm: "block" }, mr: 2 }}
         />
         <Box
           component="img"
-          src={`${API}/static/logo.png`}
+          src="/static/logo.png"
           alt="SMOL logo"
           sx={{ height: 40, display: { xs: "block", sm: "none" } }}
         />

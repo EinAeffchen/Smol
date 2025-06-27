@@ -9,13 +9,14 @@ import {
 } from "react-leaflet";
 import { Link as RouterLink } from "react-router-dom";
 import { Box, useTheme } from "@mui/material";
-import { API } from "../config";
 import type { LatLngExpression } from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { API } from "../config";
 
 // Import our new custom components/hooks
 import { useGridClustering } from "../hooks/useGridClustering";
 import { ClusterMarker } from "../components/ClusterMarker";
+import { getMediaLocations } from "../services/media";
 
 export interface MediaLocation {
   id: number;
@@ -39,9 +40,12 @@ function MapController({
 
   const fetchLocationsForView = useCallback(() => {
     const bounds = map.getBounds();
-    const url = `${API}/api/media/locations?north=${bounds.getNorth()}&south=${bounds.getSouth()}&east=${bounds.getEast()}&west=${bounds.getWest()}`;
-    fetch(url)
-      .then((res) => res.json())
+    getMediaLocations(
+      bounds.getNorth(),
+      bounds.getSouth(),
+      bounds.getEast(),
+      bounds.getWest()
+    )
       .then(onLocationsChange)
       .catch(console.error);
   }, [map, onLocationsChange]);

@@ -6,25 +6,21 @@ import {
   Grid,
   CircularProgress,
 } from "@mui/material";
-import { useInfinite, CursorResponse } from "../hooks/useInfinite";
+import { useInfinite, PageResponse } from "../hooks/useInfinite";
 import FaceCard from "../components/FaceCard";
 import { FaceRead } from "../types";
-import { API } from "../config";
+import { getOrphanFaces } from "../services/face";
+import { assignFace, createPersonFromFaces, deleteFace, detachFace } from "../services/faceActions";
 
 const ITEMS_PER_PAGE = 48;
 
 export default function OrphanFacesPage() {
   const fetchOrphans = useCallback(
-    (cursor: string | null, limit: number) =>
-      fetch(
-        `${API}/api/faces/orphans${
-          cursor ? `?cursor=${cursor}&` : "?"
-        }limit=${limit}`
-      ).then((res) => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.json() as Promise<CursorResponse<FaceRead>>;
-      }),
-    [API]
+    async (page: number, limit: number): Promise<PageResponse<FaceRead>> => {
+      const data = await getOrphanFaces(page);
+      return { items: data, next_page: data.length === 0 ? null : page + 1 };
+    },
+    []
   );
 
   const {
@@ -36,35 +32,25 @@ export default function OrphanFacesPage() {
   } = useInfinite<FaceRead>(fetchOrphans, ITEMS_PER_PAGE, []);
 
   // assign a face to an existing person
-  async function assignFace(faceId: number, personId: number) {
-    await fetch(`${API}/api/faces/${faceId}/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ person_id: personId }),
-    });
+  async function handleAssignFace(faceId: number, personId: number) {
+    await assignFace(faceId, personId);
     setOrphans((prev) => prev.filter((f) => f.id !== faceId));
   }
 
   // create a new person from a face
-  async function createPersonFromFace(faceId: number, data: any) {
-    const res = await fetch(`${API}/api/faces/${faceId}/create_person`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    const json = await res.json();
-    const p = (json as any).person ?? (json as any);
+  async function handleCreatePersonFromFace(faceId: number, data: any) {
+    const p = await createPersonFromFaces([faceId], data);
     if (p?.id) window.location.href = `/person/${p.id}`;
   }
 
   // delete a face entirely
-  async function deleteFace(faceId: number) {
-    await fetch(`${API}/api/faces/${faceId}`, { method: "DELETE" });
+  async function handleDeleteFace(faceId: number) {
+    await deleteFace(faceId);
     setOrphans((prev) => prev.filter((f) => f.id !== faceId));
   }
   // detach a face
-  async function detachFace(faceId: number) {
-    await fetch(`${API}/api/faces/${faceId}/detach`, { method: "POST" });
+  async function handleDetachFace(faceId: number) {
+    await detachFace(faceId);
     setOrphans((prev) => prev.filter((f) => f.id !== faceId));
   }
 
@@ -106,10 +92,10 @@ export default function OrphanFacesPage() {
               face={face}
               isProfile={false}
               onSetProfile={() => {}}
-              onAssign={(pid) => assignFace(face.id, pid)}
-              onCreate={(data) => createPersonFromFace(face.id, data)}
-              onDelete={() => deleteFace(face.id)}
-              onDetach={() => detachFace(face.id)}
+              onAssign={(pid) => handleAssignFace(face.id, pid)}
+              onCreate={(data) => handleCreatePersonFromFace(face.id, data)}
+              onDelete={() => handleDeleteFace(face.id)}
+              onDetach={() => handleDetachFace(face.id)}
             />
           </Grid>
         ))}
