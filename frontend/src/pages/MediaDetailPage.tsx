@@ -293,9 +293,6 @@ export default function MediaDetailPage() {
       closeDialog();
     }
   };
-  {
-    console.log(showSwipeHint);
-  }
 
   const handleClose = () => {
     if (backgroundLocation) {

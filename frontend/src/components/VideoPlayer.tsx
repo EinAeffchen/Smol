@@ -1,131 +1,16 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
-import "plyr/dist/plyr.css";
-import Plyr from "plyr";
+import ReactPlayer from "react-player";
 import { Media } from "../types";
 import { API } from "../config";
 
 export function VideoWithPreview({ media }: { media: Media }) {
-  const playerContainerRef = useRef<HTMLDivElement>(null);
-  const plyrInstanceRef = useRef<Plyr | null>(null);
-
-  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
   const mediaUrl = `${API}/originals/${media.path}`;
-
-  useEffect(() => {
-    if (!playerContainerRef.current || !media.path) {
-      if (!media.path) setLoading(false); // No media to load
-      return;
-    }
-
-    setLoading(true);
-    // Clear previous Plyr instance and its video element if any
-    if (plyrInstanceRef.current) {
-      try {
-        plyrInstanceRef.current.destroy();
-      } catch (e) {
-        console.warn("Error destroying previous Plyr instance:", e);
-      }
-      plyrInstanceRef.current = null;
-    }
-    if (playerContainerRef.current) {
-      playerContainerRef.current.innerHTML = "";
-    }
-
-    playerContainerRef.current.innerHTML = "";
-
-    const video = document.createElement("video");
-    video.src = mediaUrl;
-    video.setAttribute("controls", "true");
-    video.setAttribute("preload", "metadata");
-
-    video.style.display = "block";
-    video.style.width = "100%";
-
-    video.style.maxHeight = "500px";
-    video.style.objectFit = "contain";
-
-    playerContainerRef.current.appendChild(video);
-
-    const player = new Plyr(video, {
-      controls: ["play", "progress", "current-time", "volume", "fullscreen"],
-      previewThumbnails: {
-        enabled: true,
-        src: `${API}/api/media/${media.id}/scenes.vtt`,
-      },
-      fullscreen: {
-        enabled: true,
-        fallback: true,
-        iosNative: false,
-      },
-    });
-
-    plyrInstanceRef.current = player;
-
-    player.on("ready", () => setLoading(false));
-    player.on("waiting", () => setLoading(true));
-    player.on("playing", () => setLoading(false));
-    player.on("error", (event) => {
-      console.error("Plyr error:", event);
-      setLoading(false);
-    });
-
-    player.on("enterfullscreen", () => {
-      console.log("Plyr event: enterfullscreen triggered.");
-      if (player && player.elements && player.elements.container) {
-        console.log(
-          "IMMEDIATE Player container classes:",
-          player.elements.container.className
-        );
-
-        setTimeout(() => {
-          if (
-            plyrInstanceRef.current &&
-            plyrInstanceRef.current.elements &&
-            plyrInstanceRef.current.elements.container
-          ) {
-            // Re-check instance
-            console.log(
-              "DELAYED Player container classes:",
-              plyrInstanceRef.current.elements.container.className
-            );
-          }
-        }, 0);
-      }
-      playerContainerRef.current?.classList.add("custom-fullscreen-active");
-    });
-
-    player.on("exitfullscreen", () => {
-      console.log("Plyr event: exitfullscreen triggered.");
-      playerContainerRef.current?.classList.remove("custom-fullscreen-active");
-      setTimeout(() => {
-        if (
-          plyrInstanceRef.current &&
-          plyrInstanceRef.current.elements &&
-          plyrInstanceRef.current.elements.container
-        ) {
-          console.log(
-            "DELAYED Player container classes on exit:",
-            plyrInstanceRef.current.elements.container.className
-          );
-        }
-      }, 0);
-    });
-
-    return () => {
-      if (plyrInstanceRef.current) {
-        try {
-          plyrInstanceRef.current.destroy();
-        } catch (e) {
-          console.warn("Error destroying Plyr instance on cleanup:", e);
-        }
-        plyrInstanceRef.current = null;
-      }
-      if (playerContainerRef.current) {
-        playerContainerRef.current.classList.remove("custom-fullscreen-active");
-      }
-    };
-  }, [mediaUrl, API, media.id]);
+  const scenesUrl = `${API}/api/media/${media.id}/scenes.vtt`;
+  const thumbnailUrl = media.thumbnail_path
+    ? `${API}/thumbnails/${media.thumbnail_path}`
+    : `${API}/thumbnails/${media.id}.jpg`;
 
   if (!media.path) {
     return <Typography color="text.secondary">No video available</Typography>;
@@ -135,11 +20,12 @@ export function VideoWithPreview({ media }: { media: Media }) {
     <Box
       sx={{
         width: "100%",
-        height: "100%",
+        // Use aspect-ratio for responsive, layout-shift-free sizing
         position: "relative",
+        paddingTop: "56.25%" /* 16:9 Aspect Ratio */,
       }}
     >
-      {loading && (
+      {isLoading && (
         <Box
           sx={{
             position: "absolute",
@@ -147,16 +33,33 @@ export function VideoWithPreview({ media }: { media: Media }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            bgcolor: "rgba(0,0,0,0.4)",
             zIndex: 1,
-            borderRadius: "inherit",
           }}
         >
-          <CircularProgress color="secondary" />
+          <CircularProgress />
         </Box>
       )}
 
-      <div ref={playerContainerRef} style={{ width: "100%", height: "100%" }} />
+      <ReactPlayer
+        url={mediaUrl}
+        controls
+        playing // Autoplay when ready
+        width="100%"
+        height="100%"
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+        }}
+        // We use these callbacks to hide our manual spinner
+        onReady={() => setIsLoading(false)}
+        onError={() => setIsLoading(false)}
+        config={{
+          file: {
+            attributes: { crossOrigin: "anonymous" },
+          },
+        }}
+      />
     </Box>
   );
 }

@@ -44,7 +44,6 @@ export function MediaContentTabs(props: MediaContentTabsProps) {
   const renderTab = (label: string, icon: React.ReactNode) => (
     <Tab
       label={label}
-      icon={icon}
       iconPosition="start"
       sx={{ minHeight: "64px" }} // Taller tabs for a better look
     />

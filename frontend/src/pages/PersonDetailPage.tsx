@@ -241,7 +241,7 @@ export default function PersonDetailPage() {
     return () => {
       controller.abort();
     };
-  }, [id, location.key]);
+  }, [id]);
 
   const handleAssignWrapper = async (
     faceId: number,

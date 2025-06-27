@@ -3,7 +3,7 @@ import os
 from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import BackgroundTasks, FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -102,6 +102,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_accept_ranges_header(request: Request, call_next):
+    # First, get the response from the actual endpoint (e.g., StaticFiles)
+    response = await call_next(request)
+
+    # Check if the request path was for the /originals mount point
+    if request.url.path.startswith("/originals"):
+        # If so, add the header to the response
+        response.headers["Accept-Ranges"] = "bytes"
+
+    return response
+
+
 app.include_router(proc_router, prefix="/api", tags=["processors"])
 app.include_router(media, prefix="/api/media", tags=["media"])
 app.include_router(person, prefix="/api/persons", tags=["persons"])
@@ -130,4 +145,7 @@ app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa_catch_all(full_path: str):
-    return FileResponse(STATIC_DIR / "index.html")
+    return FileResponse(
+        STATIC_DIR / "index.html",
+        headers={"Cache-Control": "no-cache, max-age=0, must-revalidate"},
+    )
