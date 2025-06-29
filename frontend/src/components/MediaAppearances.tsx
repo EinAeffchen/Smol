@@ -1,11 +1,11 @@
-import React, { useCallback, useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import { Box, CircularProgress, Autocomplete, TextField } from "@mui/material";
 import Masonry from "react-masonry-css";
 import { useInView } from "react-intersection-observer";
 
-import { Media, Person, PersonReadSimple } from "../types";
+import { Person, PersonReadSimple } from "../types";
 import MediaCard from "./MediaCard";
-import { useMediaStore, defaultListState } from "../stores/useMediaStore";
+import { useListStore, defaultListState } from "../stores/useListStore";
 import { getPeople, getPersonMediaAppearances } from "../services/person";
 
 const breakpointColumnsObj = {
@@ -19,44 +19,56 @@ const breakpointColumnsObj = {
 
 interface MediaAppearancesProps {
   person: Person;
+  filterPeople: PersonReadSimple[];
+  onFilterPeopleChange: (people: PersonReadSimple[]) => void;
+  mediaListKey: string;
 }
-export default function MediaAppearances({ person }: MediaAppearancesProps) {
-  const [filterPeople, setFilterPeople] = useState<PersonReadSimple[]>([]);
+export default function MediaAppearances({
+  person,
+  filterPeople,
+  onFilterPeopleChange,
+  mediaListKey,
+}: MediaAppearancesProps) {
   const [personOptions, setPersonOptions] = useState<PersonReadSimple[]>([]);
 
-  const mediaListKey = useMemo(() => {
-    const filterIds = filterPeople.map((p) => p.id).sort().join(",");
-    return `person-${person.id}-media-appearances-${filterIds}`;
-  }, [person.id, filterPeople]);
-
-  const { items, hasMore, isLoading } = useMediaStore(
+  const { items, hasMore, isLoading } = useListStore(
     (state) => state.lists[mediaListKey] || defaultListState
   );
-  const { fetchInitial, loadMore } = useMediaStore();
-
+  const { fetchInitial, loadMore } = useListStore();
   const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
 
   useEffect(() => {
-    getPeople(1) // Assuming getPeople can fetch all simple people or takes a page parameter
+    getPeople()
       .then((data) => {
-        setPersonOptions(data.filter((p: Person) => p.id !== person.id));
+        const options = data.items.filter((p) => p.id !== person.id);
+        setPersonOptions(options);
       })
       .catch((err) => console.error("Failed to fetch person options:", err));
   }, [person.id]);
 
   useEffect(() => {
+    const filterIds = filterPeople.map((p) => p.id);
     fetchInitial(mediaListKey, () =>
-      getPersonMediaAppearances(person.id, 1, filterPeople.map((p) => p.id))
+      getPersonMediaAppearances(person.id, undefined, filterIds)
     );
   }, [mediaListKey, fetchInitial, person.id, filterPeople]);
 
   useEffect(() => {
     if (inView && hasMore && !isLoading) {
-      loadMore(mediaListKey, (page) =>
-        getPersonMediaAppearances(person.id, page, filterPeople.map((p) => p.id))
+      const filterIds = filterPeople.map((p) => p.id);
+      loadMore(mediaListKey, (cursor) =>
+        getPersonMediaAppearances(person.id, cursor, filterIds)
       );
     }
-  }, [inView, hasMore, isLoading, loadMore, mediaListKey, person.id, filterPeople]);
+  }, [
+    inView,
+    hasMore,
+    isLoading,
+    loadMore,
+    mediaListKey,
+    person.id,
+    filterPeople,
+  ]);
 
   return (
     <Box>
@@ -68,7 +80,7 @@ export default function MediaAppearances({ person }: MediaAppearancesProps) {
           getOptionLabel={(option) => option.name || `Person ${option.id}`}
           value={filterPeople}
           onChange={(event, newValue) => {
-            setFilterPeople(newValue);
+            onFilterPeopleChange(newValue);
           }}
           renderInput={(params) => (
             <TextField

@@ -11,7 +11,7 @@ export const createTag = async (name: string): Promise<Tag> => {
   return res.json();
 };
 
-export const assignTag = async (ownerType: "media" | "persons", ownerId: number, tagId: number) => {
+export const assignTag = async (ownerType: "media" | "person", ownerId: number, tagId: number) => {
   const res = await fetch(`${API}/api/tags/${ownerType}/${ownerId}/${tagId}`, {
     method: "POST",
   });

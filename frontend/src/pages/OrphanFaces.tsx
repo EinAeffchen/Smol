@@ -1,4 +1,4 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect } from "react";
 import {
   Container,
   Box,
@@ -6,56 +6,69 @@ import {
   Grid,
   CircularProgress,
 } from "@mui/material";
-import { useInfinite, PageResponse } from "../hooks/useInfinite";
+import { useNavigate } from "react-router-dom";
+import { useInfinite, CursorResponse } from "../hooks/useInfinite";
 import FaceCard from "../components/FaceCard";
 import { FaceRead } from "../types";
+import { useInView } from "react-intersection-observer";
 import { getOrphanFaces } from "../services/face";
-import { assignFace, createPersonFromFaces, deleteFace, detachFace } from "../services/faceActions";
+import { useListStore, defaultListState } from "../stores/useListStore";
+import {
+  assignFace,
+  createPersonFromFaces,
+  deleteFace,
+  detachFace,
+} from "../services/faceActions";
 
 const ITEMS_PER_PAGE = 48;
 
 export default function OrphanFacesPage() {
-  const fetchOrphans = useCallback(
-    async (page: number, limit: number): Promise<PageResponse<FaceRead>> => {
-      const data = await getOrphanFaces(page);
-      return { items: data, next_page: data.length === 0 ? null : page + 1 };
-    },
-    []
-  );
+  const navigate = useNavigate();
+  const listKey = "orphan-faces";
 
   const {
     items: orphans,
-    setItems: setOrphans,
     hasMore,
-    loading,
-    loaderRef,
-  } = useInfinite<FaceRead>(fetchOrphans, ITEMS_PER_PAGE, []);
+    isLoading,
+  } = useListStore((state) => state.lists[listKey] || defaultListState);
+  const { fetchInitial, loadMore, removeItem } = useListStore();
+  const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
+
+  useEffect(() => {
+    fetchInitial(listKey, () => getOrphanFaces(null));
+  }, [fetchInitial, listKey]);
+
+  useEffect(() => {
+    if (inView && hasMore && !isLoading) {
+      loadMore(listKey, (cursor) => getOrphanFaces(cursor));
+    }
+  }, [inView, hasMore, isLoading, loadMore, listKey]);
 
   // assign a face to an existing person
-  async function handleAssignFace(faceId: number, personId: number) {
-    await assignFace(faceId, personId);
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
-  }
+  const handleAssignFace = async (faceId: number, personId: number) => {
+    await assignFace([faceId], personId);
+    // Optimistically remove the face from the list using the store's action
+    removeItem(listKey, faceId);
+  };
 
   // create a new person from a face
-  async function handleCreatePersonFromFace(faceId: number, data: any) {
-    const p = await createPersonFromFaces([faceId], data);
-    if (p?.id) window.location.href = `/person/${p.id}`;
-  }
+  const handleCreatePersonFromFace = async (faceId: number, data: any) => {
+    const p = await createPersonFromFaces([faceId], data.name);
+    // Optimistically remove the face from this list
+    removeItem(listKey, faceId);
+    // Use navigate for a smooth SPA transition instead of a full page reload
+    if (p?.id) navigate(`/person/${p.id}`);
+  };
 
   // delete a face entirely
-  async function handleDeleteFace(faceId: number) {
-    await deleteFace(faceId);
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
-  }
-  // detach a face
-  async function handleDetachFace(faceId: number) {
-    await detachFace(faceId);
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
-  }
+  const handleDeleteFace = async (faceId: number) => {
+    await deleteFace([faceId]);
+    // Optimistically remove the face from the list
+    removeItem(listKey, faceId);
+  };
 
   // initial loading state
-  if (loading && orphans.length === 0) {
+  if (isLoading && orphans.length === 0) {
     return (
       <Box textAlign="center" py={4}>
         <CircularProgress color="secondary" />
@@ -64,7 +77,7 @@ export default function OrphanFacesPage() {
   }
 
   // no orphans
-  if (!loading && orphans.length === 0) {
+  if (!isLoading && orphans.length === 0) {
     return (
       <Typography
         variant="body1"
@@ -77,46 +90,43 @@ export default function OrphanFacesPage() {
   }
 
   return (
-    <Container
-      maxWidth={false}
-      sx={{ pt: 4, pb: 7, bgcolor: "background.default" }}
-    >
-      <Typography variant="h4" color="text.primary" gutterBottom>
-        Unassigned Faces
+    <Container maxWidth="xl" sx={{ pt: 4, pb: 7 }}>
+      <Typography variant="h4" gutterBottom>
+        Unassigned Faces ({orphans.length})
       </Typography>
 
-      <Grid container spacing={2}>
-        {orphans.map((face) => (
-          <Grid key={face.id} size={{ xs: 4, sm: 3, md: 2, lg: 1 }}>
-            <FaceCard
-              face={face}
-              isProfile={false}
-              onSetProfile={() => {}}
-              onAssign={(pid) => handleAssignFace(face.id, pid)}
-              onCreate={(data) => handleCreatePersonFromFace(face.id, data)}
-              onDelete={() => handleDeleteFace(face.id)}
-              onDetach={() => handleDetachFace(face.id)}
-            />
-          </Grid>
-        ))}
-      </Grid>
-
-      {loading && (
-        <Box textAlign="center" py={2}>
-          <CircularProgress color="secondary" />
-        </Box>
-      )}
-
-      {!loading && hasMore && (
-        <Box
-          ref={loaderRef}
-          textAlign="center"
-          py={2}
-          sx={{ color: "text.secondary" }}
+      {orphans.length === 0 && !isLoading ? (
+        <Typography
+          variant="body1"
+          align="center"
+          sx={{ py: 4, color: "text.secondary" }}
         >
-          Scroll to load more…
+          No unassigned faces found. Great job!
+        </Typography>
+      ) : (
+        <Grid container spacing={2}>
+          {orphans.map((face) => (
+            <Grid key={face.id} size={{ xs: 4, sm: 3, md: 2, lg: 1 }}>
+              <FaceCard
+                face={face}
+                isProfile={false}
+                onAssign={(pid) => handleAssignFace(face.id, pid)}
+                onCreate={(data) => handleCreatePersonFromFace(face.id, data)}
+                onDelete={() => handleDeleteFace(face.id)}
+              />
+            </Grid>
+          ))}
+        </Grid>
+      )}
+
+      {isLoading && orphans.length > 0 && (
+        <Box textAlign="center" py={4}>
+          <CircularProgress />
         </Box>
       )}
+
+      {/* Sentinel for infinite scroll */}
+      {hasMore && <Box ref={loaderRef} sx={{ height: "10px" }} />}
     </Container>
   );
 }

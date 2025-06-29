@@ -19,6 +19,7 @@ import ShutterSpeedIcon from "@mui/icons-material/ShutterSpeed";
 import ApertureIcon from "@mui/icons-material/DonutLarge";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import { API } from "../config";
+import { getExifData } from "../services/exif"
 
 interface MediaExifProps {
   mediaId: number;

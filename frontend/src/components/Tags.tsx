@@ -3,7 +3,10 @@ import { Link } from "react-router-dom";
 import { Media, Tag } from "../types";
 import { Person } from "../types";
 import { Chip, Box, Typography } from "@mui/material";
-import { removeTagFromMedia, removeTagFromPerson } from "../services/tagActions";
+import {
+  removeTagFromMedia,
+  removeTagFromPerson,
+} from "../services/tagActions";
 
 export interface TagsProps {
   media?: Media;
@@ -51,7 +54,11 @@ export function Tags({ media, person, onUpdate }: Readonly<TagsProps>) {
             to={`/tag/${tag.id}`}
             clickable
             // The onDelete prop adds a delete icon and handles the click
-            onDelete={() => handleRemove(tag)}
+            onDelete={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handleRemove(tag);
+            }}
             // Use the theme's accent color for a consistent look
             sx={{
               color: "accent.dark",

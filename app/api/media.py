@@ -50,16 +50,44 @@ def format_timestamp(seconds: float) -> str:
     return f"{hrs:02d}:{mins:02d}:{secs:02d}.{ms:03d}"
 
 
-@router.get("/missing_geo", response_model=list[MediaPreview])
-def get_missing_geo(session: Session = Depends(get_session)):
+@router.get("/missing-geo", response_model=CursorPage)
+def get_missing_geo(
+    session: Session = Depends(get_session),
+    cursor: str | None = None,  # 1. Accept an optional string cursor
+    limit: int = 100,  # 2. Make the limit a parameter
+):
     stmt = (
         select(Media)
         .join(ExifData)
         .where(ExifData.lat.is_(None))
-        .order_by(Media.inserted_at.desc())
-        .limit(100)
+        # Add a secondary unique sort key for stable ordering
+        .order_by(Media.inserted_at.desc(), Media.id.desc())
     )
-    return session.exec(stmt).all()
+
+    # 3. If a cursor is provided, add it to the query
+    if cursor:
+        try:
+            # The cursor will be the `inserted_at` timestamp of the last item from the previous page
+            cursor_datetime = datetime.fromisoformat(cursor)
+            stmt = stmt.where(Media.inserted_at < cursor_datetime)
+        except ValueError:
+            # Handle invalid cursor format if necessary
+            pass
+
+    # Apply the limit to get one page of results
+    stmt = stmt.limit(limit)
+
+    results = session.exec(stmt).all()
+
+    # 4. Determine the next cursor
+    next_cursor = None
+    if len(results) == limit:
+        # If we got a full page, the next cursor is the timestamp of the last item
+        last_item_timestamp = results[-1].inserted_at
+        next_cursor = last_item_timestamp.isoformat()
+
+    # 5. Return the data in the correct object shape
+    return CursorPage(items=results, next_cursor=next_cursor)
 
 
 @router.get("/", response_model=CursorPage)
@@ -164,9 +192,7 @@ def list_locations(
     results = []
     for row in rows:
         thumbnail_path = (
-            f"/{row.id}.jpg"
-            if not row.thumbnail_path
-            else row.thumbnail_path
+            f"/{row.id}.jpg" if not row.thumbnail_path else row.thumbnail_path
         )
         results.append(
             MediaLocation(

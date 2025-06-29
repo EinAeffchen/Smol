@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 
-export type PageResponse<T> = {
+export type CursorResponse<T> = {
   items: T[];
   next_cursor: string | null;
 };
@@ -8,7 +8,7 @@ export type PageResponse<T> = {
 export function useInfinite<T>(
   fetchPage: (
     cursor?: string
-  ) => Promise<PageResponse<T>>,
+  ) => Promise<CursorResponse<T>>,
   resetDeps: any[] = [],
   disabled: boolean = false
 ) {

@@ -1,5 +1,4 @@
 import { API } from "../config";
-import { Tag } from "../types";
 
 export const removeTagFromMedia = async (mediaId: number, tagId: number) => {
   const res = await fetch(`${API}/api/tags/media/${mediaId}/${tagId}`, {

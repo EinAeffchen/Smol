@@ -1,6 +1,5 @@
 import { API } from "../config";
 import { Person } from "../types";
-import { useCallback } from "react";
 
 export const assignFace = async (faceIds: number[], personId: number) => {
   await fetch(`${API}/api/faces/assign`, {
@@ -33,6 +32,6 @@ export const detachFace = async (faceIds: number[]) => {
   await fetch(`${API}/api/faces/detach`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(faceIds),
+    body: JSON.stringify({ face_ids: faceIds }),
   });
 };

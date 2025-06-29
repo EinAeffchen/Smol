@@ -8,11 +8,12 @@ import {
   Grid,
   Button,
 } from "@mui/material";
-import { Media, Person, Tag, FaceRead, SimilarPerson } from "../types";
+import { Person, FaceRead, SimilarPerson, PersonReadSimple, Tag, Media } from "../types";
 
 import MediaAppearances from "./MediaAppearances";
 import SimilarPersonCard from "./SimilarPersonCard";
 import { TagsSection } from "./TagsSection";
+import { string } from "prop-types";
 const DetectedFaces = React.lazy(() => import("./DetectedFaces"));
 
 interface TabPanelProps {
@@ -40,24 +41,46 @@ interface PersonContentTabsProps {
   detectedFacesList: FaceRead[];
   hasMoreFaces: boolean;
   loadingMoreFaces: boolean;
-  onTagAdded: (updatedPerson: Person) => void;
+  onTagAdded: (tag: Tag) => void;
   loadMoreDetectedFaces: () => void;
   handleProfileAssignmentWrapper: (faceId: number, personId: number) => void;
   handleAssignWrapper: (faceIds: number[], personId: number) => void;
-  handleCreateWrapper: (faceIds: number[], name: string) => Promise<Person>;
+  handleCreateWrapper: (faceIds: number[], name?: string) => Promise<Person>;
   handleDeleteWrapper: (faceIds: number[]) => void;
   handleDetachWrapper: (faceIds: number[]) => void;
   suggestedFaces: FaceRead[];
   similarPersons: SimilarPerson[];
-  onTagUpdate: () => void;
+  onTagUpdate: (obj: Person|Media) => void;
   onRefreshSuggestions: () => void;
   onLoadSimilar: () => void;
+  filterPeople: PersonReadSimple[];
+  onFilterPeopleChange: () => void;
+  mediaListKey: string;
 }
 
 export function PersonContentTabs(props: PersonContentTabsProps) {
   const [tabValue, setTabValue] = useState(0);
   const [faceTabValue, setFaceTabValue] = useState(0);
   const [hasLoadedSimilar, setHasLoadedSimilar] = useState(false);
+  const [isProcessingFaces, setIsProcessingFaces] = useState(false);
+
+  const createActionHandler = (action: (...args: any[]) => Promise<any>) => {
+    return async (...args: any[]) => {
+      setIsProcessingFaces(true);
+      try {
+        await action(...args);
+      } catch (error) {
+        console.error("An error occurred during the face action:", error);
+        // Optionally, show an error toast to the user here
+      } finally {
+        setIsProcessingFaces(false);
+      }
+    };
+  };
+  const handleAssign = createActionHandler(props.handleAssignWrapper);
+  const handleCreate = createActionHandler(props.handleCreateWrapper);
+  const handleDelete = createActionHandler(props.handleDeleteWrapper);
+  const handleDetach = createActionHandler(props.handleDetachWrapper);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -90,7 +113,6 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
         >
           <Tab label={`Media Appearances (${props.person.appearance_count})`} />
           <Tab label="Faces" />
-          <Tab label="Suggested Faces" />
           <Tab label="Similar People" />
           <Tab label="Tags" />
         </Tabs>
@@ -100,6 +122,9 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
         <Suspense fallback={<CircularProgress />}>
           <MediaAppearances
             person={props.person}
+            filterPeople={props.filterPeople}
+            onFilterPeopleChange={props.onFilterPeopleChange}
+            mediaListKey={props.mediaListKey}
           />
         </Suspense>
       </TabPanel>
@@ -118,21 +143,21 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
         <TabPanel value={faceTabValue} index={0}>
           <Suspense fallback={<CircularProgress />}>
             <DetectedFaces
+              isProcessing={isProcessingFaces}
               title="Confirmed Faces"
               faces={props.detectedFacesList}
               profileFaceId={props.person.profile_face_id}
               onSetProfile={(faceId) =>
                 props.handleProfileAssignmentWrapper(faceId, props.person.id)
               }
-              onAssign={(faceIds, personId) => props.handleAssignWrapper(faceIds, personId)}
-              onCreate={props.handleCreateWrapper}
-              onDelete={(faceIds) => props.handleDeleteWrapper(faceIds)}
-              onDetach={(faceIds) => props.handleDetachWrapper(faceIds)}
+              onAssign={handleAssign}
+              onDelete={handleDelete}
+              onDetach={handleDetach}
+              onCreateMultiple={handleCreate}
               onLoadMore={props.loadMoreDetectedFaces}
               hasMore={props.hasMoreFaces}
               isLoadingMore={props.loadingMoreFaces}
               personId={props.person.id}
-              onCreateMultiple={props.handleCreateWrapper}
             />
           </Suspense>
         </TabPanel>
@@ -156,14 +181,14 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
           </Box>
           <Suspense fallback={<CircularProgress />}>
             <DetectedFaces
+              isProcessing={isProcessingFaces}
               title="Suggested Faces"
               faces={props.suggestedFaces}
-              onAssign={(faceIds, personId) => props.handleAssignWrapper(faceIds, personId)}
-              onCreate={props.handleCreateWrapper}
-              onDelete={(faceIds) => props.handleDeleteWrapper(faceIds)}
-              onDetach={(faceIds) => props.handleDetachWrapper(faceIds)}
+              onAssign={handleAssign}
+              onDelete={handleDelete}
+              onDetach={handleDetach}
+              onCreateMultiple={handleCreate}
               personId={props.person.id}
-              onCreateMultiple={props.handleCreateWrapper}
             />
           </Suspense>
         </TabPanel>
@@ -186,7 +211,7 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
       <TabPanel value={tabValue} index={3}>
         <TagsSection
           person={props.person}
-          onTagAdded={props.onTagAdded}
+          onTagAdded={(person) => props.onTagAdded(person)}
           onUpdate={props.onTagUpdate}
         />
       </TabPanel>

@@ -7,25 +7,22 @@ import {
   createFilterOptions,
 } from "@mui/material";
 import { Tag } from "../types";
-import { CursorResponse } from "../hooks/useInfinite";
 import { getTags } from "../services/tag";
 import { createTag, assignTag } from "../services/tagging";
 
-type OwnerType = "media" | "persons";
+type OwnerType = "media" | "person";
 
 interface TagAdderProps {
   ownerType: OwnerType;
   ownerId: number;
   existingTags: Tag[];
-  onTagAdded: () => void;
+  onTagAdded: (newTag: Tag) => void;
 }
 
-// A custom type for our Autocomplete options, which can be a real Tag or a "Create" action
 interface TagOption extends Partial<Tag> {
-  inputValue?: string; // This will hold the name for a new tag
+  inputValue?: string;
 }
 
-// This helper from MUI allows us to customize filtering, which we'll use to add our "Create" option
 const filter = createFilterOptions<TagOption>();
 
 export default function TagAdder({
@@ -41,7 +38,7 @@ export default function TagAdder({
   useEffect(() => {
     setLoading(true);
     getTags(1) // Assuming getTags can fetch all tags or takes a page parameter
-      .then((data) => setAllTags(data || []))
+      .then((data) => setAllTags(data.items || []))
       .catch((error) => console.error("Failed to load all tags:", error))
       .finally(() => setLoading(false));
   }, []);
@@ -94,7 +91,7 @@ export default function TagAdder({
     // Assign the tag
     try {
       await assignTag(ownerType, ownerId, tagToAssign!.id);
-      onTagAdded();
+      onTagAdded(tagToAssign);
     } catch (error) {
       console.error("Error assigning tag:", error);
     }

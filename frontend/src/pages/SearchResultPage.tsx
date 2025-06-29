@@ -1,15 +1,15 @@
 import { Box, CircularProgress, Container, Typography } from "@mui/material";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { useInView } from "react-intersection-observer";
 import Masonry from "react-masonry-css";
 import { useLocation, useSearchParams } from "react-router-dom";
 import MediaCard from "../components/MediaCard";
 import PersonCard from "../components/PersonCard";
 import TagCard from "../components/TagCard";
-import { search } from "../services/search";
-import { PageResponse, useInfinite } from "../hooks/useInfinite";
-import { defaultListState, useMediaStore } from "../stores/useMediaStore";
+import { defaultListState, useListStore } from "../stores/useListStore";
 import { Media, Person, Tag } from "../types";
+import { searchMedia, searchPeople, searchTags } from "../services/search";
+import { API } from "../config";
 
 const ITEMS_PER_PAGE = 30;
 
@@ -38,85 +38,73 @@ export default function SearchResultsPage() {
   const category =
     (searchParams.get("category") as "media" | "person" | "tag") || "media";
   const query = searchParams.get("query") || "";
-
   const location = useLocation();
-  const preloadedState = location.state as {
-    items: Media[];
-    searchType: "image";
-  } | null;
+
+  const listKey = useMemo(() => {
+    if (!query || !category) return "";
+    const params = new URLSearchParams({ query });
+    return `${API}/api/search/${category}?${params.toString()}`;
+  }, [category, query]);
 
   const mediaListKey = useMemo(() => {
     if (category !== "media" || !query) return "";
-    return `search-media-${query}`;
+    const params = new URLSearchParams({ query });
+    return `${API}/api/search/media?${params.toString()}`;
   }, [category, query]);
 
-  const {
-    items: mediaItems,
-    hasMore: mediaHasMore,
-    isLoading: mediaIsLoading,
-  } = useMediaStore((state) => state.lists[mediaListKey] || defaultListState);
-
-  const { fetchInitial, loadMore } = useMediaStore();
-  const { ref: inViewRef, inView } = useInView({ threshold: 0.5 });
-
-  useEffect(() => {
-    if (category === "media" && mediaListKey) {
-      fetchInitial(mediaListKey, async () => {
-        const result = await search(query);
-        return result.media;
-      });
-    }
-  }, [mediaListKey, fetchInitial, category, query]);
-
-  useEffect(() => {
-    if (inView && category === "media" && mediaHasMore && !mediaIsLoading) {
-      loadMore(mediaListKey, async (page) => {
-        const result = await search(query);
-        return result.media;
-      });
-    }
-  }, [inView, category, mediaHasMore, mediaIsLoading, loadMore, mediaListKey, query]);
-
-  const fetchOtherPage = useCallback(
-    async (page: number, limit: number): Promise<PageResponse<Person | Tag>> => {
-      const result = await search(query);
-      if (category === "person") {
-        return { items: result.persons, next_page: null };
-      } else if (category === "tag") {
-        return { items: result.tags, next_page: null };
-      }
-      return { items: [], next_page: null };
-    },
-    [category, query]
+  const { items, hasMore, isLoading } = useListStore(
+    (state) => state.lists[listKey] || defaultListState
   );
+  const { fetchInitial, loadMore } = useListStore();
+  const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
 
-  const {
-    items: otherItems,
-    hasMore: otherHasMore,
-    loading: otherIsLoading,
-    loaderRef: otherLoaderRef,
-  } = useInfinite<Person | Tag>(fetchOtherPage, ITEMS_PER_PAGE, [category, query]);
+  useEffect(() => {
+    if (!listKey) return;
 
-  const items = category === "media" ? mediaItems : otherItems;
-  const isLoading = category === "media" ? mediaIsLoading : otherIsLoading;
-  const hasMore = category === "media" ? mediaHasMore : otherHasMore;
-  const loaderRef = category === "media" ? inViewRef : otherLoaderRef;
+    const fetcherMap = {
+      media: () => searchMedia(query, ITEMS_PER_PAGE),
+      person: () => searchPeople(query, ITEMS_PER_PAGE),
+      tag: () => searchTags(query, ITEMS_PER_PAGE),
+    };
 
+    const fetcher = fetcherMap[category];
+    if (fetcher) {
+      // We depend on location.key to ensure that navigating triggers a re-evaluation
+      // of this effect, which in turn calls fetchInitial. The store's internal logic
+      // will then decide whether to actually make a network request.
+      fetchInitial(listKey, fetcher);
+    }
+  }, [listKey, category, query, fetchInitial, location.key]);
+
+  const preloadedState = location.state as {
+    items: any[];
+    searchType: "image";
+  } | null;
   const displayItems = preloadedState?.items || items;
 
-  const visibleItems = useMemo(() => {
-    return items.filter((item) => !displayItems.includes(item.id));
-  }, [items, displayItems]);
-
   const renderItem = (item: Media | Person | Tag) => {
+    const itemKey = `${category}-${item.id}`;
+
     if (isMedia(item)) {
-      return <MediaCard media={item} />;
+      return (
+        <div key={itemKey}>
+          <MediaCard media={item} mediaListKey={listKey} />
+        </div>
+      );
     }
     if (isPerson(item)) {
-      return <PersonCard person={item} />;
+      return (
+        <div key={itemKey}>
+          <PersonCard person={item} />
+        </div>
+      );
     }
     if (isTag(item)) {
-      return <TagCard tag={item} />;
+      return (
+        <div key={itemKey}>
+          <TagCard onTagDeleted={handleTagDeleted} tag={item} />
+        </div>
+      );
     }
     return null;
   };
@@ -125,6 +113,10 @@ export default function SearchResultsPage() {
     preloadedState?.searchType === "image"
       ? "Similar Image Results"
       : `Search Results for "${query}"`;
+
+  const handleTagDeleted = (tagId: number) => {
+    items.filter((tag) => tag.id === tagId);
+  };
 
   return (
     <Container maxWidth="xl" sx={{ pt: 4, pb: 6 }}>
@@ -137,20 +129,16 @@ export default function SearchResultsPage() {
         className="my-masonry-grid"
         columnClassName="my-masonry-grid_column"
       >
-        {visibleItems.map((item) => (
-          <div key={`${category}-${item.id}`}>{renderItem(item)}</div>
-        ))}
+        {displayItems.map(renderItem)}
       </Masonry>
 
-      {isLoading && !preloadedState && (
+      {isLoading && (
         <Box textAlign="center" py={4}>
           <CircularProgress />
         </Box>
       )}
-      {hasMore && !preloadedState && (
-        <Box ref={loaderRef} sx={{ height: "1px" }} />
-      )}
-      {!isLoading && visibleItems.length === 0 && (
+      {hasMore && !isLoading && <Box ref={loaderRef} sx={{ height: "1px" }} />}
+      {!isLoading && displayItems.length === 0 && (
         <Typography sx={{ mt: 4 }}>No results found.</Typography>
       )}
     </Container>

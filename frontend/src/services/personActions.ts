@@ -1,12 +1,11 @@
 import { API } from "../config";
 import { Person } from "../types";
-import { useCallback } from "react";
 
 export const updatePerson = async (
   personId: number,
   data: { name?: string; profile_face_id?: number }
 ): Promise<Person> => {
-  const res = await fetch(`${API}/api/persons/${personId}`, {
+  const res = await fetch(`${API}/api/person/${personId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -16,14 +15,14 @@ export const updatePerson = async (
 };
 
 export const deletePerson = async (personId: number) => {
-  const res = await fetch(`${API}/api/persons/${personId}`, {
+  const res = await fetch(`${API}/api/person/${personId}`, {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete person");
 };
 
 export const mergePersons = async (sourceId: number, targetId: number) => {
-  const res = await fetch(`${API}/api/persons/merge`, {
+  const res = await fetch(`${API}/api/person/merge`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ source_id: sourceId, target_id: targetId }),
@@ -33,21 +32,31 @@ export const mergePersons = async (sourceId: number, targetId: number) => {
 
 export const searchPersonsByName = async (name: string): Promise<Person[]> => {
   const res = await fetch(
-    `${API}/api/persons/?name=${encodeURIComponent(name)}`
+    `${API}/api/person/?name=${encodeURIComponent(name)}`
   );
   if (!res.ok) throw new Error("Failed to search persons");
   const data = await res.json();
   return data.items;
 };
 
-export const getSuggestedFaces = async (personId: number): Promise<any[]> => {
-  const res = await fetch(`${API}/api/persons/${personId}/suggest-faces`);
+export const getSuggestedFaces = async (
+  personId: number,
+  signal?: AbortSignal
+): Promise<any[]> => {
+  const res = await fetch(`${API}/api/person/${personId}/suggest-faces`, {
+    signal,
+  });
   if (!res.ok) throw new Error("Failed to fetch suggested faces");
   return res.json();
 };
 
-export const getSimilarPersons = async (personId: number): Promise<any[]> => {
-  const res = await fetch(`${API}/api/persons/${personId}/similarities`);
+export const getSimilarPersons = async (
+  personId: number,
+  signal?: AbortSignal
+): Promise<any[]> => {
+  const res = await fetch(`${API}/api/person/${personId}/similarities`, {
+    signal,
+  });
   if (!res.ok) throw new Error("Failed to fetch similar persons");
   return res.json();
 };
@@ -64,7 +73,7 @@ export const getPersonFaces = async (
     params.append("cursor", cursor);
   }
   const res = await fetch(
-    `${API}/api/persons/${personId}/faces?${params.toString()}`
+    `${API}/api/person/${personId}/faces?${params.toString()}`
   );
   if (!res.ok) throw new Error("Failed to fetch person faces");
   return res.json();

@@ -213,7 +213,7 @@ def get_appearances(
     if not matching_media_ids:
         return CursorPage(items=[], next_cursor=None)
 
-    q = select(Media).where(Media.id.in_(matching_media_ids))
+    q = select(Media).where(Media.id.in_(matching_media_ids)).order_by(Media.created_at.desc())
 
     if cursor:
         try:

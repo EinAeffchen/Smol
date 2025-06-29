@@ -12,7 +12,7 @@ import {
   MenuItem,
   Container,
 } from "@mui/material";
-import { useMediaStore, defaultListState } from "../stores/useMediaStore";
+import { useListStore, defaultListState } from "../stores/useListStore";
 import { getVideos } from "../services/media";
 
 const breakpointColumnsObj = {
@@ -30,23 +30,21 @@ export default function VideosPage() {
     null
   );
 
-  const listState = useMediaStore(
-    (state) => state.lists["videos"]
+  const listKey = useMemo(() => `videos-${sortOrder}`, [sortOrder]);
+  const { items, hasMore, isLoading } = useListStore(
+    (state) => state.lists[listKey] || defaultListState
   );
-  const items = listState?.items || [];
-  const hasMore = listState?.hasMore || defaultListState.hasMore;
-  const isLoading = listState?.isLoading || defaultListState.isLoading;
-  const { fetchInitial, loadMore } = useMediaStore();
+  const { fetchInitial, loadMore } = useListStore();
 
   useEffect(() => {
-    fetchInitial("videos", () => getVideos(null));
-  }, [fetchInitial]);
+    fetchInitial(listKey, () => getVideos(null, sortOrder));
+  }, [listKey, fetchInitial, sortOrder]);
 
   useEffect(() => {
     if (inView && hasMore && !isLoading) {
-      loadMore("videos", (cursor) => getVideos(cursor));
+      loadMore(listKey, (cursor) => getVideos(cursor, sortOrder));
     }
-  }, [inView, hasMore, isLoading, loadMore]);
+  }, [inView, hasMore, isLoading, loadMore, listKey, sortOrder]); // Add listKey and sortOr
 
   const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setSortMenuAnchorEl(event.currentTarget);
@@ -106,11 +104,7 @@ export default function VideosPage() {
         >
           {items.map((media) => (
             <div key={media.id}>
-              <MediaCard
-                media={media}
-                mediaListKey="videos"
-                sortOrder={sortOrder}
-              />
+              <MediaCard media={media} mediaListKey={listKey} />
             </div>
           ))}
         </Masonry>

@@ -1,28 +1,47 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
-import { Box, Typography, CircularProgress, Button, Stack, TextField, Dialog, DialogTitle, DialogContent, DialogActions } from "@mui/material";
-import DeleteIcon from "@mui/icons-material/Delete";
-import LinkOffIcon from "@mui/icons-material/LinkOff";
-import PersonAddIcon from "@mui/icons-material/PersonAdd";
-import PersonSearchIcon from "@mui/icons-material/PersonSearch";
+import {
+  Box,
+  Typography,
+  CircularProgress,
+  Button,
+  Stack,
+  Paper,
+  useTheme,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  TextField,
+  DialogActions,
+} from "@mui/material";
 import Masonry from "react-masonry-css";
 import { FaceRead, Person } from "../types";
 import FaceCard from "./FaceCard";
 
 interface DetectedFacesProps {
+  isProcessing: boolean;
   faces: FaceRead[];
-  profileFaceId?: number;
   title: string;
-  onSetProfile?: (faceId: number) => void;
-  onAssign: (faceIds: number[], personId: number) => void;
-  onCreate: (faceId: number, data: any) => Promise<Person>;
   onDelete: (faceIds: number[]) => void;
   onDetach: (faceIds: number[]) => void;
+  onAssign: (faceIds: number[], personId: number) => void;
+  onCreateMultiple?: (faceIds: number[], name?: string) => Promise<Person>;
+  personId?: number; // Make optional for orphan faces
+  onClearSelection?: () => void;
+
+  // --- Individual Actions ---
+  allowIndividualActions?: boolean; // New prop to control single actions
+  onSingleFaceDelete?: (faceId: number) => void;
+  onSingleFaceAssign?: (faceId: number, personId: number) => void;
+  onSingleFaceCreate?: (faceId: number, name: string) => void;
+
+  // --- Profile Actions ---
+  profileFaceId?: number;
+  onSetProfile?: (faceId: number) => void;
+
+  // --- Infinite Scroll ---
   onLoadMore?: () => void;
   hasMore?: boolean;
   isLoadingMore?: boolean;
-  onClearSelection?: () => void;
-  personId?: number;
-  onCreateMultiple?: (faceIds: number[], name?: string) => Promise<Person>;
 }
 
 const breakpointColumnsObj = {
@@ -34,21 +53,26 @@ const breakpointColumnsObj = {
 };
 
 export default function DetectedFaces({
+  isProcessing,
   faces,
-  profileFaceId,
   title,
-  onSetProfile,
-  onAssign,
-  onCreate,
   onDelete,
   onDetach,
+  onAssign,
+  personId,
+  onClearSelection,
+  allowIndividualActions = false, // Default to false
+  onSingleFaceDelete,
+  onSingleFaceAssign,
+  onSingleFaceCreate,
+  profileFaceId,
+  onSetProfile,
   onLoadMore,
   hasMore,
   isLoadingMore,
-  onClearSelection,
-  personId, // Destructure personId
   onCreateMultiple,
 }: DetectedFacesProps) {
+  const theme = useTheme();
   const observerRef = useRef<IntersectionObserver | null>(null);
   const lastCardRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -77,6 +101,7 @@ export default function DetectedFaces({
   const [selectedFaceIds, setSelectedFaceIds] = useState<number[]>([]);
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [newPersonName, setNewPersonName] = useState("");
+  const isAnythingSelected = selectedFaceIds.length > 0;
 
   const handleToggleSelect = useCallback((faceId: number) => {
     setSelectedFaceIds((prevSelected) =>
@@ -94,7 +119,6 @@ export default function DetectedFaces({
   }, [onClearSelection]);
 
   useEffect(() => {
-    // Clear selection if faces change (e.g., new person loaded)
     setSelectedFaceIds([]);
   }, [faces]);
 
@@ -111,63 +135,77 @@ export default function DetectedFaces({
   }
 
   return (
-    <Box sx={{ my: 4 }}>
-      <Typography variant="h6" gutterBottom>
-        {title} ({faces.length})
-      </Typography>
-
-      {selectedFaceIds.length > 0 && (
-        <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
-          <Button
-            variant="outlined"
-            onClick={handleClearSelection}
-            size="small"
-          >
-            Clear Selection ({selectedFaceIds.length})
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<PersonSearchIcon />}
-            onClick={() => {
-              if (personId) {
-                onAssign(selectedFaceIds, personId);
-              } else {
-                console.error("Person ID is not available for assignment.");
-              }
+    <Paper variant="outlined" sx={{ p: 2, my: 4 }}>
+      <Box sx={{ mb: 1 }}>
+        {!isAnythingSelected ? (
+          <Typography variant="h6">{title}</Typography>
+        ) : (
+          <Paper
+            elevation={0}
+            sx={{
+              p: 1,
+              bgcolor: "action.selected",
+              borderRadius: 1,
+              border: `1px solid ${theme.palette.divider}`,
             }}
-            size="small"
           >
-            Assign
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<LinkOffIcon />}
-            onClick={() => onDetach(selectedFaceIds)}
-            size="small"
-          >
-            Detach
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<DeleteIcon />}
-            onClick={() => onDelete(selectedFaceIds)}
-            size="small"
-            color="error"
-          >
-            Delete
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<PersonAddIcon />}
-            onClick={() => setOpenCreateDialog(true)}
-            size="small"
-          >
-            Create New
-          </Button>
-        </Stack>
-      )}
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button size="small" onClick={handleClearSelection}>
+                {selectedFaceIds.length} selected
+              </Button>
+              <Box sx={{ flexGrow: 1 }} />
 
-      <Dialog open={openCreateDialog} onClose={() => setOpenCreateDialog(false)}>
+              {onAssign && personId && (
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={isProcessing}
+                  onClick={() => onAssign(selectedFaceIds, personId)}
+                >
+                  Assign
+                </Button>
+              )}
+              {onCreateMultiple && (
+                <Button
+                  variant="contained"
+                  size="small"
+                  disabled={isProcessing}
+                  onClick={() => setOpenCreateDialog(true)}
+                >
+                  Create New
+                </Button>
+              )}
+              {onDetach && (
+                <Button
+                  variant="outlined"
+                  color="secondary"
+                  size="small"
+                  disabled={isProcessing}
+                  onClick={() => onDetach(selectedFaceIds)}
+                >
+                  Detach
+                </Button>
+              )}
+              {onDelete && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  size="small"
+                  disabled={isProcessing}
+                  onClick={() => onDelete(selectedFaceIds)}
+                >
+                  Delete
+                </Button>
+              )}
+              {isProcessing && <CircularProgress size={20} />}
+            </Stack>
+          </Paper>
+        )}
+      </Box>
+      <Dialog
+        open={openCreateDialog}
+        onClose={() => setOpenCreateDialog(false)}
+      >
         <DialogTitle>Create New Person</DialogTitle>
         <DialogContent>
           <TextField
@@ -183,68 +221,93 @@ export default function DetectedFaces({
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenCreateDialog(false)}>Cancel</Button>
-          <Button onClick={async () => {
-            if (onCreateMultiple) {
-              await onCreateMultiple(selectedFaceIds, newPersonName);
-              setOpenCreateDialog(false);
-              setSelectedFaceIds([]);
-              setNewPersonName("");
-            }
-          }}>Create</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Box
-        sx={{
-          maxHeight: "280px", // Approximate height for two rows of FaceCards (130px height + spacing)
-          overflowY: "auto",
-          overflowX: "hidden",
-          py: 1,
-          pr: 2,
-          position: "relative",
-        }}
-      >
-        <Masonry
-          breakpointCols={breakpointColumnsObj}
-          className="my-masonry-grid"
-          columnClassName="my-masonry-grid_column"
-        >
-          {faces.map((face, index) => (
-            <div
-              key={face.id}
-              ref={
-                index === faces.length - 1 && hasMore && onLoadMore
-                  ? lastCardRef
-                  : null
+          <Button
+            onClick={async () => {
+              if (onCreateMultiple) {
+                await onCreateMultiple(selectedFaceIds, newPersonName);
+                setOpenCreateDialog(false);
+                setSelectedFaceIds([]);
+                setNewPersonName("");
               }
-              style={{ padding: "4px" }} // Add padding here
-            >
-              <FaceCard
-                face={face}
-                isProfile={face.id === profileFaceId}
-                onSetProfile={onSetProfile}
-                selectable={true}
-                selected={selectedFaceIds.includes(face.id)}
-                onToggleSelect={handleToggleSelect}
-                showActions={false} // Hide individual actions when multi-select is active
-              />
-            </div>
-          ))}
-        </Masonry>
-        {isLoadingMore && onLoadMore && (
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              minWidth: "60px",
-              py: 2,
             }}
           >
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+      {/* --- Faces Grid --- */}
+      <Box
+        sx={{
+          maxHeight: "350px",
+          overflowY: "auto",
+          pr: 1, // Padding for scrollbar
+          // Custom scrollbar styling
+          "&::-webkit-scrollbar": { width: "8px" },
+          "&::-webkit-scrollbar-track": {
+            background: theme.palette.background.default,
+          },
+          "&::-webkit-scrollbar-thumb": {
+            backgroundColor: theme.palette.divider,
+            borderRadius: "4px",
+          },
+          "&::-webkit-scrollbar-thumb:hover": {
+            background: theme.palette.text.secondary,
+          },
+        }}
+      >
+        {faces.length === 0 && !isLoadingMore ? (
+          <Typography
+            sx={{ textAlign: "center", p: 4, color: "text.secondary" }}
+          >
+            No faces to display.
+          </Typography>
+        ) : (
+          <Masonry
+            breakpointCols={breakpointColumnsObj}
+            className="my-masonry-grid"
+            columnClassName="my-masonry-grid_column"
+          >
+            {faces.map((face, index) => (
+              <div
+                key={face.id}
+                ref={index === faces.length - 1 ? lastCardRef : null}
+                style={{ padding: "4px" }}
+              >
+                <FaceCard
+                  face={face}
+                  isProfile={face.id === profileFaceId}
+                  onSetProfile={onSetProfile}
+                  selectable={!allowIndividualActions}
+                  selected={selectedFaceIds.includes(face.id)}
+                  onToggleSelect={handleToggleSelect}
+                  showActions={allowIndividualActions && !isAnythingSelected}
+                  onDelete={
+                    onSingleFaceDelete
+                      ? () => onSingleFaceDelete(face.id)
+                      : undefined
+                  }
+                  onAssign={
+                    onSingleFaceAssign
+                      ? (pid) => onSingleFaceAssign(face.id, pid)
+                      : undefined
+                  }
+                  onCreate={
+                    onSingleFaceCreate
+                      ? (data) => onSingleFaceCreate(face.id, data)
+                      : undefined
+                  }
+                />
+              </div>
+            ))}
+          </Masonry>
+        )}
+        {isLoadingMore && (
+          <Box sx={{ display: "flex", justifyContent: "center", p: 2 }}>
             <CircularProgress size={24} />
           </Box>
         )}
       </Box>
-    </Box>
+      {/* Create Dialog remains the same */}
+    </Paper>
   );
 }

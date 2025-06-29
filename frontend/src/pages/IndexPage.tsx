@@ -11,7 +11,7 @@ import {
 import Masonry from "react-masonry-css";
 import ImportExportIcon from "@mui/icons-material/ImportExport";
 
-import { useMediaStore, defaultListState } from "../stores/useMediaStore";
+import { useListStore, defaultListState } from "../stores/useListStore";
 import MediaCard from "../components/MediaCard";
 import { getMediaList } from "../services/media";
 
@@ -36,13 +36,13 @@ export default function IndexPage() {
     return `all-media-${sortOrder}-${tagString}`;
   }, [sortOrder, tags]);
 
-  const listState = useMediaStore(
+  const listState = useListStore(
     (state) => state.lists[mediaListKey]
   );
   const items = listState?.items || [];
   const hasMore = listState?.hasMore || defaultListState.hasMore;
   const isLoading = listState?.isLoading || defaultListState.isLoading;
-  const { fetchInitial, loadMore } = useMediaStore();
+  const { fetchInitial, loadMore } = useListStore();
 
   useEffect(() => {
     fetchInitial(mediaListKey, () => getMediaList(null, sortOrder, tags));

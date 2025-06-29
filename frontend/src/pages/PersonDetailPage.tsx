@@ -13,52 +13,45 @@ import {
 } from "@mui/material";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
-import { useCallback, useEffect, useState, useMemo } from "react";
-import { useNavigate, useParams, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { PersonContentTabs } from "../components/PersonContentTabs";
 import { PersonHero } from "../components/PersonHero";
-import { useMediaStore, defaultListState } from "../stores/useMediaStore"; // Import the store
-import { getPerson } from "../services/person";
 import {
   assignFace,
   createPersonFromFaces,
   deleteFace,
   detachFace,
 } from "../services/faceActions";
-import { PageResponse } from "../hooks/useInfinite";
-import { setProfileFace } from "../services/personActions";
+import { getPerson } from "../services/person";
+import {
+  deletePerson as deletePersonService,
+  getPersonFaces,
+  getSimilarPersons,
+  getSuggestedFaces,
+  mergePersons,
+  searchPersonsByName,
+  setProfileFace,
+  updatePerson,
+} from "../services/personActions";
+import { defaultListState, useListStore } from "../stores/useListStore";
 import {
   FaceRead,
   Person,
   SimilarPerson,
-  Media,
   SimilarPersonWithDetails,
+  PersonReadSimple,
+  Tag,
 } from "../types";
-import {
-  updatePerson,
-  deletePerson as deletePersonService,
-  mergePersons,
-  searchPersonsByName,
-  getSuggestedFaces,
-  getSimilarPersons,
-  getPersonFaces,
-} from "../services/personActions";
 
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const location = useLocation();
   const navigate = useNavigate();
 
   const [person, setPerson] = useState<Person | null>(null);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: "" });
   const [saving, setSaving] = useState(false);
-
-  // States for the paginated "Detected Faces" section
-  const [detectedFacesList, setDetectedFacesList] = useState<FaceRead[]>([]);
-  const [facesNextCursor, setFacesNextCursor] = useState<string | null>(null);
-  const [loadingMoreFaces, setLoadingMoreFaces] = useState<boolean>(false);
-  const [hasMoreFaces, setHasMoreFaces] = useState<boolean>(true);
 
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<{
@@ -72,10 +65,31 @@ export default function PersonDetailPage() {
   const [similarPersons, setSimilarPersons] = useState<SimilarPerson[]>([]);
   const [suggestedFaces, setSuggestedFaces] = useState<FaceRead[]>([]);
 
-  const baseUrl = useMemo(() => {
-    if (!id) return "";
-    return `/api/persons/${id}/media-appearances?`;
-  }, [id]);
+  const [filterPeople, setFilterPeople] = useState<PersonReadSimple[]>([]);
+
+  const mediaListKey = useMemo(() => {
+    const filterIds = filterPeople
+      .map((p) => p.id)
+      .sort()
+      .join(",");
+    // The key must be unique to the person and the filters applied
+    return `person-${id}-media-appearances-${filterIds}`;
+  }, [id, filterPeople]);
+
+  const detectedFacesListKey = useMemo(
+    () => (id ? `/api/person/${id}/faces` : ""),
+    [id]
+  );
+
+  const {
+    items: detectedFacesList,
+    hasMore: hasMoreFaces,
+    isLoading: loadingMoreFaces,
+  } = useListStore(
+    (state) => state.lists[detectedFacesListKey] || defaultListState
+  );
+
+  const { fetchInitial, loadMore, removeItems, clearList } = useListStore();
 
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
@@ -95,7 +109,7 @@ export default function PersonDetailPage() {
     async (signal?: AbortSignal) => {
       if (!id) return;
       try {
-        const personData = await getPerson(id);
+        const personData = await getPerson(id, signal);
         setPerson(personData);
         setForm({
           name: personData.name ?? "",
@@ -109,68 +123,19 @@ export default function PersonDetailPage() {
     [id]
   );
 
-  const fetchFacesPage = useCallback(
-    async (
-      personId: string,
-      cursor: string | null,
-      limit: number = 20,
-      signal?: AbortSignal
-    ): Promise<PageResponse<FaceRead> | null> => {
-      try {
-        const data = await getPersonFaces(Number(personId), cursor, limit);
-        return { items: data.items, next_page: data.next_cursor };
-      } catch (error) {
-        console.error(`Error fetching faces for person ${personId}:`, error);
-        return null;
-      }
-    },
-    []
-  );
-
-  const loadInitialDetectedFaces = useCallback(
-    async (personId: string, signal?: AbortSignal) => {
-      if (!personId) return;
-      setLoadingMoreFaces(true);
-      setDetectedFacesList([]);
-      setFacesNextCursor(null);
-      setHasMoreFaces(true);
-
-      const pageData = await fetchFacesPage(personId, null, 20, signal);
-      if (pageData) {
-        setDetectedFacesList(pageData.items);
-        setFacesNextCursor(pageData.next_page);
-        setHasMoreFaces(!!pageData.next_page && pageData.items.length > 0);
-      } else {
-        setHasMoreFaces(false);
-      }
-      setLoadingMoreFaces(false);
-    },
-    [fetchFacesPage]
-  );
-
-  const loadMoreDetectedFaces = useCallback(
-    async () => {
-      if (!id || !facesNextCursor || loadingMoreFaces || !hasMoreFaces) return;
-      setLoadingMoreFaces(true);
-
-      const pageData = await fetchFacesPage(id, facesNextCursor, 20);
-      if (pageData?.items) {
-        setDetectedFacesList((prevFaces) => [...prevFaces, ...pageData.items]);
-        setFacesNextCursor(pageData.next_page);
-        setHasMoreFaces(!!pageData.next_page && pageData.items.length > 0);
-      } else {
-        setHasMoreFaces(false);
-      }
-      setLoadingMoreFaces(false);
-    },
-    [id, facesNextCursor, loadingMoreFaces, hasMoreFaces, fetchFacesPage]
-  );
+  const loadMoreDetectedFaces = useCallback(() => {
+    if (detectedFacesListKey) {
+      loadMore(detectedFacesListKey, (cursor) =>
+        getPersonFaces(Number(id), cursor, 20)
+      );
+    }
+  }, [detectedFacesListKey, loadMore, id]);
 
   const loadSuggestedFaces = useCallback(
     async (signal?: AbortSignal) => {
       if (!id) return;
       try {
-        const data = await getSuggestedFaces(Number(id));
+        const data = await getSuggestedFaces(Number(id), signal);
         setSuggestedFaces(data);
       } catch (err) {
         console.error(err);
@@ -185,7 +150,8 @@ export default function PersonDetailPage() {
       setSimilarPersons([]);
       try {
         const data: SimilarPersonWithDetails[] = await getSimilarPersons(
-          Number(id)
+          Number(id),
+          signal
         );
         setSimilarPersons(data);
       } catch (error) {
@@ -204,12 +170,7 @@ export default function PersonDetailPage() {
         setLoading(true);
         try {
           // Pass the signal to each fetch call
-          await Promise.all([
-            loadDetail(signal),
-            loadInitialDetectedFaces(id, signal),
-            loadSuggestedFaces(signal),
-            loadSimilar(signal),
-          ]);
+          await Promise.all([loadDetail(signal), loadSuggestedFaces(signal)]);
         } catch (err) {
           if (err.name !== "AbortError") {
             console.error("Initial load failed:", err);
@@ -229,15 +190,23 @@ export default function PersonDetailPage() {
     return () => {
       controller.abort();
     };
-  }, [id]);
+  }, [id, loadDetail, loadSuggestedFaces]);
+
+  useEffect(() => {
+    if (detectedFacesListKey) {
+      fetchInitial(detectedFacesListKey, () =>
+        getPersonFaces(Number(id), null, 20)
+      );
+    }
+  }, [detectedFacesListKey, fetchInitial, id]);
 
   const handleAssignWrapper = async (
     faceIds: number[],
     assignedToPersonId: number
   ) => {
     await assignFace(faceIds, assignedToPersonId);
+    clearList(mediaListKey);
     if (id) {
-      loadInitialDetectedFaces(id);
       loadSuggestedFaces();
       loadDetail();
     }
@@ -245,27 +214,28 @@ export default function PersonDetailPage() {
 
   const handleDeleteWrapper = async (faceIds: number[]) => {
     await deleteFace(faceIds);
-    // Filter out all deleted faces from both lists
-    setDetectedFacesList((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+    removeItems(detectedFacesListKey, faceIds);
     setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
     loadDetail();
   };
 
   const handleDetachWrapper = async (faceIds: number[]) => {
     await detachFace(faceIds);
-    // Filter out all detached faces from both lists
-    setDetectedFacesList((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+    clearList(mediaListKey);
+    removeItems(detectedFacesListKey, faceIds);
     setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
     loadDetail();
   };
 
   const handleCreateWrapper = async (
     faceIds: number[],
-    name: string
+    name?: string
   ): Promise<Person> => {
     const newPerson = await createPersonFromFaces(faceIds, name);
-    setSuggestedFaces((prev) => prev.filter((f) => f.id !== faceId));
-    setDetectedFacesList((prev) => prev.filter((f) => f.id !== faceId));
+    removeItems(detectedFacesListKey, faceIds);
+
+    setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+
     navigate(`/person/${newPerson.id}`);
     return newPerson;
   };
@@ -279,6 +249,10 @@ export default function PersonDetailPage() {
     loadDetail(signal);
   };
 
+  const handlePersonUpdate = (updatedPerson: Person) => {
+    setPerson(updatedPerson);
+  };
+
   async function handleDeletePerson() {
     if (!id || !person) return;
     try {
@@ -290,6 +264,15 @@ export default function PersonDetailPage() {
     }
     setConfirmDelete(false);
   }
+  const handleTagAddedToPerson = (newTag: Tag) => {
+    setPerson((prevPerson) => {
+      if (!prevPerson) return null;
+
+      const updatedTags = [...(prevPerson.tags || []), newTag];
+
+      return { ...prevPerson, tags: updatedTags };
+    });
+  };
 
   async function onSave(formDataFromChild: { name: string }) {
     if (!id) return;
@@ -309,14 +292,17 @@ export default function PersonDetailPage() {
   async function handleConfirmMerge() {
     if (!id || !mergeTarget) return;
 
+    const sourceId = Number(id);
     const targetId = mergeTarget.id;
 
+    const targetMediaListKey = `/api/person/${targetId}/media-appearances`;
+
+    clearList(targetMediaListKey);
     setMergeTarget(null);
     setMergeOpen(false);
-    console.log(`SOURCE: ${Number(id)}`);
-    console.log(`TARGET: ${targetId}`);
+
     try {
-      await mergePersons(Number(id), targetId);
+      await mergePersons(sourceId, targetId);
       navigate(`/person/${targetId}`, { replace: true });
     } catch (error) {
       console.error("Merge failed:", error);
@@ -385,21 +371,24 @@ export default function PersonDetailPage() {
 
       <PersonContentTabs
         person={person}
-        onTagUpdate={loadDetail}
-        onTagAdded={(updatedPerson: Person) => setPerson(updatedPerson)}
+        onTagUpdate={(person: Person) => handlePersonUpdate(person)}
+        onTagAdded={(tag: Tag) => handleTagAddedToPerson(tag)}
         detectedFacesList={detectedFacesList}
         hasMoreFaces={hasMoreFaces}
         loadingMoreFaces={loadingMoreFaces}
         loadMoreDetectedFaces={loadMoreDetectedFaces}
         handleProfileAssignmentWrapper={handleProfileAssignmentWrapper}
         handleAssignWrapper={handleAssignWrapper}
-        handleCreateWrapper={handleCreateWrapper}
         handleDeleteWrapper={handleDeleteWrapper}
         handleDetachWrapper={handleDetachWrapper}
         onLoadSimilar={loadSimilar}
         suggestedFaces={suggestedFaces}
         similarPersons={similarPersons}
         onRefreshSuggestions={loadSuggestedFaces}
+        handleCreateWrapper={handleCreateWrapper}
+        filterPeople={filterPeople}
+        onFilterPeopleChange={setFilterPeople}
+        mediaListKey={mediaListKey}
       />
 
       <Snackbar

@@ -9,7 +9,7 @@ interface TagsSectionProps {
   media?: Media;
   person?: Person;
   onTagAdded: (tag: Tag) => void;
-  onUpdate: (updatedMediaObject: Media) => void;
+  onUpdate: (updatedMediaObject: Media | Person) => void;
 }
 
 export function TagsSection({
@@ -19,7 +19,7 @@ export function TagsSection({
   onUpdate,
 }: TagsSectionProps) {
   const owner = media || person;
-  const ownerType = media ? "media" : "persons";
+  const ownerType = media ? "media" : "person";
   const tags = owner.tags ?? [];
   const ownerId = owner.id;
   return (
@@ -38,7 +38,9 @@ export function TagsSection({
         </Box>
       )}
 
-      {tags && tags.length > 0 && <Tags media={owner} onUpdate={onUpdate} />}
+      {tags && tags.length > 0 && (
+        <Tags media={media} person={person} onUpdate={onUpdate} />
+      )}
     </Box>
   );
 }

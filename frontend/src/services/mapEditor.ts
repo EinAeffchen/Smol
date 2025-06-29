@@ -1,13 +1,24 @@
 import { API } from "../config";
-import { MediaPreview } from "../types";
+import { CursorPage, MediaPreview } from "../types";
 
-export const getMissingGeoMedia = async (): Promise<MediaPreview[]> => {
-  const response = await fetch(`${API}/api/media/missing_geo`);
-  if (!response.ok) throw new Error("Failed to fetch missing geo media");
+export const getMissingGeoMedia = async (
+  cursor: string | null
+): Promise<CursorPage<MediaPreview>> => {
+  const params = new URLSearchParams();
+  if (cursor) {
+    params.append("cursor", cursor);
+  }
+  const response = await fetch(
+    `${API}/api/media/missing-geo?${params.toString()}`
+  );
   return response.json();
 };
 
-export const updateMediaGeolocation = async (mediaId: number, latitude: number, longitude: number) => {
+export const updateMediaGeolocation = async (
+  mediaId: number,
+  latitude: number,
+  longitude: number
+) => {
   const res = await fetch(`${API}/api/media/${mediaId}/geolocation`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

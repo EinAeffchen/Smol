@@ -27,20 +27,20 @@ export function PeopleTabContent({
     setOrphans(initialOrphans);
   }, [initialPersons, initialOrphans]);
 
-  const handleDeleteFace = async (faceId: number) => {
-    await deleteFace(faceId);
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
+  const handleDeleteFace = async (faceIds: number[]) => {
+    await deleteFace(faceIds);
+    setOrphans((prev) => prev.filter((f) => !faceIds.includes(f)));
     onDataChanged();
   };
 
-  const handleAssignFace = async (faceId: number, personId: number) => {
-    await assignFace(faceId, personId);
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
+  const handleAssignFace = async (faceIds: number[], personId: number) => {
+    await assignFace(faceIds, personId);
+    setOrphans((prev) => prev.filter((f) => !faceIds.includes(f)));
     onDataChanged();
   };
 
-  const handleDetachFace = async (faceId: number) => {
-    await detachFace(faceId);
+  const handleDetachFace = async (faceIds: number[]) => {
+    await detachFace(faceIds);
     onDataChanged();
   };
 

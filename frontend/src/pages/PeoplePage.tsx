@@ -1,5 +1,5 @@
 import React, { useCallback } from "react";
-import { useInfinite, PageResponse } from "../hooks/useInfinite";
+import { useInfinite, CursorResponse } from "../hooks/useInfinite";
 import PersonCard from "../components/PersonCard";
 import { PersonReadSimple } from "../types";
 import {
@@ -16,7 +16,7 @@ const ITEMS_PER_PAGE = 12;
 
 export default function PeoplePage() {
   const fetchPeople = useCallback(
-    async (cursor?: string): Promise<PageResponse<PersonReadSimple>> => {
+    async (cursor?: string): Promise<CursorResponse<PersonReadSimple>> => {
       const data = await getPeople(cursor);
       return { items: data.items, next_cursor: data.next_cursor };
     },

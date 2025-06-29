@@ -2,7 +2,7 @@ import {
   ThemeProvider as MuiThemeProvider,
   createTheme,
 } from "@mui/material";
-import { ThemeContext } from "@emotion/react";
+import { ThemeContext } from "./ThemeContext";
 
 export const getTheme = (mode: ThemeMode) =>
   createTheme({

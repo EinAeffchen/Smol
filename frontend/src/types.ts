@@ -93,7 +93,7 @@ export interface SimilarPerson {
 export interface MediaPreview {
   id: number;
   filename: string;
-  thumbnail: string;
+  thumbnail_path: string;
   duration?: number;
   width?: number;
   height?: number;

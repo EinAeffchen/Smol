@@ -120,7 +120,7 @@ async def add_accept_ranges_header(request: Request, call_next):
 
 app.include_router(proc_router, prefix="/api", tags=["processors"])
 app.include_router(media, prefix="/api/media", tags=["media"])
-app.include_router(person, prefix="/api/persons", tags=["persons"])
+app.include_router(person, prefix="/api/person", tags=["person"])
 app.include_router(tasks, prefix="/api/tasks", tags=["tasks"])
 app.include_router(face, prefix="/api/faces", tags=["faces"])
 app.include_router(tags, prefix="/api/tags", tags=["tags"])

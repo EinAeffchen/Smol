@@ -8,7 +8,6 @@ import {
   Box,
   Button,
   Card,
-  CardActionArea,
   CardContent,
   IconButton,
   Stack,
@@ -20,10 +19,10 @@ import {
 import CircularProgress from "@mui/material/CircularProgress";
 import { useEffect, useRef, useState } from "react";
 import ReactDOM from "react-dom";
-import { Link } from "react-router-dom";
 import { API, READ_ONLY } from "../config";
-import { Face, Person, FaceRead } from "../types";
+import { Face, Person } from "../types";
 import { useNavigate, useLocation } from "react-router-dom";
+import { createPersonFromFaces } from "../services/faceActions";
 
 import Checkbox from "@mui/material/Checkbox";
 
@@ -34,7 +33,6 @@ interface FaceCardProps {
   onAssign?: (personId: number) => void;
   onCreate?: (data: { name?: string }) => void;
   onDelete?: () => void;
-  onDetach?: () => void;
   selectable?: boolean;
   selected?: boolean;
   onToggleSelect?: (faceId: number) => void;
@@ -48,7 +46,6 @@ export default function FaceCard({
   onAssign,
   onCreate,
   onDelete,
-  onDetach,
   selectable = false,
   selected = false,
   onToggleSelect,
@@ -80,7 +77,7 @@ export default function FaceCard({
       setCands([]);
       return;
     }
-    fetch(`${API}/api/persons/?name=${encodeURIComponent(query)}`)
+    fetch(`${API}/api/person/?name=${encodeURIComponent(query)}`)
       .then((r) => r.json())
       .then((r) => setCands(r.items))
       .catch(console.error);
@@ -269,7 +266,7 @@ export default function FaceCard({
       >
         <Box sx={{ position: "relative" }}>
           <Avatar
-            src={`${API}/thumbnails/${face.thumbnail_path}`}
+            src={thumbUrl}
             variant="rounded"
             sx={{
               width: "100%",
@@ -295,51 +292,57 @@ export default function FaceCard({
               }}
             />
           )}
-          {!READ_ONLY && showActions && (
-            <Box
-              className="hover-actions"
-              sx={{
-                position: "absolute",
-                top: 4,
-                left: 4,
-                right: 4,
-                display: "flex",
-                justifyContent: "space-between",
-                opacity: 0,
-                transition: "opacity 0.3s",
-              }}
-            >
-              <Tooltip title="Delete">
-                <IconButton
-                  size="small"
-                  sx={{
-                    bgcolor: "rgba(0,0,0,0.4)",
-                    "&:hover": { bgcolor: "rgba(0,0,0,0.6)" },
-                  }}
-                  onClick={onDelete}
-                >
-                  <DeleteIcon fontSize="small" sx={{ color: "error.main" }} />
-                </IconButton>
-              </Tooltip>
-              {!isProfile && (
+          <Box
+            className="hover-actions"
+            sx={{
+              position: "absolute",
+              top: 4,
+              left: 4,
+              right: 4,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              opacity: 0,
+              transition: "opacity 0.3s",
+              pointerEvents: "none",
+            }}
+          >
+            <Box sx={{ pointerEvents: "auto" }}>
+              {!READ_ONLY && showActions && (
+                <Tooltip title="Delete">
+                  <IconButton
+                    size="small"
+                    sx={{
+                      bgcolor: "rgba(0,0,0,0.4)",
+                      "&:hover": { bgcolor: "rgba(0,0,0,0.6)" },
+                    }}
+                    onClick={onDelete}
+                  >
+                    <DeleteIcon fontSize="small" sx={{ color: "error.main" }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
+            <Box sx={{ pointerEvents: "auto" }}>
+              {!isProfile && onSetProfile && (
                 <Tooltip title="Set as profile">
                   <IconButton
                     size="small"
                     sx={{
-                      bgcolor: "accent.main",
-                      "&:hover": { bgcolor: "accent.dark" },
+                      bgcolor: "accent.primary",
+                      "&:hover": { bgcolor: "accent.main" },
                     }}
                     onClick={() => onSetProfile(face.id)}
                   >
                     <StarIcon
                       fontSize="small"
-                      sx={{ color: "primary.contrastText" }}
+                      sx={{ color: "text.secondary" }}
                     />
                   </IconButton>
                 </Tooltip>
               )}
             </Box>
-          )}
+          </Box>
         </Box>
 
         {!READ_ONLY && showActions && (
@@ -350,14 +353,6 @@ export default function FaceCard({
               </Typography>
             ) : (
               <Stack direction="row" spacing={1} justifyContent="center">
-                <Tooltip title="Detach from person">
-                  <IconButton size="small" onClick={onDetach}>
-                    <LinkOffIcon
-                      fontSize="small"
-                      sx={{ color: "text.secondary" }}
-                    />
-                  </IconButton>
-                </Tooltip>
                 <Tooltip title="Assign Existing">
                   <IconButton
                     size="small"

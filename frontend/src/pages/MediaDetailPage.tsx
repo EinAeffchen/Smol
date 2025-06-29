@@ -18,20 +18,20 @@ import {
 import { ArrowBackIosNew, ArrowForwardIos } from "@mui/icons-material";
 import CloseIcon from "@mui/icons-material/Close";
 
-import {
-  useMediaStore,
-  defaultListState,
-  noContextListState,
-} from "../stores/useMediaStore";
+import { useListStore, defaultListState } from "../stores/useListStore";
 
 import { ActionDialogs } from "../components/ActionDialogs";
 import { MediaDisplay } from "../components/MediaDisplay";
 import { MediaHeader } from "../components/MediaHeader";
 import { MediaContentTabs } from "../components/MediaContentTabs";
 
-import { Media, MediaDetail, Task } from "../types";
+import { Media, MediaDetail, Tag, Task } from "../types";
 import { getMedia } from "../services/media";
-import { convertMedia, deleteMediaRecord, deleteMediaFile } from "../services/mediaActions";
+import {
+  convertMedia,
+  deleteMediaRecord,
+  deleteMediaFile,
+} from "../services/mediaActions";
 import { getTask } from "../services/task";
 
 export default function MediaDetailPage() {
@@ -44,7 +44,7 @@ export default function MediaDetailPage() {
 
   // --- 1. STATE MANAGEMENT ---
   const mediaListKey = location.state?.mediaListKey as string | undefined;
-  const listFromStore = useMediaStore((state) =>
+  const listFromStore = useListStore((state) =>
     mediaListKey ? state.lists[mediaListKey] : undefined
   );
   // A. Global state from Zustand for the list context
@@ -52,8 +52,8 @@ export default function MediaDetailPage() {
     items,
     hasMore,
     isLoading: isListLoading,
-  } = listFromStore || (mediaListKey ? defaultListState : noContextListState);
-  const { loadMore } = useMediaStore();
+  } = listFromStore || (mediaListKey ? defaultListState : defaultListState);
+  const { loadMore } = useListStore();
 
   // B. Local state for this specific modal's content
   const preloadedMedia = location.state?.media as Media | null;
@@ -169,7 +169,7 @@ export default function MediaDetailPage() {
           // Assuming loadMore now takes a fetcher function for the next page
           // You'll need to adjust this based on how your loadMore is implemented
           // For example, if mediaListKey is "images", you might call loadMore("images", (page) => getImages(page))
-          // Since the current loadMore in useMediaStore doesn't take a fetcher, this part needs careful consideration.
+          // Since the current loadMore in useListStore doesn't take a fetcher, this part needs careful consideration.
           // For now, I'll leave it as is, but this is a potential area for further refactoring.
           await loadMore(mediaListKey, (page) => {
             // This part needs to be dynamic based on mediaListKey
@@ -188,7 +188,7 @@ export default function MediaDetailPage() {
       isListLoading,
       loadMore,
       viewContext,
-      mediaListKey
+      mediaListKey,
     ]
   );
 
@@ -242,6 +242,25 @@ export default function MediaDetailPage() {
     if (distance > 50) handleNavigate("next");
     else if (distance < -50) handleNavigate("prev");
     setTouchStartX(null);
+  };
+  const handleMediaUpdate = (updatedMedia: Media) => {
+    setDetail((prevDetail) => {
+      if (!prevDetail) return null;
+      return { ...prevDetail, media: updatedMedia };
+    });
+  };
+
+  const handleTagAddedToMedia = (newTag: Tag) => {
+    setDetail((prevDetail) => {
+      if (!prevDetail) return null;
+
+      const updatedMedia = {
+        ...prevDetail.media,
+        tags: [...(prevDetail.media.tags || []), newTag],
+      };
+
+      return { ...prevDetail, media: updatedMedia };
+    });
   };
 
   const closeDialog = () => setDialogType(null);
@@ -480,10 +499,9 @@ export default function MediaDetailPage() {
               ) : (
                 <MediaContentTabs
                   detail={detail}
+                  onTagAdded={handleTagAddedToMedia}
                   onDetailReload={fetchDetail}
-                  onTagUpdate={(updatedMedia) =>
-                    setDetail((d) => (d ? { ...d, media: updatedMedia } : null))
-                  }
+                  onTagUpdate={handleMediaUpdate}
                 />
               )}
               <Snackbar
