@@ -65,7 +65,11 @@ export interface MediaDetail {
   orphans: Face[];
 }
 
-export type TaskType = "process_media" | "cluster_persons" | "scan";
+export type TaskType =
+  | "process_media"
+  | "cluster_persons"
+  | "scan"
+  | "find_duplicates";
 export type TaskStatus = "pending" | "running" | "completed" | "cancelled";
 
 export interface Task {
@@ -99,6 +103,17 @@ export interface MediaPreview {
   height?: number;
   views: number;
   inserted_at: string;
+}
+
+export interface MediaDuplicate extends MediaPreview {
+  size: number;
+  path: string;
+}
+
+export interface DuplicateGroup {
+  id: number;
+  items: MediaDuplicate[];
+  group_id: number;
 }
 
 export interface SceneRead {
@@ -137,4 +152,9 @@ export interface MediaIndex {
 export interface CursorPage<T> {
   items: T[];
   next_cursor: string | null;
+}
+
+export interface DuplicatePage {
+  items: MediaPreview[][];
+  next_cursor: number | null;
 }

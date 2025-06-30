@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 import mimetypes
 
-from app.api import face, media, person, search, tags, tasks
+from app.api import face, media, person, search, tags, tasks, duplicates
 from app.api.processors import router as proc_router
 from app.config import (
     DATABASE_URL,
@@ -125,6 +125,7 @@ app.include_router(tasks, prefix="/api/tasks", tags=["tasks"])
 app.include_router(face, prefix="/api/faces", tags=["faces"])
 app.include_router(tags, prefix="/api/tags", tags=["tags"])
 app.include_router(search, prefix="/api/search", tags=["search"])
+app.include_router(duplicates, prefix="/api/duplicates", tags=["duplicates"])
 
 app.mount(
     "/thumbnails",

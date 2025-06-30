@@ -65,3 +65,6 @@ alembic-generate:
 
 alembic-upgrade:
 	alembic upgrade head
+
+alembic-downgrade:
+	alembic downgrade -1

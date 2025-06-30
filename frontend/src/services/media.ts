@@ -63,7 +63,7 @@ export const getMediaList = async (
 };
 
 export const getSimilarMedia = async (mediaId: number): Promise<Media[]> => {
-  const response = await fetch(`${API}/api/media/${mediaId}/get_similar`);
+  const response = await fetch(`${API}/api/media/${mediaId}/get-similar`);
   if (!response.ok) throw new Error("Failed to load similar media");
   return response.json();
 };

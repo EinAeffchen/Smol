@@ -15,6 +15,11 @@ class MediaTagLink(SQLModel, table=True):
     )
 
 
+class Blacklist(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    path: str = Field(unique=True)
+
+
 class PersonTagLink(SQLModel, table=True):
     person_id: int | None = Field(
         default=None, foreign_key="person.id", primary_key=True
@@ -85,12 +90,16 @@ class Media(SQLModel, table=True):
     embedding: list[float] | None = Field(
         sa_column=Column(JSON, nullable=True, index=True)
     )
+    phash: str | None = Field(index=True)
     faces: list["Face"] = Relationship(back_populates="media")
     scenes: list["Scene"] = Relationship(back_populates="media")
     tags: list[Tag] = Relationship(
         back_populates="media", link_model=MediaTagLink
     )
     exif: "ExifData" = Relationship(back_populates="media")
+    duplicate_entries: list["DuplicateMedia"] = Relationship(
+        back_populates="media"
+    )
 
     class Config:
         from_attributes = True
@@ -160,7 +169,7 @@ class ProcessingTask(SQLModel, table=True):
     status: str = Field(default="pending", index=True)
     total: int = Field(default=0)
     processed: int = Field(default=0)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=datetime.now)
     started_at: datetime | None = None
     finished_at: datetime | None = None
 
@@ -173,7 +182,7 @@ class PersonSimilarity(SQLModel, table=True):
     person_id: int = Field(foreign_key="person.id", primary_key=True)
     other_id: int = Field(foreign_key="person.id", primary_key=True)
     similarity: float
-    calculated_at: datetime = Field(default_factory=datetime.utcnow)
+    calculated_at: datetime = Field(default_factory=datetime.now)
 
     class Config:
         from_attributes = True
@@ -199,3 +208,18 @@ class ExifData(SQLModel, table=True):
     lon: float | None = Field(default=None, index=True)
 
     media: Media = Relationship(back_populates="exif")
+
+
+class DuplicateGroup(SQLModel, table=True):
+    id: int | None = Field(default=None, primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+    media_links: list["DuplicateMedia"] = Relationship(back_populates="group")
+
+
+class DuplicateMedia(SQLModel, table=True):
+    group_id: int = Field(foreign_key="duplicategroup.id", primary_key=True)
+    media_id: int = Field(foreign_key="media.id", primary_key=True)
+
+    group: DuplicateGroup = Relationship(back_populates="media_links")
+    media: Media = Relationship(back_populates="duplicate_entries")

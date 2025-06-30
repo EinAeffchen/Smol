@@ -141,3 +141,4 @@ models/
 .locks/
 smol_tst/
 smol.env
+.gemini

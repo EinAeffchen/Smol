@@ -24,6 +24,7 @@ const TASK_LABELS: TaskLabels = {
   scan: "Scan Folder",
   process_media: "Process Media",
   cluster_persons: "Cluster Persons",
+  find_duplicates: "find_duplicates",
 };
 
 export default function TaskManager() {

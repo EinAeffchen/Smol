@@ -41,6 +41,7 @@ class MediaPreview(SQLModel):
     path: str
     inserted_at: datetime
     thumbnail_path: str | None
+    size: int | None
 
 
 class MediaLocation(SQLModel):

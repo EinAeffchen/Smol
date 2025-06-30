@@ -13,7 +13,6 @@ import { Person, FaceRead, SimilarPerson, PersonReadSimple, Tag, Media } from ".
 import MediaAppearances from "./MediaAppearances";
 import SimilarPersonCard from "./SimilarPersonCard";
 import { TagsSection } from "./TagsSection";
-import { string } from "prop-types";
 const DetectedFaces = React.lazy(() => import("./DetectedFaces"));
 
 interface TabPanelProps {

@@ -4,7 +4,6 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
-    Response,
     status,
 )
 from pydantic import BaseModel

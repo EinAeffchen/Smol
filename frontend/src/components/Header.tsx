@@ -128,9 +128,10 @@ export function Header() {
     ["Faces", "/orphanfaces"],
     ["Map", "/map"],
     ["Geotagger", "/maptagger"],
+    ["Duplicates", "/duplicates"],
   ];
 
-  const pathsToExcludeInReadOnly: string[] = ["/orphanfaces", "/maptagger"];
+  const pathsToExcludeInReadOnly: string[] = ["/orphanfaces", "/maptagger", "/duplicates"];
   const pathsToExcludeInPeopleDisabled: string[] = ["/people"];
   let visibleNavItems = allNavItems.filter(
     ([, path]) =>

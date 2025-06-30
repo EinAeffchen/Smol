@@ -7,13 +7,15 @@ from pathlib import Path
 from typing import Literal
 
 import hdbscan
+import imagehash
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import or_, func
+from sqlalchemy import func, or_
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
-from sqlalchemy.exc import OperationalError
+
 from app.api.media import delete_media_record
 from app.config import (
     AUTO_CLUSTER,
@@ -30,9 +32,11 @@ from app.database import engine, get_session, safe_commit
 from app.logger import logger
 from app.models import Face, Media, Person, PersonSimilarity, ProcessingTask
 from app.processor_registry import processors
+from app.processors.duplicates import DuplicateProcessor
 from app.utils import (
     complete_task,
     generate_thumbnail,
+    generate_perceptual_hash,
     process_file,
     split_video,
 )
@@ -45,7 +49,9 @@ router = APIRouter()
 def create_and_run_task(
     session: Session,
     background_tasks: BackgroundTasks,
-    task_type: Literal["scan", "process_media", "cluster_persons"],
+    task_type: Literal[
+        "scan", "process_media", "cluster_persons", "find_duplicates"
+    ],
     callable_task: Callable,
 ):
     """
@@ -70,7 +76,7 @@ def create_and_run_task(
         return
 
     if existing_task:
-        logger.info("Scan task is already running. Skipping new scan.")
+        logger.info(f"{task_type} is already running. Skipping new scan.")
         # Return the existing task instead of creating a new one
         return existing_task
 
@@ -416,7 +422,7 @@ def assign_to_existing_persons(
                     """
                 ).bindparams(p_id=person_id, f_id=face.id)
                 person = session.get(Person, person_id)
-                person.appearance_count+=1
+                person.appearance_count += 1
                 session.exec(sql)
             else:
 
@@ -591,7 +597,34 @@ def start_scan(
     return task
 
 
+@router.post(
+    "/find_duplicates",
+    response_model=ProcessingTask,
+    summary="Find and group duplicate images",
+)
+def start_duplicate_detection(
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+    threshold: int = 2,
+):
+    task = create_and_run_task(
+        session=session,
+        background_tasks=background_tasks,
+        task_type="find_duplicates",
+        callable_task=lambda task_id: _run_duplicate_detection(
+            task_id, threshold
+        ),
+    )
+    return task
+
+
 # ─── 5) HELPER ─────────────────────────────────
+
+
+def _run_duplicate_detection(task_id: str, threshold: int):
+    generate_hashes()
+    processor = DuplicateProcessor(task_id, threshold)
+    processor.process()
 
 
 @router.post("/reset/processing", summary="Resets media processing status")
@@ -718,3 +751,22 @@ def _run_scan(task_id: str):
         )
         task.finished_at = datetime.now(timezone.utc)
         sess.commit()
+
+
+def generate_hashes():
+    """A task to find all media without a pHash and generate one."""
+    with Session(engine) as session:
+        media_to_hash_stmt = select(Media).where(Media.phash.is_(None))
+        media_to_hash = session.exec(media_to_hash_stmt).all()
+
+        for media in tqdm(media_to_hash):
+            try:
+                # Make sure you have the full path to the image file
+                media.phash = generate_perceptual_hash(media)
+                session.add(media)
+            except Exception as e:
+                logger.error(
+                    f"Could not generate hash for media {media.id}: {e}"
+                )
+
+        session.commit()

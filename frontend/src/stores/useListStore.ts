@@ -126,9 +126,12 @@ export const useListStore = create<ListStoreState>((set, get) => ({
       const currentList = state.lists[listKey];
       if (!currentList) return state; // If the list doesn't exist, do nothing
 
-      const updatedItems = currentList.items.filter(
-        (item: any) => item.id !== itemId
-      );
+      const updatedItems = currentList.items.filter((item: any) => {
+        const itemIdentifier =
+          item.group_id !== undefined ? item.group_id : item.id;
+
+        return itemIdentifier !== itemId;
+      });
 
       return {
         lists: {
