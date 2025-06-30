@@ -168,7 +168,7 @@ export function Header() {
         />
       </Link>
 
-      <Box sx={{ display: { xs: "none", md: "flex" } /* ... */ }}>
+      <Box sx={{ display: { xs: "none", lg: "flex" } /* ... */ }}>
         {renderSearchInputs()}
       </Box>
 
@@ -176,7 +176,7 @@ export function Header() {
 
       <Box
         sx={{
-          display: { xs: "none", md: "flex" },
+          display: { xs: "none", lg: "flex" },
           alignItems: "center",
           gap: 0.5,
         }}
@@ -198,7 +198,7 @@ export function Header() {
         )}
       </Box>
 
-      <Box sx={{ display: { xs: "flex", md: "none" }, alignItems: "center" }}>
+      <Box sx={{ display: { xs: "flex", lg: "none" }, alignItems: "center" }}>
         <IconButton color="primary" onClick={() => setIsSearchVisible(true)}>
           <SearchIcon />
         </IconButton>
