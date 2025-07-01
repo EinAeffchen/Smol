@@ -20,7 +20,6 @@ interface ListStoreState {
     listKey: string,
     fetcher: () => Promise<CursorPage<T>>
   ) => Promise<void>;
-
   loadMore: <T>(
     listKey: string,
     fetcher: (cursor: string | null) => Promise<CursorPage<T>>
@@ -28,6 +27,8 @@ interface ListStoreState {
   removeItem: (listKey: string, itemId: number | string) => void;
   removeItems: (listKey: string, itemIds: (number | string)[]) => void;
   clearList: (listKey: string) => void;
+  addItem: <T>(listKey: string, item: T, position?: "start" | "end") => void;
+  updateItem: <T extends { id: any }>(listKey: string, item: T) => void;
 }
 
 // The default state for any new list
@@ -171,6 +172,43 @@ export const useListStore = create<ListStoreState>((set, get) => ({
       const newLists = { ...state.lists };
       delete newLists[listKey];
       return { lists: newLists };
+    });
+  },
+  addItem: (listKey, item, position = "end") => {
+    set((state) => {
+      const currentList = state.lists[listKey];
+      if (!currentList) return state;
+
+      const updatedItems =
+        position === "start"
+          ? [item, ...currentList.items]
+          : [...currentList.items, item];
+
+      return {
+        lists: {
+          ...state.lists,
+          [listKey]: {
+            ...currentList,
+            items: updatedItems,
+          },
+        },
+      };
+    });
+  },
+
+  updateItem: (listKey, updatedItem) => {
+    set((state) => {
+      const currentList = state.lists[listKey];
+      if (!currentList) return state;
+      const updatedItems = currentList.items.map((item: any) =>
+        item.data.id === updatedItem.id ? { ...item, data: updatedItem } : item
+      );
+      return {
+        lists: {
+          ...state.lists,
+          [listKey]: { ...currentList, items: updatedItems },
+        },
+      };
     });
   },
 }));

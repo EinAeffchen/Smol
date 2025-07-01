@@ -8,8 +8,15 @@ import {
   Grid,
   Button,
 } from "@mui/material";
-import { Person, FaceRead, SimilarPerson, PersonReadSimple, Tag, Media } from "../types";
-
+import {
+  Person,
+  FaceRead,
+  SimilarPerson,
+  PersonReadSimple,
+  Tag,
+  Media,
+} from "../types";
+import { TimelineTab } from "./TimelineTab";
 import MediaAppearances from "./MediaAppearances";
 import SimilarPersonCard from "./SimilarPersonCard";
 import { TagsSection } from "./TagsSection";
@@ -49,7 +56,7 @@ interface PersonContentTabsProps {
   handleDetachWrapper: (faceIds: number[]) => void;
   suggestedFaces: FaceRead[];
   similarPersons: SimilarPerson[];
-  onTagUpdate: (obj: Person|Media) => void;
+  onTagUpdate: (obj: Person | Media) => void;
   onRefreshSuggestions: () => void;
   onLoadSimilar: () => void;
   filterPeople: PersonReadSimple[];
@@ -113,6 +120,7 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
           <Tab label={`Media Appearances (${props.person.appearance_count})`} />
           <Tab label="Faces" />
           <Tab label="Similar People" />
+          <Tab label="Timeline" />
           <Tab label="Tags" />
         </Tabs>
       </Box>
@@ -206,8 +214,12 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
           hasLoadedSimilar && <CircularProgress />
         )}
       </TabPanel>
-
       <TabPanel value={tabValue} index={3}>
+        <Suspense fallback={<CircularProgress />}>
+          <TimelineTab person={props.person} />
+        </Suspense>
+      </TabPanel>
+      <TabPanel value={tabValue} index={4}>
         <TagsSection
           person={props.person}
           onTagAdded={(person) => props.onTagAdded(person)}

@@ -7,22 +7,25 @@
         "preview": "vite preview"
     },
     "dependencies": {
+        "@mui/lab": "7.0.0-beta.14",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
         "react-router-dom": "^6.11.2",
         "leaflet": "1.9.4",
         "react-leaflet": "^4.2.1",
         "prop-types": "15.8.1",
-        "@mui/material": "7.1.1",
+        "@mui/material": "7.2.0",
         "@mui/icons-material": "7.1.0",
         "@emotion/react": "11.14.0",
-        "@emotion/styled": "11.14.0",
+        "@emotion/styled": "11.14.1",
         "react-window": "1.8.11",
         "@react-hook/resize-observer": "2.0.2",
         "react-masonry-css": "1.0.16",
         "react-intersection-observer": "9.16.0",
         "zustand": "^5.0.5",
-        "react-player":"2.16.0"
+        "react-player": "2.16.0",
+        "@mui/x-date-pickers": "8.6.0",
+        "date-fns": "4.1.0"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.0.0",

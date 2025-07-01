@@ -1,9 +1,23 @@
 from sqlmodel import SQLModel, Field, Relationship
 from sqlalchemy import Column
 from sqlalchemy.types import JSON
-from datetime import datetime
+from datetime import datetime, date
 import uuid
 from typing import Optional
+
+
+class TimelineEvent(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str = Field(index=True)
+    description: Optional[str] = None
+    event_date: date
+
+    # For recurrence, a simple string is robust and easy to start with
+    # e.g., "yearly", "monthly". We'll start with just "yearly".
+    recurrence: Optional[str] = Field(default=None)
+
+    person_id: int = Field(foreign_key="person.id")
+    person: "Person" = Relationship(back_populates="timeline_events")
 
 
 class MediaTagLink(SQLModel, table=True):
@@ -156,6 +170,9 @@ class Person(SQLModel, table=True):
         back_populates="persons", link_model=PersonTagLink
     )
     appearance_count: int = Field(default=None, index=True)
+    timeline_events: list["TimelineEvent"] = Relationship(
+        back_populates="person"
+    )
 
     class Config:
         from_attributes = True

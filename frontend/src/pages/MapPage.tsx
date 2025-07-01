@@ -95,7 +95,6 @@ export default function MapPage() {
         />
 
         {clusters.map((point) => {
-          console.log(point);
           if (point.count > 1) {
             return <ClusterMarker key={point.id} cluster={point} />;
           }

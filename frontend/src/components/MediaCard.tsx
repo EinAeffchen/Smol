@@ -9,7 +9,7 @@ import {
   Typography,
   useTheme,
 } from "@mui/material";
-import { Media } from "../types";
+import { MediaPreview } from "../types";
 import { API } from "../config";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
@@ -24,7 +24,7 @@ function formatDuration(d?: number): string {
 }
 
 interface MediaCardProps {
-  media: Media;
+  media: MediaPreview;
   mediaListKey?: string;
 }
 
@@ -36,7 +36,6 @@ export default function MediaCard({ media, mediaListKey }: MediaCardProps) {
   const location = useLocation();
 
   const isVideo = typeof media.duration === "number";
-
 
   const mediaUrl = `${API}/originals/${media.path}`;
   const thumbUrl = media.thumbnail_path

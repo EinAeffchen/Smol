@@ -40,6 +40,7 @@ class MediaPreview(SQLModel):
     views: int
     path: str
     inserted_at: datetime
+    created_at: datetime
     thumbnail_path: str | None
     size: int | None
 

@@ -97,6 +97,8 @@ export interface SimilarPerson {
 export interface MediaPreview {
   id: number;
   filename: string;
+  path: string;
+  size: number;
   thumbnail_path: string;
   duration?: number;
   width?: number;
@@ -158,3 +160,42 @@ export interface DuplicatePage {
   items: MediaPreview[][];
   next_cursor: number | null;
 }
+
+// Timeline
+export interface TimelineEvent {
+  id: number;
+  title: string;
+  description?: string;
+  event_date: Date; // ISO date string e.g., "2025-06-30"
+  recurrence?: "yearly";
+  person_id: number;
+}
+
+export type TimelineEventCreate = Omit<TimelineEvent, "id" | "person_id">;
+export type TimelineEventUpdate = Partial<TimelineEventCreate>;
+export interface TimelineMediaItem {
+  type: "media";
+  date: string;
+  items: MediaPreview;
+}
+
+export interface TimelineEventItem {
+  type: "event";
+  date: string;
+  items: TimelineEvent;
+}
+export interface MediaItemGroup {
+  type: "media_group";
+  date: string;
+  items: MediaPreview[];
+}
+
+// This represents an event, which is displayed individually
+export interface EventDisplayItem {
+  type: "event";
+  date: string;
+  event: TimelineEvent;
+}
+
+export type TimelineItem = TimelineMediaItem | TimelineEventItem;
+export type TimelineDisplayItem = MediaItemGroup | EventDisplayItem;
