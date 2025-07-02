@@ -19,7 +19,7 @@ import ShutterSpeedIcon from "@mui/icons-material/ShutterSpeed";
 import ApertureIcon from "@mui/icons-material/DonutLarge";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import { API } from "../config";
-import { getExifData } from "../services/exif"
+import { getExifData } from "../services/exif";
 
 interface MediaExifProps {
   mediaId: number;
@@ -144,7 +144,7 @@ export function MediaExif({ mediaId }: MediaExifProps) {
           <Divider sx={{ my: 3 }} />
           <MuiLink
             component={Link}
-            to={`/map?focus=${mediaId}`}
+            to={`/map?lat=${exif?.lat}&lng=${exif?.lon}`}
             sx={{
               display: "flex",
               alignItems: "center",

@@ -1,21 +1,25 @@
-import React, { useState, useCallback, useEffect } from "react";
+import { Box, useTheme } from "@mui/material";
+import { useMemo } from "react";
+import type { LatLngExpression, Map as LeafletMap } from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { useCallback, useEffect, useState } from "react";
 import {
   MapContainer,
-  TileLayer,
   Marker,
   Popup,
+  TileLayer,
   useMap,
   useMapEvents,
 } from "react-leaflet";
-import { Link as RouterLink } from "react-router-dom";
-import { Box, useTheme } from "@mui/material";
-import type { LatLngExpression } from "leaflet";
-import "leaflet/dist/leaflet.css";
+import {
+  Link as RouterLink,
+  useSearchParams,
+  useLocation,
+} from "react-router-dom";
 import { API } from "../config";
 
-// Import our new custom components/hooks
-import { useGridClustering } from "../hooks/useGridClustering";
 import { ClusterMarker } from "../components/ClusterMarker";
+import { useGridClustering } from "../hooks/useGridClustering";
 import { getMediaLocations } from "../services/media";
 
 export interface MediaLocation {
@@ -25,17 +29,26 @@ export interface MediaLocation {
   thumbnail: string;
 }
 
+interface FocusLocation {
+  latitude: number;
+  longitude: number;
+  zoom?: number;
+}
+
 function MapController({
   onLocationsChange,
   onMapChange,
+  focus,
 }: {
   onLocationsChange: (locs: MediaLocation[]) => void;
   onMapChange: (map: L.Map) => void;
+  focus?: FocusLocation;
 }) {
   const map = useMap();
 
   useEffect(() => {
     onMapChange(map);
+    fetchLocationsForView();
   }, [map, onMapChange]);
 
   const fetchLocationsForView = useCallback(() => {
@@ -51,7 +64,11 @@ function MapController({
   }, [map, onLocationsChange]);
 
   useMapEvents({
-    load: fetchLocationsForView,
+    load: () => {
+      if (!focus) {
+        fetchLocationsForView();
+      }
+    },
     moveend: fetchLocationsForView,
     zoomend: fetchLocationsForView,
   });
@@ -60,20 +77,46 @@ function MapController({
 }
 
 export default function MapPage() {
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
   const [locations, setLocations] = useState<MediaLocation[]>([]);
-  const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
+  const [mapInstance, setMapInstance] = useState<LeafletMap | null>(null);
   const theme = useTheme();
+
+  const focus = useMemo((): FocusLocation | undefined => {
+    const lat = searchParams.get("lat");
+    const lng = searchParams.get("lng");
+
+    if (lat && lng) {
+      const zoom = searchParams.get("zoom");
+      return {
+        latitude: parseFloat(lat),
+        longitude: parseFloat(lng),
+        zoom: zoom ? parseInt(zoom, 10) : 15,
+      };
+    }
+    return undefined;
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (mapInstance && focus) {
+      mapInstance.flyTo([focus.latitude, focus.longitude], focus.zoom);
+    }
+  }, [mapInstance, focus]);
 
   // Our custom hook processes the raw locations into clusters
   const clusters = useGridClustering({ locations, map: mapInstance });
 
-  const center: LatLngExpression = [20, 0];
+  const initialCenter: LatLngExpression = focus
+    ? [focus.latitude, focus.longitude]
+    : [20, 0]; // Default center
+  const initialZoom = focus ? focus.zoom : 2; // Default zoom
 
   return (
     <Box sx={{ height: "calc(100vh - 64px)", width: "100%" }}>
       <MapContainer
-        center={center}
-        zoom={2}
+        center={initialCenter}
+        zoom={initialZoom}
         scrollWheelZoom
         style={{
           height: "100%",
@@ -93,6 +136,7 @@ export default function MapPage() {
         <MapController
           onLocationsChange={setLocations}
           onMapChange={setMapInstance}
+          focus={focus}
         />
 
         {clusters.map((point) => {
@@ -102,7 +146,10 @@ export default function MapPage() {
           return (
             <Marker key={point.id} position={[point.lat, point.lon]}>
               <Popup>
-                <RouterLink to={`/medium/${point.baseId}`}>
+                <RouterLink
+                  to={`/medium/${point.baseId}`}
+                  state={{ backgroundLocation: location }}
+                >
                   <Box
                     component="img"
                     src={`${API}/thumbnails/${point.thumbnail}`}
