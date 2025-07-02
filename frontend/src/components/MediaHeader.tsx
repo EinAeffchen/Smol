@@ -39,8 +39,13 @@ export function MediaHeader({
   };
 
   const handleAction = (type: "convert" | "deleteRecord" | "deleteFile") => {
-    onOpenDialog(type);
-    handleMenuClose();
+    try {
+      onOpenDialog(type);
+    } catch (error) {
+      console.error("Failed to handle action:", error);
+    } finally {
+      handleMenuClose();
+    }
   };
 
   return (

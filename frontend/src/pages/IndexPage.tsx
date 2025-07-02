@@ -45,13 +45,18 @@ export default function IndexPage() {
   const { fetchInitial, loadMore } = useListStore();
 
   useEffect(() => {
+    const controller = new AbortController();
     fetchInitial(mediaListKey, () => getMediaList(null, sortOrder, tags));
+    return () => controller.abort();
   }, [mediaListKey, fetchInitial, sortOrder, tags]);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (inView && hasMore && !isLoading) {
-      loadMore(mediaListKey, (cursor) => getMediaList(cursor, sortOrder, tags));
+      loadMore(mediaListKey, (cursor) => getMediaList(cursor, sortOrder, tags))
+        .catch(console.error);
     }
+    return () => controller.abort();
   }, [inView, hasMore, isLoading, loadMore, mediaListKey, sortOrder, tags]);
 
   const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {

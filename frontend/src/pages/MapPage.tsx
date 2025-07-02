@@ -53,6 +53,7 @@ function MapController({
   useMapEvents({
     load: fetchLocationsForView,
     moveend: fetchLocationsForView,
+    zoomend: fetchLocationsForView,
   });
 
   return null;

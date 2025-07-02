@@ -31,16 +31,23 @@ export function useInfinite<T>(
   }, [cursor, fetchPage, hasMore, loading]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    
     setItems([]);
     setCursor(undefined);
     setHasMore(true);
     setLoading(true);
+    
     fetchPage(undefined).then(({ items: firstItems, next_cursor }) => {
-      setItems(firstItems);
-      setCursor(next_cursor || undefined);
-      setHasMore(next_cursor !== null);
-      setLoading(false);
-    });
+      if (!controller.signal.aborted) {
+        setItems(firstItems);
+        setCursor(next_cursor || undefined);
+        setHasMore(next_cursor !== null);
+        setLoading(false);
+      }
+    }).catch(console.error);
+
+    return () => controller.abort();
   }, resetDeps);
 
   useEffect(() => {
