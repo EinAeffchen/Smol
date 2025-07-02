@@ -24,7 +24,7 @@ from app.config import (
 from app.database import init_db, init_vec_index
 from app.logger import logger
 from app.processor_registry import load_processors
-from app.api.tasks import _run_scan_and_chain
+from app.api.tasks import _run_cleanup_and_chain
 from sqlalchemy import select, or_
 from app.models import ProcessingTask
 from app.database import engine
@@ -58,13 +58,13 @@ def scheduled_scan_job():
             return
 
         # Create the first task in the chain
-        task = ProcessingTask(task_type="scan", total=0, processed=0)
+        task = ProcessingTask(task_type="clean_missing_files", total=0, processed=0)
         session.add(task)
         session.commit()
         session.refresh(task)
 
         # Start the chain
-        _run_scan_and_chain(task.id)
+        _run_cleanup_and_chain(task.id)
 
 
 @asynccontextmanager

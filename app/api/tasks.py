@@ -650,17 +650,16 @@ def _run_duplicate_detection(task_id: str, threshold: int):
             text("""
                 SELECT group_id FROM (
                     SELECT group_id, COUNT(*) as cnt 
-                    FROM duplicate_media 
+                    FROM duplicatemedia 
                     GROUP BY group_id
                 ) WHERE cnt < 2
             """)
         ).all()
-        
         if empty_groups:
             logger.info(f"Cleaning up {len(empty_groups)} empty duplicate groups")
             session.exec(
                 delete(DuplicateMedia)
-                .where(DuplicateMedia.group_id.in_(empty_groups))
+                .where(DuplicateMedia.group_id.in_([row[0] for row in empty_groups]))
             )
             session.commit()
 

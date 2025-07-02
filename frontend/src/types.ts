@@ -67,6 +67,7 @@ export interface MediaDetail {
 
 export type TaskType =
   | "process_media"
+  | "clean_missing_files"
   | "cluster_persons"
   | "scan"
   | "find_duplicates";

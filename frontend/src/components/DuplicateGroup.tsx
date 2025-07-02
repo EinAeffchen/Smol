@@ -7,17 +7,14 @@ import {
   Box,
   Button,
   Grid,
-  Radio,
-  FormControlLabel,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  TextField,
 } from "@mui/material";
 import { DuplicateGroup as GroupType } from "../types";
 import { DuplicateMediaCard } from "./DuplicateMediaCard";
-import { resolveDuplicates } from "../services/duplicates"; // We'll need a new service
+import { resolveDuplicates } from "../services/duplicates";
 import { CircularProgress } from "@mui/material";
 
 interface DuplicateGroupProps {

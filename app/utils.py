@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
+
 from fastapi import HTTPException
 import ffmpeg
 import numpy as np
@@ -72,7 +73,8 @@ def process_file(filepath: Path) -> Media:
             created_at=creation_date,
             embedding=None,
         )
-        media.phash = generate_perceptual_hash(media)
+        if media.duration is None:
+            media.phash = generate_perceptual_hash(media)
         return media
 
 
@@ -117,7 +119,10 @@ def fix_image_rotation(full_path: Path) -> None:
 
 def generate_perceptual_hash(media: Media) -> str:
     full_path = MEDIA_DIR / media.path
-    img = Image.open(full_path)
+    try:
+        img = Image.open(full_path)
+    except UnidentifiedImageError:
+        logger.warning("Skipping %s, not an image!", media.path)
     try:
         return str(imagehash.phash(img))
     except OSError:
@@ -129,7 +134,6 @@ def generate_thumbnail(media: Media) -> str | None:
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
     full_path = MEDIA_DIR / filepath
-    fix_image_rotation(full_path)
     if filepath.suffix.lower() in VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)
@@ -139,6 +143,7 @@ def generate_thumbnail(media: Media) -> str | None:
         )
     else:
         try:
+            fix_image_rotation(full_path)
             img = Image.open(full_path)
             img = ImageOps.exif_transpose(img)
         except UnidentifiedImageError:

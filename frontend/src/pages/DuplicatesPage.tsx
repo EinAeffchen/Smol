@@ -98,13 +98,16 @@ const DuplicatesPage: React.FC = () => {
         </Typography>
       ) : (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          {duplicateGroups.map((group) => (
-            <DuplicateGroup
-              key={group.group_id}
-              group={group}
-              onGroupResolved={() => handleGroupResolved(group.group_id)}
-            />
-          ))}
+          {duplicateGroups.map(
+            (group) =>
+              group.items.length > 1 && (
+                <DuplicateGroup
+                  key={group.group_id}
+                  group={group}
+                  onGroupResolved={() => handleGroupResolved(group.group_id)}
+                />
+              )
+          )}
           {hasMore && <Box ref={loaderRef} sx={{ height: "1px" }} />}
         </Box>
       )}

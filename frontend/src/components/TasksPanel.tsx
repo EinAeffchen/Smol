@@ -18,11 +18,13 @@ import { getActiveTasks, startTask as startTaskService, cancelTask as cancelTask
 import SyncIcon from "@mui/icons-material/Sync";
 import MovieIcon from "@mui/icons-material/Movie";
 import Diversity3Icon from "@mui/icons-material/Diversity3";
+import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
 
 type TaskLabels = Record<TaskType, string>;
 const TASK_LABELS: TaskLabels = {
   scan: "Scan Folder",
   process_media: "Process Media",
+  clean_missing_files: "Cleanup missing files",
   cluster_persons: "Cluster Persons",
   find_duplicates: "find_duplicates",
 };
@@ -134,6 +136,17 @@ export default function TaskManager() {
               <SyncIcon />
             </ListItemIcon>
             <ListItemText primary="Scan Media Folder" />
+          </ListItemButton>
+        </ListItem>
+        <ListItem disablePadding>
+          <ListItemButton
+            onClick={() => startTask("clean_missing_files")}
+            disabled={isTaskRunning("clean_missing_files")}
+          >
+            <ListItemIcon>
+              <CleaningServicesIcon />
+            </ListItemIcon>
+            <ListItemText primary="Clean missing files" />
           </ListItemButton>
         </ListItem>
         <ListItem disablePadding>

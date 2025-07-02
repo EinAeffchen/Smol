@@ -100,6 +100,9 @@ async def detach_faces(
         update_face_embedding(
             session, face_id, -1
         )  # -1 detaches face from person in embedding table
+        # update embedding of person to fix suggested faces after detach
+        if person_id:
+            update_person_embedding(session, person_id)
     safe_commit(session)
     return {"message": "Faces detached successfully"}
 
