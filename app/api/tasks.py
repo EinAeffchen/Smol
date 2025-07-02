@@ -12,6 +12,7 @@ import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import func, or_
+from app.models import DuplicateMedia
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
@@ -50,7 +51,7 @@ def create_and_run_task(
     session: Session,
     background_tasks: BackgroundTasks,
     task_type: Literal[
-        "scan", "process_media", "cluster_persons", "find_duplicates"
+        "scan", "process_media", "cluster_persons", "find_duplicates", "clean_missing_files"
     ],
     callable_task: Callable,
 ):
@@ -108,6 +109,23 @@ async def start_media_processing(
         callable_task=_run_media_processing,
     )
 
+
+
+
+def _run_cleanup_and_chain(task_id: str):
+    _run_scan(task_id)
+
+    logger.info("Cleanup task finished, starting scan task.")
+    with Session(engine) as new_session:
+        next_task = ProcessingTask(
+            task_type="scan", total=0, processed=0
+        )
+        new_session.add(next_task)
+        new_session.commit()
+        new_session.refresh(next_task)
+
+        # Call the next worker in the chain
+        _run_scan_and_chain(next_task.id)
 
 def _run_scan_and_chain(task_id: str):
     _run_scan(task_id)
@@ -269,7 +287,7 @@ def _fetch_faces_and_embeddings(
     results = session.exec(
         select(Face.id, Face.embedding)
         .where(
-            Face.embedding != None, Face.person_id == None, Face.id > last_id
+            Face.embedding.is_not(None), Face.person_id.is_(None), Face.id > last_id
         )
         .order_by(Face.id.asc())
         .limit(limit)
@@ -625,6 +643,26 @@ def _run_duplicate_detection(task_id: str, threshold: int):
     generate_hashes()
     processor = DuplicateProcessor(task_id, threshold)
     processor.process()
+    
+    # Clean up any empty duplicate groups that were created
+    with Session(engine) as session:
+        empty_groups = session.exec(
+            text("""
+                SELECT group_id FROM (
+                    SELECT group_id, COUNT(*) as cnt 
+                    FROM duplicate_media 
+                    GROUP BY group_id
+                ) WHERE cnt < 2
+            """)
+        ).all()
+        
+        if empty_groups:
+            logger.info(f"Cleaning up {len(empty_groups)} empty duplicate groups")
+            session.exec(
+                delete(DuplicateMedia)
+                .where(DuplicateMedia.group_id.in_(empty_groups))
+            )
+            session.commit()
 
 
 @router.post("/reset/processing", summary="Resets media processing status")
@@ -661,6 +699,49 @@ def reset_clustering(session: Session = Depends(get_session)):
     safe_commit(session)
     return "OK"
 
+
+def _clean_missing_files(task_id: str):
+    """Background task to scan for and delete records of missing files"""
+    with Session(engine) as session:
+        task = session.get(ProcessingTask, task_id)
+        if not task:
+            logger.error("Task %s not found", task_id)
+            return
+
+        task.status = "running"
+        task.started_at = datetime.now(timezone.utc)
+        task.total = session.exec(select(func.count()).select_from(Media)).first()
+        session.commit()
+
+        deleted_count = 0
+        batch_size = 100
+        offset = 0
+        
+        while True:
+            media_batch = session.exec(
+                select(Media)
+                .offset(offset)
+                .limit(batch_size)
+            ).all()
+            
+            if not media_batch:
+                break
+                
+            for media in media_batch:
+                full_path = MEDIA_DIR / media.path
+                if not full_path.exists():
+                    delete_media_record(media.id, session)
+                    deleted_count += 1
+                    logger.info("Deleted record for missing file: %s", media.path)
+
+            offset += batch_size
+            task.processed = offset
+            session.commit()
+
+        task.status = "completed"
+        task.finished_at = datetime.now(timezone.utc)
+        session.commit()
+        logger.info("Cleaned %d missing file records", deleted_count)
 
 def _run_scan(task_id: str):
     with Session(engine) as sess:
@@ -756,7 +837,7 @@ def _run_scan(task_id: str):
 def generate_hashes():
     """A task to find all media without a pHash and generate one."""
     with Session(engine) as session:
-        media_to_hash_stmt = select(Media).where(Media.phash.is_(None))
+        media_to_hash_stmt = select(Media).where(Media.phash.is_(None), Media.duration.is_(None))
         media_to_hash = session.exec(media_to_hash_stmt).all()
 
         for media in tqdm(media_to_hash):
@@ -770,3 +851,19 @@ def generate_hashes():
                 )
 
         session.commit()
+
+@router.post(
+    "/clean_missing_files",
+    summary="Scan for and delete records of files that no longer exist",
+    response_model=ProcessingTask,
+)
+async def start_missing_files_cleanup(
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+):
+    return create_and_run_task(
+        session=session,
+        background_tasks=background_tasks,
+        task_type="clean_missing_files",
+        callable_task=_clean_missing_files,
+    )
