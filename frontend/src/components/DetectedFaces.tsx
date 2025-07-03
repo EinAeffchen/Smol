@@ -113,7 +113,7 @@ export default function DetectedFaces({
 
   useEffect(() => {
     setSelectedFaceIds([]);
-  }, [faces]);
+  }, [personId]);
 
   if (
     faces.length === 0 &&

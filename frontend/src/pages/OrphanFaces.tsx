@@ -37,7 +37,7 @@ export default function OrphanFacesPage() {
     hasMore,
     isLoading,
   } = useListStore((state) => state.lists[listKey] || defaultListState);
-  const { fetchInitial, loadMore, removeItems } = useListStore();
+  const { fetchInitial, loadMore, removeItems, clearList } = useListStore();
 
   // All UI state is now managed directly by the page
   const [isProcessing, setIsProcessing] = useState(false);
@@ -70,11 +70,6 @@ export default function OrphanFacesPage() {
     }
   }, [inView, loadMore, listKey]);
 
-  // Clear selection when the list changes to avoid stale selections
-  useEffect(() => {
-    setSelectedFaceIds([]);
-  }, [orphans]);
-
   // --- Action Handlers ---
   const handleBulkDelete = async () => {
     if (
@@ -96,10 +91,23 @@ export default function OrphanFacesPage() {
     if (!newPersonName.trim()) return;
     setIsProcessing(true);
     try {
-      const p = await createPersonFromFaces(selectedFaceIds, newPersonName);
+      const newPerson = await createPersonFromFaces(selectedFaceIds, newPersonName);
+      if (!newPerson?.id) {
+        throw new Error("Failed to get ID for newly created person.");
+      }
       removeItems(listKey, selectedFaceIds);
+
+      const newPersonMediaListKey = `person-${newPerson.id}-media-appearances`;
+      const newPersonFacesListKey = `/api/person/${newPerson.id}/faces`; // The key used on PersonDetailPage
+
+      clearList(newPersonMediaListKey);
+      clearList(newPersonFacesListKey);
+
       setCreateDialogOpen(false);
-      if (p?.id) navigate(`/person/${p.id}`);
+      if (newPerson?.id) navigate(`/person/${newPerson.id}`);
+    } catch (error) {
+      console.error("Failed to create and navigate to new person:", error);
+      alert("Failed to create new person.");
     } finally {
       setIsProcessing(false);
     }

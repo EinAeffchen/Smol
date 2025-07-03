@@ -11,6 +11,7 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import { useLocation } from "react-router-dom";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -46,6 +47,7 @@ import {
 
 export default function PersonDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
 
   const [person, setPerson] = useState<Person | null>(null);
@@ -162,6 +164,22 @@ export default function PersonDetailPage() {
   );
 
   useEffect(() => {
+    setPerson(null);
+    setLoading(true);
+
+    if (location.state?.forceRefresh && id) {
+      console.log(`Force refreshing data for person ${id}`);
+      // Define all list keys that this page and its children use
+      const mediaListKey = `person-${id}-media-appearances`;
+      const facesListKey = `/api/person/${id}/faces`;
+      const timelineListKey = `person-${id}-timeline`;
+
+      // Clear them from the cache
+      clearList(mediaListKey);
+      clearList(facesListKey);
+      clearList(timelineListKey);
+    }
+
     const controller = new AbortController();
     const signal = controller.signal;
 
@@ -236,7 +254,12 @@ export default function PersonDetailPage() {
 
     setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
 
-    navigate(`/person/${newPerson.id}`);
+    if (newPerson?.id) {
+      const newPersonMediaListKey = `person-${newPerson.id}-media-appearances`;
+      clearList(newPersonMediaListKey);
+
+      navigate(`/person/${newPerson.id}`, { replace: true });
+    }
     return newPerson;
   };
 
@@ -295,15 +318,19 @@ export default function PersonDetailPage() {
     const sourceId = Number(id);
     const targetId = mergeTarget.id;
 
+    const sourceMediaListKey = `person-${sourceId}-media-appearances`;
     const targetMediaListKey = `/api/person/${targetId}/media-appearances`;
 
+    clearList(sourceMediaListKey);
     clearList(targetMediaListKey);
+
     setMergeTarget(null);
     setMergeOpen(false);
-
     try {
       await mergePersons(sourceId, targetId);
-      navigate(`/person/${targetId}`, { replace: true });
+      navigate(`/person/${targetId}`, {
+        replace: true,
+      });
     } catch (error) {
       console.error("Merge failed:", error);
       showMessage("Merge failed", "error");

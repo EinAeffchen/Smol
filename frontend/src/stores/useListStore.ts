@@ -22,7 +22,7 @@ interface ListStoreState {
   ) => Promise<void>;
   loadMore: <T>(
     listKey: string,
-    fetcher: (cursor: string | null) => Promise<CursorPage<T>>
+    fetcher: (cursor?: string) => Promise<CursorPage<T>>
   ) => Promise<void>;
   removeItem: (listKey: string, itemId: number | string) => void;
   removeItems: (listKey: string, itemIds: (number | string)[]) => void;

@@ -97,11 +97,12 @@ export default function MediaAppearances({
         className="my-masonry-grid"
         columnClassName="my-masonry-grid_column"
       >
-        {items.map((media) => (
-          <div key={media.id}>
-            <MediaCard media={media} mediaListKey={mediaListKey} />
-          </div>
-        ))}
+        {items &&
+          items.map((media) => (
+            <div key={media.id}>
+              <MediaCard media={media} mediaListKey={mediaListKey} />
+            </div>
+          ))}
       </Masonry>
 
       <Box ref={loaderRef} sx={{ height: "1px" }} />
