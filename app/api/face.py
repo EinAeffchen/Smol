@@ -89,8 +89,9 @@ async def detach_faces(
         person_id = face.person_id
         if person_id:
             person = face.person
-            person.appearance_count -= 1
-            session.add(person)
+            if person:
+                person.appearance_count -= 1
+                session.add(person)
 
         face.person_id = None
         session.add(face)

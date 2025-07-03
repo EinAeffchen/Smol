@@ -17,7 +17,7 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
 
-from app.api.media import delete_media_record
+from app.api.media import delete_record
 from app.config import (
     AUTO_CLUSTER,
     CLUSTER_BATCH_SIZE,
@@ -381,9 +381,15 @@ def _assign_faces_to_clusters(
                 ).bindparams(p_id=new_person.id, f_id=face_id)
                 session.exec(sql_face_emb)
 
+            person_del = text(
+                """
+                DELETE FROM person_embeddings(person_id, embedding) WHERE person_id=:p_id
+                """
+            ).bindparams(p_id=new_person.id)
+            session.exec(person_del)
             sql_person_emb = text(
                 """
-                INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
+                INSERT INTO person_embeddings(person_id, embedding)
                 VALUES (:p_id, :emb)
                 """
             ).bindparams(p_id=new_person.id, emb=json.dumps(centroid.tolist()))
@@ -625,6 +631,7 @@ def start_duplicate_detection(
     session: Session = Depends(get_session),
     threshold: int = 2,
 ):
+    #TODO add auto-cleanup with options (keep oldest, newest, biggest, smallest)
     task = create_and_run_task(
         session=session,
         background_tasks=background_tasks,
@@ -729,7 +736,7 @@ def _clean_missing_files(task_id: str):
             for media in media_batch:
                 full_path = MEDIA_DIR / media.path
                 if not full_path.exists():
-                    delete_media_record(media.id, session)
+                    delete_record(media.id, session)
                     deleted_count += 1
                     logger.info("Deleted record for missing file: %s", media.path)
 

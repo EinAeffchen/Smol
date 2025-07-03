@@ -465,14 +465,18 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
     )
     logger.info(stmt)
     media_count = session.scalar(stmt)
+    if person.profile_face:
+        profile_face = ProfileFace(
+                id=person.profile_face.id,
+                thumbnail_path=person.profile_face.thumbnail_path,
+            )
+    else:
+        profile_face = None
     return PersonDetail(
         id=person.id,
         name=person.name,
         profile_face_id=person.profile_face_id,
-        profile_face=ProfileFace(
-            id=person.profile_face.id,
-            thumbnail_path=person.profile_face.thumbnail_path,
-        ),
+        profile_face=profile_face,
         tags=person.tags,
         appearance_count=media_count,
     )

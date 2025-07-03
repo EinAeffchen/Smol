@@ -202,10 +202,16 @@ def get_person_embedding(
 
 def update_person_embedding(session: Session, person_id: int):
     centroid = get_person_embedding(session, person_id, new=True)
-
+    logger.info("Updating person_embedding!")
+    del_sql = text(
+        """
+        DELETE FROM person_embeddings WHERE person_id=:p_id
+    """
+    ).bindparams(p_id=person_id)
+    session.exec(del_sql)
     sql = text(
         """
-        INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
+        INSERT INTO person_embeddings(person_id, embedding)
         VALUES (:p_id, :emb)
     """
     ).bindparams(p_id=person_id, emb=centroid)
