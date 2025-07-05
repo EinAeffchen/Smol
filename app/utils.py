@@ -78,7 +78,7 @@ def process_file(filepath: Path) -> Media:
             height=height,
             faces_extracted=False,
             embeddings_created=False,
-            created_at=get_image_taken_date(img, img_path=filepath.relative_to(MEDIA_DIR)),
+            created_at=get_image_taken_date(img, img_path=filepath),
             embedding=None,
             phash=None
         )
