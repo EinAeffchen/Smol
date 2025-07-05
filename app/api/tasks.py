@@ -5,9 +5,8 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
-
+from datetime import date
 import hdbscan
-import imagehash
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
@@ -40,6 +39,7 @@ from app.utils import (
     generate_perceptual_hash,
     process_file,
     split_video,
+    get_image_taken_date
 )
 
 router = APIRouter()
@@ -109,11 +109,49 @@ async def start_media_processing(
         callable_task=_run_media_processing,
     )
 
+@router.post(
+    "/refresh_creation_date",
+    summary="Detect faces and compute embeddings for all unprocessed media",
+)
+async def start_creation_refresh(
+    session: Session = Depends(get_session),
+):
+    logger.info("Starting creation_date refresh!")
+    batch_size = 100
+    batch_count = 0
+    offset = 0
+    while True:
+        media_batch = session.exec(
+            select(Media)
+            .offset(offset)
+            .limit(batch_size)
+        ).all()
+        
+        if not media_batch:
+            break
+            
+        for media in media_batch:
+            full_path = MEDIA_DIR / media.path
+            if media.duration is not None:
+                continue
+
+            if not full_path.exists():
+                delete_record(media.id, session)
+                continue
+            img = Image.open(full_path)
+            media.created_at = get_image_taken_date(img, full_path)
+
+        offset += batch_size
+        session.commit()
+        batch_count+=1
+        logger.info("Finished batch: %s", batch_count)
+    return {"Done":"OK"}
+
 
 
 
 def _run_cleanup_and_chain(task_id: str):
-    _run_scan(task_id)
+    _clean_missing_files(task_id)
 
     logger.info("Cleanup task finished, starting scan task.")
     with Session(engine) as new_session:

@@ -10,6 +10,7 @@ import ffmpeg
 import numpy as np
 import piexif
 from PIL import Image, UnidentifiedImageError, ImageOps
+from PIL.Image import Image as ImageType
 from scenedetect import AdaptiveDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlmodel import Session, select
@@ -41,6 +42,13 @@ from app.models import (
     ProcessingTask,
 )
 
+def get_image_taken_date(img: Image.Image, img_path: Path|None=None) -> datetime:
+    format_code = '%Y:%m:%d %H:%M:%S'
+    exif = img._getexif()
+    if exif and (creation_date:=exif.get(36867)):
+        return datetime.strptime(creation_date, format_code)
+    else:
+        return datetime.fromtimestamp(img_path.stat().st_mtime) # fallback use last modification time
 
 def process_file(filepath: Path) -> Media:
     with Session(engine) as session:
@@ -54,13 +62,10 @@ def process_file(filepath: Path) -> Media:
             duration = float(probe["format"].get("duration", 0))
         else:
             duration = None
-        creation_timestamp = filepath.stat().st_dev or filepath.stat().st_mtime
-        creation_date = datetime.fromtimestamp(
-            creation_timestamp, timezone.utc
-        )
         vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
         width = int(vs[0]["width"]) if vs else None
         height = int(vs[0]["height"]) if vs else None
+        img = Image.open(filepath.relative_to(MEDIA_DIR))
         media = Media(
             path=str(filepath.relative_to(MEDIA_DIR)),
             filename=filepath.name,
@@ -70,8 +75,9 @@ def process_file(filepath: Path) -> Media:
             height=height,
             faces_extracted=False,
             embeddings_created=False,
-            created_at=creation_date,
+            created_at=get_image_taken_date(img, img_path=filepath.relative_to(MEDIA_DIR)),
             embedding=None,
+            phash=None
         )
         if media.duration is None:
             media.phash = generate_perceptual_hash(media)
