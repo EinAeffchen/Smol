@@ -43,7 +43,14 @@ from app.models import (
 )
 
 def get_image_taken_date(img_path: Path|None=None) -> datetime:
-    img = Image.open(img_path)
+    # fallback use last modification time
+    alt_time = datetime.fromtimestamp(img_path.stat().st_mtime)
+
+    try:
+        img = Image.open(img_path)
+    except UnidentifiedImageError:
+        return alt_time
+    
     format_code = '%Y:%m:%d %H:%M:%S'
     try:
         exif = img._getexif()
@@ -51,8 +58,7 @@ def get_image_taken_date(img_path: Path|None=None) -> datetime:
         exif = None
     if exif and (creation_date:=exif.get(36867)):
         return datetime.strptime(creation_date, format_code)
-    else:
-        return datetime.fromtimestamp(img_path.stat().st_mtime) # fallback use last modification time
+    return alt_time 
 
 def process_file(filepath: Path) -> Media:
     with Session(engine) as session:
