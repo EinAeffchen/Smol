@@ -1,6 +1,6 @@
 import React, { Suspense } from "react";
 import { Box, Typography, CircularProgress } from "@mui/material";
-import { MediaDetail, Person, Face } from "../types";
+import { Person, Face } from "../types";
 import PersonCard from "./PersonCard";
 import { READ_ONLY } from "../config";
 
@@ -10,7 +10,7 @@ interface PeopleSectionProps {
   persons: Person[];
   orphans: Face[];
   onAssign: (faceIds: number[], personId: number) => Promise<void>;
-  onCreateFace: (faceIds: number[], data: any) => Promise<any>;
+  onCreateFace: (faceIds: number[], data: { name: string }) => Promise<any>;
   onDeleteFace: (faceIds: number[]) => Promise<void>;
   onDetachFace: (faceIds: number[]) => Promise<void>;
 }
@@ -70,9 +70,7 @@ export function PeopleSection({
               title="Unassigned Faces"
               faces={orphans}
               onAssign={onAssign}
-              onSetProfile={() => {
-                alert("No profile to set");
-              }}
+              onSetProfile={() => {}}
               onDelete={onDeleteFace}
               onDetach={onDetachFace}
               onCreateMultiple={onCreateFace}

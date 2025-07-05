@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { getPerson, getPersonMediaAppearances } from "../services/person";
@@ -21,7 +20,12 @@ import {
   PersonReadSimple,
   Tag,
 } from "../types";
-import { assignFace, createPersonFromFaces, deleteFace, detachFace } from "../services/faceActions";
+import {
+  assignFace,
+  createPersonFromFaces,
+  deleteFace,
+  detachFace,
+} from "../services/faceActions";
 
 export const usePersonDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -60,7 +64,11 @@ export const usePersonDetailPage = () => {
     [id]
   );
 
-  const { items: detectedFacesList, hasMore: hasMoreFaces, isLoading: loadingMoreFaces } = useListStore(
+  const {
+    items: detectedFacesList,
+    hasMore: hasMoreFaces,
+    isLoading: loadingMoreFaces,
+  } = useListStore(
     (state) => state.lists[detectedFacesListKey] || defaultListState
   );
 
@@ -142,7 +150,7 @@ export const usePersonDetailPage = () => {
 
     if (location.state?.forceRefresh && id) {
       console.log(`Force refreshing data for person ${id}`);
-      const mediaListKey = `person-${id}-media-appearances`;
+      const mediaListKey = `person-${id}-media-appearances-`;
       const facesListKey = `/api/person/${id}/faces`;
       const timelineListKey = `person-${id}-timeline`;
 
@@ -158,7 +166,11 @@ export const usePersonDetailPage = () => {
       const initialLoad = async () => {
         setLoading(true);
         try {
-          await Promise.all([loadDetail(signal), loadSuggestedFaces(signal)]);
+          await Promise.all([
+            loadDetail(signal),
+            loadSuggestedFaces(signal),
+            getPersonMediaAppearances(Number(id), undefined),
+          ]);
         } catch (err) {
           if (err.name !== "AbortError") {
             console.error("Initial load failed:", err);
@@ -237,7 +249,10 @@ export const usePersonDetailPage = () => {
     if (newPerson?.id) {
       const newPersonMediaListKey = `person-${newPerson.id}-media-appearances`;
       clearList(newPersonMediaListKey);
-      navigate(`/person/${newPerson.id}`, { replace: true, state: { forceRefresh: true } });
+      navigate(`/person/${newPerson.id}`, {
+        replace: true,
+        state: { forceRefresh: true },
+      });
     }
     return newPerson;
   };
@@ -296,11 +311,9 @@ export const usePersonDetailPage = () => {
     const sourceId = Number(id);
     const targetId = mergeTarget.id;
 
-    const sourceMediaListKey = `person-${sourceId}-media-appearances`;
-    const targetMediaListKey = `/api/person/${targetId}/media-appearances`;
+    const sourceMediaListKey = `person-${sourceId}-media-appearances-`;
 
     clearList(sourceMediaListKey);
-    clearList(targetMediaListKey);
 
     setMergeTarget(null);
     setMergeOpen(false);
@@ -308,6 +321,9 @@ export const usePersonDetailPage = () => {
       await mergePersons(sourceId, targetId);
       navigate(`/person/${targetId}`, {
         replace: true,
+        state: {
+          forceRefresh: true,
+        },
       });
     } catch (error) {
       console.error("Merge failed:", error);

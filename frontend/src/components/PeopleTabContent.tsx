@@ -45,7 +45,7 @@ export function PeopleTabContent({
   };
 
   const handleCreateFace = async (faceId: number, data: any) => {
-    const newPerson = await createPersonFromFaces([faceId], data);
+    const newPerson = await createPersonFromFaces([faceId], name);
     setOrphans((prev) => prev.filter((f) => f.id !== faceId));
     onDataChanged();
     return newPerson;

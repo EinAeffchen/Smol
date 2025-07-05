@@ -7,8 +7,8 @@ import {
   Button,
   Paper,
   useTheme,
-  Grid,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { Person } from "../types";
 import { PersonEditForm } from "./PersonEditForm";
 import { API, READ_ONLY } from "../config";
@@ -78,10 +78,19 @@ export function PersonHero({
               <Button variant="outlined" onClick={onMerge} disabled={saving}>
                 Merge
               </Button>
-              <Button variant="outlined" onClick={onRefreshSimilar} disabled={saving}>
+              <Button
+                variant="outlined"
+                onClick={() => onRefreshSimilar()}
+                disabled={saving}
+              >
                 Refresh Similar
               </Button>
-              <Button variant="outlined" color="error" onClick={onDelete} disabled={saving}>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={onDelete}
+                disabled={saving}
+              >
                 Delete
               </Button>
             </Stack>

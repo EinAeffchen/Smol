@@ -1,23 +1,17 @@
-// components/MediaItemGroup.tsx
-
 import React from "react";
-import { Box, Button, Paper, Typography } from "@mui/material";
+import { Box, Button, Paper } from "@mui/material";
 import { MediaPreview } from "../types";
 import { API } from "../config";
 import PhotoLibraryIcon from "@mui/icons-material/PhotoLibrary";
 
 interface MediaItemGroupProps {
   mediaItems: MediaPreview[];
-  listKey: string;
-  date: string;
   onViewAll: () => void;
 }
 
 export const MediaItemGroup: React.FC<MediaItemGroupProps> = ({
   mediaItems,
   onViewAll,
-  listKey,
-  date,
 }) => {
   const previewItems = mediaItems.slice(0, 3);
 

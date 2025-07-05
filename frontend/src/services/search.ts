@@ -1,11 +1,11 @@
 import { API } from "../config";
-import { CursorPage, Media, PersonReadSimple, Tag } from "../types";
+import { CursorPage, MediaPreview, PersonReadSimple, Tag } from "../types";
 
 export const searchMedia = async (
   query: string,
   limit: number,
   cursor?: string
-): Promise<CursorPage<Media>> => {
+): Promise<CursorPage<MediaPreview>> => {
   const response = await fetch(
     `${API}/api/search/media?query=${query}&limit=${limit}${cursor ? `&cursor=${cursor}` : ""}`
   );
@@ -14,7 +14,7 @@ export const searchMedia = async (
 
 export const searchPeople = async (
   query: string,
-  limit: number=10,
+  limit: number = 10,
   cursor?: string
 ): Promise<CursorPage<PersonReadSimple>> => {
   const response = await fetch(

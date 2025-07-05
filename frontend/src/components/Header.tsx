@@ -133,7 +133,7 @@ export function Header() {
 
   const pathsToExcludeInReadOnly: string[] = ["/orphanfaces", "/maptagger", "/duplicates"];
   const pathsToExcludeInPeopleDisabled: string[] = ["/people"];
-  let visibleNavItems = allNavItems.filter(
+  const visibleNavItems = allNavItems.filter(
     ([, path]) =>
       !(READ_ONLY && pathsToExcludeInReadOnly.includes(path)) &&
       !(!ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path))
@@ -220,7 +220,7 @@ export function Header() {
         variant="outlined"
         size="small"
         value={category}
-        onChange={(e) => setCategory(e.target.value as any)}
+        onChange={(e) => setCategory(e.target.value as "media" | "person" | "tag")}
         sx={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
       >
         <MenuItem value="media">Media</MenuItem>

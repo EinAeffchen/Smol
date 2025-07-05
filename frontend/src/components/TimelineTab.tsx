@@ -36,8 +36,7 @@ export const TimelineTab: React.FC<{ person: Person }> = ({ person }) => {
   const { items, hasMore, isLoading } = useListStore(
     (state) => state.lists[listKey] || defaultListState
   );
-  const { fetchInitial, loadMore, clearList, removeItem, updateItem } =
-    useListStore();
+  const { fetchInitial, loadMore, clearList, removeItem } = useListStore();
   const { ref, inView } = useInView({
     threshold: 0.5,
     skip: isLoading || !hasMore,
@@ -45,7 +44,7 @@ export const TimelineTab: React.FC<{ person: Person }> = ({ person }) => {
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [eventToEdit, setEventToEdit] = useState<TimelineEvent | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -60,22 +59,18 @@ export const TimelineTab: React.FC<{ person: Person }> = ({ person }) => {
     }
   }, [inView, person.id, loadMore, listKey]);
 
-  // Logic to open an "Add Event" dialog would go here
-  const handleAddEvent = () => {
-    setIsDialogOpen(true);
-  };
   const handleOpenCreateDialog = () => {
-    setEventToEdit(null); // Ensure we're not in edit mode
+    setEventToEdit(null);
     setIsFormOpen(true);
   };
 
   const handleOpenEditDialog = (event: TimelineEvent) => {
-    setEventToEdit(event); // Set the event to edit
-    setIsFormOpen(true); // Open the same dialog
+    setEventToEdit(event);
+    setIsFormOpen(true);
   };
   const handleCloseDialog = () => {
     setIsFormOpen(false);
-    setEventToEdit(null); // Clear any event being edited
+    setEventToEdit(null);
   };
 
   const handleDeleteEvent = async (event: TimelineEvent) => {
@@ -85,24 +80,23 @@ export const TimelineTab: React.FC<{ person: Person }> = ({ person }) => {
       )
     ) {
       await deleteTimelineEvent(person.id, event.id);
-      removeItem(listKey, event.id);
+      clearList(listKey);
+      fetchInitial(listKey, () => getPersonTimeline(person.id, null));
     }
   };
   const handleSubmitEvent = async (eventData: TimelineEventCreate) => {
     setIsSubmitting(true);
     try {
       if (eventToEdit) {
-        const updatedEvent = await updateTimelineEvent(
-          person.id,
-          eventToEdit.id,
-          eventData
-        );
-        updateItem(listKey, updatedEvent);
+        await updateTimelineEvent(person.id, eventToEdit.id, eventData);
+        clearList(listKey);
+        fetchInitial(listKey, () => getPersonTimeline(person.id, null));
       } else {
         await createTimelineEvent(person.id, eventData);
         clearList(listKey);
+        fetchInitial(listKey, () => getPersonTimeline(person.id, null));
       }
-      handleCloseDialog();
+      handleCloseDialog(); // Use the unified close handler
     } finally {
       setIsSubmitting(false);
     }
@@ -140,7 +134,7 @@ export const TimelineTab: React.FC<{ person: Person }> = ({ person }) => {
         <Button
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={handleAddEvent}
+          onClick={handleOpenCreateDialog}
         >
           Add Event
         </Button>
@@ -185,20 +179,12 @@ export const TimelineTab: React.FC<{ person: Person }> = ({ person }) => {
           );
         })}
       </Timeline>
-
       <EventFormDialog
-        open={!!eventToEdit}
-        onClose={() => setEventToEdit(null)}
+        open={isFormOpen}
+        onClose={handleCloseDialog}
         onSubmit={handleSubmitEvent}
         isSubmitting={isSubmitting}
-        // Pass initial data to pre-fill the form
         initialData={eventToEdit}
-      />
-      <EventFormDialog
-        open={isDialogOpen}
-        onClose={() => setIsDialogOpen(false)}
-        onSubmit={handleSubmitEvent}
-        isSubmitting={isSubmitting}
       />
       <Dialog
         open={!!dayToView}

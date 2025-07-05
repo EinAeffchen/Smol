@@ -6,12 +6,12 @@ import {
   Typography,
   Box,
   Button,
-  Grid,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { DuplicateGroup as GroupType } from "../types";
 import { DuplicateMediaCard } from "./DuplicateMediaCard";
 import { resolveDuplicates } from "../services/duplicates";

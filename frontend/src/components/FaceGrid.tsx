@@ -1,5 +1,3 @@
-// components/FaceGrid.tsx
-
 import React from "react";
 import { Box } from "@mui/material";
 import FaceCard from "./FaceCard";

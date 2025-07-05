@@ -1,18 +1,11 @@
-import React, { useCallback, useState, useEffect } from "react";
-import {
-  Container,
-  Typography,
-  Grid,
-  Box,
-  CircularProgress,
-} from "@mui/material";
+import { useCallback, useEffect } from "react";
+import { Container, Typography, Box, CircularProgress } from "@mui/material";
+import Grid from "@mui/material/Grid";
+
 import { useInView } from "react-intersection-observer";
 import TagCard from "../components/TagCard";
-import { useInfinite, CursorResponse } from "../hooks/useInfinite";
-import { Tag } from "../types";
 import { useListStore, defaultListState } from "../stores/useListStore";
 import { getTags } from "../services/tag";
-const ITEMS_PER_PAGE = 20;
 
 export default function TagsPage() {
   const listKey = "tags-all";

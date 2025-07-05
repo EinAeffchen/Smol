@@ -6,13 +6,11 @@ import {
   Container,
   Box,
   Typography,
-  Grid,
   CircularProgress,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { ENABLE_PEOPLE } from "../config";
 import { getPeople } from "../services/person";
-
-const ITEMS_PER_PAGE = 12;
 
 export default function PeoplePage() {
   const fetchPeople = useCallback(
@@ -25,7 +23,6 @@ export default function PeoplePage() {
 
   const {
     items: people,
-    setItems: setPeople,
     hasMore,
     loading,
     loaderRef,

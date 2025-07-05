@@ -7,7 +7,6 @@ import {
   CardMedia,
   CardContent,
   Typography,
-  Box,
   Radio,
   FormControlLabel,
   useTheme,

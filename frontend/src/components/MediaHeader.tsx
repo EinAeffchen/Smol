@@ -23,8 +23,6 @@ interface MediaHeaderProps {
 
 export function MediaHeader({
   media,
-  showExif,
-  onToggleExif,
   onOpenDialog,
 }: MediaHeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);

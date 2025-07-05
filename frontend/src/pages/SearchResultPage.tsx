@@ -7,7 +7,7 @@ import MediaCard from "../components/MediaCard";
 import PersonCard from "../components/PersonCard";
 import TagCard from "../components/TagCard";
 import { defaultListState, useListStore } from "../stores/useListStore";
-import { Media, Person, Tag } from "../types";
+import { Media, MediaPreview, Person, Tag } from "../types";
 import { searchMedia, searchPeople, searchTags } from "../services/search";
 import { API } from "../config";
 
@@ -21,13 +21,13 @@ const breakpointColumnsObj = {
   600: 2,
 };
 
-function isMedia(item: any): item is Media {
+function isMedia(item: MediaPreview | Person | Tag): item is MediaPreview {
   return item && "thumbnail_path" in item;
 }
-function isPerson(item: any): item is Person {
+function isPerson(item: MediaPreview | Person | Tag): item is Person {
   return item && "profile_face" in item;
 }
-function isTag(item: any): item is Tag {
+function isTag(item: MediaPreview | Person | Tag): item is Tag {
   return (
     item && !("tags" in item) && "name" in item && !("profile_face" in item)
   );
@@ -46,17 +46,27 @@ export default function SearchResultsPage() {
     return `${API}/api/search/${category}?${params.toString()}`;
   }, [category, query]);
 
-  const mediaListKey = useMemo(() => {
-    if (category !== "media" || !query) return "";
-    const params = new URLSearchParams({ query });
-    return `${API}/api/search/media?${params.toString()}`;
-  }, [category, query]);
-
-  const { items, hasMore, isLoading } = useListStore(
-    (state) => state.lists[listKey] || defaultListState
-  );
-  const { fetchInitial, loadMore } = useListStore();
+  const listState = useListStore((state) => state.lists[listKey]);
+  const items = listState?.items || [];
+  const hasMore = listState?.hasMore || defaultListState.hasMore;
+  const isLoading = listState?.isLoading || defaultListState.isLoading;
+  const { fetchInitial, loadMore, removeItem } = useListStore();
   const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
+
+  useEffect(() => {
+    if (inView && hasMore && !isLoading) {
+      const fetcherMap = {
+        media: (cursor?: string) => searchMedia(query, ITEMS_PER_PAGE, cursor),
+        person: (cursor?: string) =>
+          searchPeople(query, ITEMS_PER_PAGE, cursor),
+        tag: (cursor?: string) => searchTags(query, ITEMS_PER_PAGE, cursor),
+      };
+      const fetcher = fetcherMap[category];
+      if (fetcher) {
+        loadMore(listKey, fetcher);
+      }
+    }
+  }, [inView, hasMore, isLoading, listKey, category, query, loadMore]);
 
   useEffect(() => {
     if (!listKey) return;
@@ -77,7 +87,7 @@ export default function SearchResultsPage() {
   }, [listKey, category, query, fetchInitial, location.key]);
 
   const preloadedState = location.state as {
-    items: any[];
+    items: MediaPreview[] | Person[] | Tag[];
     searchType: "image";
   } | null;
   const displayItems = preloadedState?.items || items;
@@ -115,7 +125,7 @@ export default function SearchResultsPage() {
       : `Search Results for "${query}"`;
 
   const handleTagDeleted = (tagId: number) => {
-    items.filter((tag) => tag.id === tagId);
+    removeItem(listKey, tagId);
   };
 
   return (

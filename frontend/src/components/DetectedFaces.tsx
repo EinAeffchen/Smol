@@ -110,8 +110,8 @@ export default function DetectedFaces({
     faceIds: number[],
     assignedToPersonId: number
   ) => {
-    await onAssign(faceIds, assignedToPersonId);
     onClearSelection();
+    await onAssign(faceIds, assignedToPersonId);
   };
 
   const scrollContainerSx = !disableInternalScroll

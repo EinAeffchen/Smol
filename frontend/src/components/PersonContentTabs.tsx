@@ -5,9 +5,9 @@ import {
   Tab,
   CircularProgress,
   Typography,
-  Grid,
   Button,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import {
   Person,
   FaceRead,
@@ -70,11 +70,13 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
   const [hasLoadedSimilar, setHasLoadedSimilar] = useState(false);
   const [isProcessingFaces, setIsProcessingFaces] = useState(false);
 
-  const createActionHandler = (action: (...args: any[]) => Promise<any>) => {
-    return async (...args: any[]) => {
+  const createActionHandler = <T extends (...args: any[]) => Promise<any> | void>(
+    action: T
+  ): ((...args: Parameters<T>) => Promise<void>) => {
+    return async (...args: Parameters<T>) => {
       setIsProcessingFaces(true);
       try {
-        await action(...args);
+        await Promise.resolve(action(...args));
       } catch (error) {
         console.error("An error occurred during the face action:", error);
         // Optionally, show an error toast to the user here

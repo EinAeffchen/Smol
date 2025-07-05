@@ -14,7 +14,7 @@ export function PersonEditForm({
   saving,
 }: {
   initialPersonData: { name: string };
-  onSave: (form: any) => void;
+  onSave: (form: { name: string }) => void;
   saving: boolean;
 }) {
   const [form, setForm] = useState(initialPersonData);

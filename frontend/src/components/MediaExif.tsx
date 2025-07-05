@@ -4,10 +4,10 @@ import {
   CircularProgress,
   Typography,
   Paper,
-  Grid,
   Divider,
   Link as MuiLink,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { Link } from "react-router-dom";
 
 // Icons for a nicer look
@@ -21,6 +21,18 @@ import MyLocationIcon from "@mui/icons-material/MyLocation";
 import { API } from "../config";
 import { getExifData } from "../services/exif";
 
+interface ExifData {
+  make?: string;
+  model?: string;
+  timestamp?: string;
+  aperture?: string;
+  exposure_time?: string;
+  iso?: number;
+  focal_length?: number;
+  lat?: number;
+  lon?: number;
+}
+
 interface MediaExifProps {
   mediaId: number;
 }
@@ -30,7 +42,7 @@ export function MediaExif({ mediaId }: MediaExifProps) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">(
     "loading"
   );
-  const [exif, setExif] = useState<Record<string, any> | null>(null);
+  const [exif, setExif] = useState<ExifData | null>(null);
 
   useEffect(() => {
     // This effect runs only when the component is first mounted (i.e., when the tab is clicked)

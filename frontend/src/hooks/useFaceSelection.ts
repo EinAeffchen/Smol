@@ -1,6 +1,5 @@
-
-import { useState, useCallback } from 'react';
-import { FaceRead } from '../types';
+import { useState, useCallback, useEffect } from "react";
+import { FaceRead } from "../types";
 
 export const useFaceSelection = () => {
   const [selectedFaceIds, setSelectedFaceIds] = useState<number[]>([]);
@@ -13,13 +12,16 @@ export const useFaceSelection = () => {
     );
   }, []);
 
-  const onSelectAll = useCallback((faces: FaceRead[]) => {
-    if (selectedFaceIds.length < faces.length) {
-      setSelectedFaceIds(faces.map((f) => f.id));
-    } else {
-      setSelectedFaceIds([]);
-    }
-  }, [selectedFaceIds.length]);
+  const onSelectAll = useCallback(
+    (faces: FaceRead[]) => {
+      if (selectedFaceIds.length < faces.length) {
+        setSelectedFaceIds(faces.map((f) => f.id));
+      } else {
+        setSelectedFaceIds([]);
+      }
+    },
+    [selectedFaceIds.length]
+  );
 
   const onClearSelection = useCallback(() => {
     setSelectedFaceIds([]);
@@ -30,6 +32,6 @@ export const useFaceSelection = () => {
     onToggleSelect,
     onSelectAll,
     onClearSelection,
-    setSelectedFaceIds
+    setSelectedFaceIds,
   };
 };
