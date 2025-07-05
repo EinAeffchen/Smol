@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useCallback, useState } from "react";
+import React, { useRef, useCallback, useState, useEffect } from "react";
 import {
   Box,
   Typography,
@@ -15,6 +15,7 @@ import {
 } from "@mui/material";
 import { FaceRead, Person } from "../types";
 import FaceCard from "./FaceCard";
+import { useFaceSelection } from "../hooks/useFaceSelection";
 
 interface DetectedFacesProps {
   isProcessing: boolean;
@@ -25,7 +26,6 @@ interface DetectedFacesProps {
   onAssign: (faceIds: number[], personId: number) => void;
   onCreateMultiple?: (faceIds: number[], name?: string) => Promise<Person>;
   personId?: number; // Make optional for orphan faces
-  onClearSelection?: () => void;
 
   // --- Profile Actions ---
   profileFaceId?: number;
@@ -47,7 +47,6 @@ export default function DetectedFaces({
   onDetach,
   onAssign,
   personId,
-  onClearSelection,
   profileFaceId,
   onSetProfile,
   onLoadMore,
@@ -58,6 +57,13 @@ export default function DetectedFaces({
 }: DetectedFacesProps) {
   const theme = useTheme();
   const observerRef = useRef<IntersectionObserver | null>(null);
+  const {
+    selectedFaceIds,
+    onToggleSelect,
+    onSelectAll,
+    onClearSelection,
+    setSelectedFaceIds,
+  } = useFaceSelection();
   const lastCardRef = useCallback(
     (node: HTMLDivElement | null) => {
       if (isLoadingMore) return;
@@ -82,39 +88,12 @@ export default function DetectedFaces({
     [isLoadingMore, hasMore, onLoadMore]
   );
 
-  const [selectedFaceIds, setSelectedFaceIds] = useState<number[]>([]);
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [newPersonName, setNewPersonName] = useState("");
   const isAnythingSelected = selectedFaceIds.length > 0;
-
-  const handleSelectAll = () => {
-    // If not all are selected, select all. Otherwise, clear selection.
-    if (selectedFaceIds.length < faces.length) {
-      setSelectedFaceIds(faces.map((f) => f.id));
-    } else {
-      setSelectedFaceIds([]);
-    }
-  };
-
-  const handleToggleSelect = useCallback((faceId: number) => {
-    setSelectedFaceIds((prevSelected) =>
-      prevSelected.includes(faceId)
-        ? prevSelected.filter((id) => id !== faceId)
-        : [...prevSelected, faceId]
-    );
-  }, []);
-
-  const handleClearSelection = useCallback(() => {
-    setSelectedFaceIds([]);
-    if (onClearSelection) {
-      onClearSelection();
-    }
-  }, [onClearSelection]);
-
   useEffect(() => {
-    setSelectedFaceIds([]);
+    onClearSelection();
   }, [personId]);
-
   if (
     faces.length === 0 &&
     !isLoadingMore &&
@@ -126,6 +105,14 @@ export default function DetectedFaces({
   if (faces.length === 0 && isLoadingMore && onLoadMore) {
     return null;
   }
+
+  const handleAssign = async (
+    faceIds: number[],
+    assignedToPersonId: number
+  ) => {
+    await onAssign(faceIds, assignedToPersonId);
+    onClearSelection();
+  };
 
   const scrollContainerSx = !disableInternalScroll
     ? {
@@ -155,17 +142,17 @@ export default function DetectedFaces({
         </Typography>
         {isAnythingSelected && (
           <Stack direction="row" spacing={1} alignItems="center">
-            <Button size="small" onClick={handleClearSelection}>
+            <Button size="small" onClick={onClearSelection}>
               {selectedFaceIds.length} selected
             </Button>
             <Box sx={{ flexGrow: 1 }} />
 
-            {onAssign && personId && (
+            {personId && (
               <Button
                 variant="contained"
                 size="small"
                 disabled={isProcessing}
-                onClick={() => onAssign(selectedFaceIds, personId)}
+                onClick={() => handleAssign(selectedFaceIds, personId)}
               >
                 Assign
               </Button>
@@ -205,7 +192,7 @@ export default function DetectedFaces({
             {isProcessing && <CircularProgress size={20} />}
           </Stack>
         )}
-        <Button size="small" onClick={handleSelectAll}>
+        <Button size="small" onClick={() => onSelectAll(faces)}>
           {selectedFaceIds.length < faces.length ? "Select All" : "Select None"}
         </Button>
       </Box>
@@ -275,7 +262,7 @@ export default function DetectedFaces({
                   isProfile={face.id === profileFaceId}
                   onSetProfile={onSetProfile}
                   selected={selectedFaceIds.includes(face.id)}
-                  onToggleSelect={handleToggleSelect}
+                  onToggleSelect={onToggleSelect}
                 />
               </div>
             ))}
