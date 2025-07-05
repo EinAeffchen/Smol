@@ -42,7 +42,8 @@ from app.models import (
     ProcessingTask,
 )
 
-def get_image_taken_date(img: Image.Image, img_path: Path|None=None) -> datetime:
+def get_image_taken_date(img_path: Path|None=None) -> datetime:
+    img = Image.open(img_path)
     format_code = '%Y:%m:%d %H:%M:%S'
     try:
         exif = img._getexif()
@@ -68,7 +69,6 @@ def process_file(filepath: Path) -> Media:
         vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
         width = int(vs[0]["width"]) if vs else None
         height = int(vs[0]["height"]) if vs else None
-        img = Image.open(filepath.relative_to(MEDIA_DIR))
         media = Media(
             path=str(filepath.relative_to(MEDIA_DIR)),
             filename=filepath.name,
@@ -78,7 +78,7 @@ def process_file(filepath: Path) -> Media:
             height=height,
             faces_extracted=False,
             embeddings_created=False,
-            created_at=get_image_taken_date(img, img_path=filepath),
+            created_at=get_image_taken_date(img_path=filepath),
             embedding=None,
             phash=None
         )

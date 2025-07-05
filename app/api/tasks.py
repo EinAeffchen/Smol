@@ -137,8 +137,7 @@ async def start_creation_refresh(
 
             if not full_path.exists():
                 continue
-            img = Image.open(full_path)
-            media.created_at = get_image_taken_date(img, full_path)
+            media.created_at = get_image_taken_date(full_path)
 
         offset += batch_size
         session.commit()
