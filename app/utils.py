@@ -44,7 +44,10 @@ from app.models import (
 
 def get_image_taken_date(img: Image.Image, img_path: Path|None=None) -> datetime:
     format_code = '%Y:%m:%d %H:%M:%S'
-    exif = img._getexif()
+    try:
+        exif = img._getexif()
+    except AttributeError:
+        exif = None
     if exif and (creation_date:=exif.get(36867)):
         return datetime.strptime(creation_date, format_code)
     else:

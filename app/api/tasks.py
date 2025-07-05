@@ -136,7 +136,6 @@ async def start_creation_refresh(
                 continue
 
             if not full_path.exists():
-                delete_record(media.id, session)
                 continue
             img = Image.open(full_path)
             media.created_at = get_image_taken_date(img, full_path)
