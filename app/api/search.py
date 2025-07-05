@@ -147,7 +147,7 @@ def search_media(
 
 
 @router.get(
-    "/people",
+    "/person",
     summary="Search people by name",
     response_model=CursorPage[PersonReadSimple],
 )

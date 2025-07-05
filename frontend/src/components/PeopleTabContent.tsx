@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { PeopleSection } from "./PeopleSection";
-import { useFaceActions } from "../hooks/useFaceActions";
+import {
+  assignFace,
+  createPersonFromFaces,
+  deleteFace,
+  detachFace,
+} from "../services/faceActions";
 import { Person, Face } from "../types";
 
 interface PeopleTabContentProps {
@@ -16,32 +21,31 @@ export function PeopleTabContent({
 }: PeopleTabContentProps) {
   const [persons, setPersons] = useState(initialPersons);
   const [orphans, setOrphans] = useState(initialOrphans);
-  const faceActions = useFaceActions();
 
   useEffect(() => {
     setPersons(initialPersons);
     setOrphans(initialOrphans);
   }, [initialPersons, initialOrphans]);
 
-  const handleDeleteFace = async (faceId: number) => {
-    await faceActions.deleteFace(faceId);
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
+  const handleDeleteFace = async (faceIds: number[]) => {
+    await deleteFace(faceIds);
+    setOrphans((prev) => prev.filter((f) => !faceIds.includes(f)));
     onDataChanged();
   };
 
-  const handleAssignFace = async (faceId: number, personId: number) => {
-    await faceActions.assignFace(faceId, personId);
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
+  const handleAssignFace = async (faceIds: number[], personId: number) => {
+    await assignFace(faceIds, personId);
+    setOrphans((prev) => prev.filter((f) => !faceIds.includes(f)));
     onDataChanged();
   };
 
-  const handleDetachFace = async (faceId: number) => {
-    await faceActions.detachFace(faceId);
+  const handleDetachFace = async (faceIds: number[]) => {
+    await detachFace(faceIds);
     onDataChanged();
   };
 
   const handleCreateFace = async (faceId: number, data: any) => {
-    const newPerson = await faceActions.createPersonFromFace(faceId, data);
+    const newPerson = await createPersonFromFaces([faceId], name);
     setOrphans((prev) => prev.filter((f) => f.id !== faceId));
     onDataChanged();
     return newPerson;

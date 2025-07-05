@@ -1,8 +1,8 @@
 import React from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { Box, Typography, useTheme } from "@mui/material";
-import { API } from "../config";
 import { Person } from "../types";
+import { API } from "../config";
 
 const getInitials = (name = "") => {
   const parts = name.split(" ");

@@ -4,7 +4,7 @@ import { Box, Tabs, Tab, CircularProgress } from "@mui/material";
 import { TagsSection } from "./TagsSection";
 import SimilarContent from "./MediaRelatedContent";
 import { MediaExif } from "./MediaExif";
-import { MediaDetail } from "../types";
+import { MediaDetail, Tag } from "../types";
 import { Media } from "../types";
 import { ENABLE_PEOPLE } from "../config";
 import { PeopleTabContent } from "./PeopleTabContent";
@@ -30,11 +30,12 @@ function TabPanel(props: TabPanelProps) {
 interface MediaContentTabsProps {
   detail: MediaDetail;
   onTagUpdate: (updatedMedia: Media) => void;
+  onTagAdded: (newTag: Tag) => void;
   onDetailReload: () => void;
 }
 
 export function MediaContentTabs(props: MediaContentTabsProps) {
-  const { detail, onTagUpdate, onDetailReload } = props;
+  const { detail, onTagUpdate, onTagAdded, onDetailReload } = props;
 
   const [tabValue, setTabValue] = useState(0);
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) =>
@@ -44,6 +45,7 @@ export function MediaContentTabs(props: MediaContentTabsProps) {
   const renderTab = (label: string, icon: React.ReactNode) => (
     <Tab
       label={label}
+      icon={icon}
       iconPosition="start"
       sx={{ minHeight: "64px" }} // Taller tabs for a better look
     />
@@ -91,7 +93,7 @@ export function MediaContentTabs(props: MediaContentTabsProps) {
       <TabPanel value={tabValue} index={tabIndices.tags}>
         <TagsSection
           media={media}
-          onTagAdded={onDetailReload}
+          onTagAdded={onTagAdded}
           onUpdate={onTagUpdate}
         />
       </TabPanel>

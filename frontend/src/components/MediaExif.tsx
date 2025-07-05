@@ -4,10 +4,10 @@ import {
   CircularProgress,
   Typography,
   Paper,
-  Grid,
   Divider,
   Link as MuiLink,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { Link } from "react-router-dom";
 
 // Icons for a nicer look
@@ -19,6 +19,19 @@ import ShutterSpeedIcon from "@mui/icons-material/ShutterSpeed";
 import ApertureIcon from "@mui/icons-material/DonutLarge";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import { API } from "../config";
+import { getExifData } from "../services/exif";
+
+interface ExifData {
+  make?: string;
+  model?: string;
+  timestamp?: string;
+  aperture?: string;
+  exposure_time?: string;
+  iso?: number;
+  focal_length?: number;
+  lat?: number;
+  lon?: number;
+}
 
 interface MediaExifProps {
   mediaId: number;
@@ -29,15 +42,14 @@ export function MediaExif({ mediaId }: MediaExifProps) {
   const [status, setStatus] = useState<"loading" | "loaded" | "error">(
     "loading"
   );
-  const [exif, setExif] = useState<Record<string, any> | null>(null);
+  const [exif, setExif] = useState<ExifData | null>(null);
 
   useEffect(() => {
     // This effect runs only when the component is first mounted (i.e., when the tab is clicked)
     let isCancelled = false;
     setStatus("loading");
 
-    fetch(`${API}/api/media/${mediaId}/processors/exif`)
-      .then((res) => (res.ok ? res.json() : Promise.reject("Failed to fetch")))
+    getExifData(mediaId)
       .then((body) => {
         if (!isCancelled) {
           setExif(body);
@@ -144,7 +156,7 @@ export function MediaExif({ mediaId }: MediaExifProps) {
           <Divider sx={{ my: 3 }} />
           <MuiLink
             component={Link}
-            to={`/map?focus=${mediaId}`}
+            to={`/map?lat=${exif?.lat}&lng=${exif?.lon}`}
             sx={{
               display: "flex",
               alignItems: "center",

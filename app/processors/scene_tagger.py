@@ -88,9 +88,9 @@ class SceneTagger(MediaProcessor):
         session.add(media)
         sql = text(
             """
-                        INSERT OR REPLACE INTO media_embeddings(media_id, embedding)
-                        VALUES (:id, :emb)
-                        """
+            INSERT OR REPLACE INTO media_embeddings(media_id, embedding)
+            VALUES (:id, :emb)
+            """
         ).bindparams(id=media.id, emb=json.dumps(media.embedding))
         session.exec(sql)
         safe_commit(session)

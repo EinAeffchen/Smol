@@ -65,7 +65,12 @@ export interface MediaDetail {
   orphans: Face[];
 }
 
-export type TaskType = "process_media" | "cluster_persons" | "scan";
+export type TaskType =
+  | "process_media"
+  | "clean_missing_files"
+  | "cluster_persons"
+  | "scan"
+  | "find_duplicates";
 export type TaskStatus = "pending" | "running" | "completed" | "cancelled";
 
 export interface Task {
@@ -93,12 +98,25 @@ export interface SimilarPerson {
 export interface MediaPreview {
   id: number;
   filename: string;
-  thumbnail: string;
+  path: string;
+  size: number;
+  thumbnail_path: string;
   duration?: number;
   width?: number;
   height?: number;
   views: number;
   inserted_at: string;
+}
+
+export interface MediaDuplicate extends MediaPreview {
+  size: number;
+  path: string;
+}
+
+export interface DuplicateGroup {
+  id: number;
+  items: MediaDuplicate[];
+  group_id: number;
 }
 
 export interface SceneRead {
@@ -133,3 +151,52 @@ export interface MediaIndex {
   views: number;
   inserted_at: string; // ISO date
 }
+
+export interface CursorPage<T> {
+  items: T[];
+  next_cursor: string | null;
+}
+
+export interface DuplicatePage {
+  items: MediaPreview[][];
+  next_cursor: number | null;
+}
+
+// Timeline
+export interface TimelineEvent {
+  id: number;
+  title: string;
+  description?: string;
+  event_date: Date; // ISO date string e.g., "2025-06-30"
+  recurrence?: "yearly";
+  person_id: number;
+}
+
+export type TimelineEventCreate = Omit<TimelineEvent, "id" | "person_id">;
+export type TimelineEventUpdate = Partial<TimelineEventCreate>;
+export interface TimelineMediaItem {
+  type: "media";
+  date: string;
+  items: MediaPreview;
+}
+
+export interface TimelineEventItem {
+  type: "event";
+  date: string;
+  items: TimelineEvent;
+}
+export interface MediaItemGroup {
+  type: "media_group";
+  date: string;
+  items: MediaPreview[];
+}
+
+// This represents an event, which is displayed individually
+export interface EventDisplayItem {
+  type: "event";
+  date: string;
+  event: TimelineEvent;
+}
+
+export type TimelineItem = TimelineMediaItem | TimelineEventItem;
+export type TimelineDisplayItem = MediaItemGroup | EventDisplayItem;

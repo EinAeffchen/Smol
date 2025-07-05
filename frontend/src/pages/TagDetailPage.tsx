@@ -4,7 +4,7 @@ import { Container, Box, Typography, Grid } from "@mui/material";
 import MediaCard from "../components/MediaCard";
 import PersonCard from "../components/PersonCard";
 import { Tag, Media, Person } from "../types";
-import { API } from "../config";
+import { getTag } from "../services/tag";
 
 const BG_SECTION = "background.default";
 const TEXT_PRIMARY = "text.primary";
@@ -16,11 +16,7 @@ export default function TagDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    fetch(`${API}/api/tags/${id}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Tag not found");
-        return res.json() as Promise<Tag>;
-      })
+    getTag(id)
       .then(setTag)
       .catch(console.error);
   }, [id]);

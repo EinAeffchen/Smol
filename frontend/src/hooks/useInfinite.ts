@@ -7,15 +7,13 @@ export type CursorResponse<T> = {
 
 export function useInfinite<T>(
   fetchPage: (
-    cursor: string | null,
-    limit: number
+    cursor?: string
   ) => Promise<CursorResponse<T>>,
-  limit = 50,
   resetDeps: any[] = [],
   disabled: boolean = false
 ) {
   const [items, setItems] = useState<T[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const loaderRef = useRef<HTMLDivElement>(null);
@@ -24,25 +22,32 @@ export function useInfinite<T>(
     if (loading || !hasMore) return;
     setLoading(true);
 
-    fetchPage(cursor, limit).then(({ items: newItems, next_cursor }) => {
+    fetchPage(cursor).then(({ items: newItems, next_cursor }) => {
       setItems((prev) => [...prev, ...newItems]);
-      setCursor(next_cursor);
+      setCursor(next_cursor || undefined);
       setHasMore(next_cursor !== null);
       setLoading(false);
     });
-  }, [cursor, fetchPage, hasMore, limit, loading]);
+  }, [cursor, fetchPage, hasMore, loading]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    
     setItems([]);
-    setCursor(null);
+    setCursor(undefined);
     setHasMore(true);
     setLoading(true);
-    fetchPage(null, limit).then(({ items: firstItems, next_cursor }) => {
-      setItems(firstItems);
-      setCursor(next_cursor);
-      setHasMore(next_cursor !== null);
-      setLoading(false);
-    });
+    
+    fetchPage(undefined).then(({ items: firstItems, next_cursor }) => {
+      if (!controller.signal.aborted) {
+        setItems(firstItems);
+        setCursor(next_cursor || undefined);
+        setHasMore(next_cursor !== null);
+        setLoading(false);
+      }
+    }).catch(console.error);
+
+    return () => controller.abort();
   }, resetDeps);
 
   useEffect(() => {

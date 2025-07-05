@@ -139,7 +139,7 @@ def remove_tag(tag_id: int, session: Session = Depends(get_session)):
 
 # Assign / remove on Person
 @router.post(
-    "/persons/{person_id}/{tag_id}", status_code=status.HTTP_204_NO_CONTENT
+    "/person/{person_id}/{tag_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 def add_tag_to_person(
     person_id: int, tag_id: int, session: Session = Depends(get_session)
@@ -158,7 +158,7 @@ def add_tag_to_person(
 
 
 @router.delete(
-    "/persons/{person_id}/{tag_id}", status_code=status.HTTP_204_NO_CONTENT
+    "/person/{person_id}/{tag_id}", status_code=status.HTTP_204_NO_CONTENT
 )
 def remove_tag_from_person(
     person_id: int, tag_id: int, session: Session = Depends(get_session)

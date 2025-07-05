@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useEffect } from "react";
 import Masonry from "react-masonry-css";
 import ImportExportIcon from "@mui/icons-material/ImportExport";
-import { API } from "../config";
 import { useInView } from "react-intersection-observer";
 
 import MediaCard from "../components/MediaCard";
@@ -13,7 +12,8 @@ import {
   MenuItem,
   Container,
 } from "@mui/material";
-import { useMediaStore, defaultListState } from "../stores/useMediaStore";
+import { useListStore, defaultListState } from "../stores/useListStore";
+import { getImages } from "../services/media";
 
 const breakpointColumnsObj = {
   default: 5,
@@ -30,24 +30,21 @@ export default function ImagesPage() {
     null
   );
 
-  const baseUrl = useMemo(() => {
-    const params = new URLSearchParams({ sort: sortOrder });
-    return `${API}/api/media/images?${params.toString()}`;
-  }, [sortOrder]);
-  const { items, hasMore, isLoading } = useMediaStore(
-    (state) => state.lists[baseUrl] || defaultListState
+  const listKey = useMemo(() => `images-${sortOrder}`, [sortOrder]);
+  const { items, hasMore, isLoading } = useListStore(
+    (state) => state.lists[listKey] || defaultListState
   );
-  const { fetchInitial, loadMore } = useMediaStore();
+  const { fetchInitial, loadMore } = useListStore();
 
   useEffect(() => {
-    fetchInitial(baseUrl);
-  }, [baseUrl, fetchInitial]);
+    fetchInitial(listKey, () => getImages(null, sortOrder));
+  }, [listKey, fetchInitial, sortOrder]);
 
   useEffect(() => {
     if (inView && hasMore && !isLoading) {
-      loadMore(baseUrl);
+      loadMore(listKey, (cursor) => getImages(cursor, sortOrder));
     }
-  }, [inView, hasMore, isLoading, loadMore, baseUrl]);
+  }, [inView, hasMore, isLoading, loadMore, listKey, sortOrder]); // Add listKey and sortOr
   const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setSortMenuAnchorEl(event.currentTarget);
   };
@@ -107,8 +104,7 @@ export default function ImagesPage() {
             <div key={media.id}>
               <MediaCard
                 media={media}
-                mediaListKey={baseUrl}
-                sortOrder={sortOrder}
+                mediaListKey={listKey}
               />
             </div>
           ))}

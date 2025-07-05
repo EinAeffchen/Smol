@@ -9,10 +9,9 @@ import {
   IconButton,
   Divider,
 } from "@mui/material";
-import { MoreVert, Visibility, Vrpano, Delete } from "@mui/icons-material";
+import { MoreVert, Vrpano, Delete } from "@mui/icons-material";
 import { Media } from "../types";
 import { READ_ONLY } from "../config";
-
 const ERROR_COLOR = "error.main";
 
 interface MediaHeaderProps {
@@ -24,8 +23,6 @@ interface MediaHeaderProps {
 
 export function MediaHeader({
   media,
-  showExif,
-  onToggleExif,
   onOpenDialog,
 }: MediaHeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -40,8 +37,13 @@ export function MediaHeader({
   };
 
   const handleAction = (type: "convert" | "deleteRecord" | "deleteFile") => {
-    onOpenDialog(type);
-    handleMenuClose();
+    try {
+      onOpenDialog(type);
+    } catch (error) {
+      console.error("Failed to handle action:", error);
+    } finally {
+      handleMenuClose();
+    }
   };
 
   return (

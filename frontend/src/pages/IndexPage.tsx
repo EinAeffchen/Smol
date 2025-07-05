@@ -11,9 +11,9 @@ import {
 import Masonry from "react-masonry-css";
 import ImportExportIcon from "@mui/icons-material/ImportExport";
 
-import { useMediaStore, defaultListState } from "../stores/useMediaStore";
+import { useListStore, defaultListState } from "../stores/useListStore";
 import MediaCard from "../components/MediaCard";
-import { API } from "../config";
+import { getMediaList } from "../services/media";
 
 const breakpointColumnsObj = {
   default: 5,
@@ -31,26 +31,33 @@ export default function IndexPage() {
     null
   );
 
-  const baseUrl = useMemo(() => {
-    const params = new URLSearchParams({ sort: sortOrder });
-    tags.forEach((tag) => params.append("tags", tag));
-    return `${API}/api/media/?${params.toString()}`;
+  const mediaListKey = useMemo(() => {
+    const tagString = tags.sort().join(",");
+    return `all-media-${sortOrder}-${tagString}`;
   }, [sortOrder, tags]);
 
-  const { items, hasMore, isLoading } = useMediaStore(
-    (state) => state.lists[baseUrl] || defaultListState
+  const listState = useListStore(
+    (state) => state.lists[mediaListKey]
   );
-  const { fetchInitial, loadMore } = useMediaStore();
+  const items = listState?.items || [];
+  const hasMore = listState?.hasMore || defaultListState.hasMore;
+  const isLoading = listState?.isLoading || defaultListState.isLoading;
+  const { fetchInitial, loadMore } = useListStore();
 
   useEffect(() => {
-    fetchInitial(baseUrl);
-  }, [baseUrl, fetchInitial]);
+    const controller = new AbortController();
+    fetchInitial(mediaListKey, () => getMediaList(null, sortOrder, tags));
+    return () => controller.abort();
+  }, [mediaListKey, fetchInitial, sortOrder, tags]);
 
   useEffect(() => {
+    const controller = new AbortController();
     if (inView && hasMore && !isLoading) {
-      loadMore(baseUrl);
+      loadMore(mediaListKey, (cursor) => getMediaList(cursor, sortOrder, tags))
+        .catch(console.error);
     }
-  }, [inView, hasMore, isLoading, loadMore, baseUrl]);
+    return () => controller.abort();
+  }, [inView, hasMore, isLoading, loadMore, mediaListKey, sortOrder, tags]);
 
   const handleSortMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
     setSortMenuAnchorEl(event.currentTarget);
@@ -101,8 +108,7 @@ export default function IndexPage() {
           <div key={media.id}>
             <MediaCard
               media={media}
-              mediaListKey={baseUrl}
-              sortOrder={sortOrder}
+              mediaListKey={mediaListKey}
             />
           </div>
         ))}

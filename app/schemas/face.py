@@ -11,6 +11,7 @@ class FaceRead(BaseModel):
 
 class FaceAssign(BaseModel):
     person_id: int
+    face_ids: list[int]
 
 
 class FaceAssignReturn(BaseModel):

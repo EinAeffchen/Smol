@@ -1,136 +1,285 @@
-import React, { useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Container,
   Box,
   Typography,
-  Grid,
   CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  TextField,
+  DialogActions,
+  Button,
+  Stack,
+  Paper,
+  Autocomplete,
 } from "@mui/material";
-import { useInfinite, CursorResponse } from "../hooks/useInfinite";
-import FaceCard from "../components/FaceCard";
-import { FaceRead } from "../types";
-import { API } from "../config";
-
-const ITEMS_PER_PAGE = 48;
+import { useNavigate } from "react-router-dom";
+import { useInView } from "react-intersection-observer";
+import { useListStore, defaultListState } from "../stores/useListStore";
+import { getOrphanFaces } from "../services/face";
+import {
+  assignFace,
+  createPersonFromFaces,
+  deleteFace,
+} from "../services/faceActions";
+import { searchPersonsByName } from "../services/personActions";
+import { Person } from "../types";
+import { FaceGrid } from "../components/FaceGrid"; // Import our DUMB grid component
 
 export default function OrphanFacesPage() {
-  const fetchOrphans = useCallback(
-    (cursor: string | null, limit: number) =>
-      fetch(
-        `${API}/api/faces/orphans${
-          cursor ? `?cursor=${cursor}&` : "?"
-        }limit=${limit}`
-      ).then((res) => {
-        if (!res.ok) throw new Error(res.statusText);
-        return res.json() as Promise<CursorResponse<FaceRead>>;
-      }),
-    [API]
-  );
+  const navigate = useNavigate();
+  const listKey = "orphan-faces";
 
+  // --- State Management ---
   const {
     items: orphans,
-    setItems: setOrphans,
     hasMore,
-    loading,
-    loaderRef,
-  } = useInfinite<FaceRead>(fetchOrphans, ITEMS_PER_PAGE, []);
+    isLoading,
+  } = useListStore((state) => state.lists[listKey] || defaultListState);
+  const { fetchInitial, loadMore, removeItems, clearList } = useListStore();
 
-  // assign a face to an existing person
-  async function assignFace(faceId: number, personId: number) {
-    await fetch(`${API}/api/faces/${faceId}/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ person_id: personId }),
-    });
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
-  }
+  // All UI state is now managed directly by the page
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedFaceIds, setSelectedFaceIds] = useState<number[]>([]);
 
-  // create a new person from a face
-  async function createPersonFromFace(faceId: number, data: any) {
-    const res = await fetch(`${API}/api/faces/${faceId}/create_person`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
-    });
-    const json = await res.json();
-    const p = (json as any).person ?? (json as any);
-    if (p?.id) window.location.href = `/person/${p.id}`;
-  }
+  // State for dialogs
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [newPersonName, setNewPersonName] = useState("");
+  const [personOptions, setPersonOptions] = useState<Person[]>([]);
 
-  // delete a face entirely
-  async function deleteFace(faceId: number) {
-    await fetch(`${API}/api/faces/${faceId}`, { method: "DELETE" });
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
-  }
-  // detach a face
-  async function detachFace(faceId: number) {
-    await fetch(`${API}/api/faces/${faceId}/detach`, { method: "POST" });
-    setOrphans((prev) => prev.filter((f) => f.id !== faceId));
-  }
+  // --- Infinite Scroll ---
+  // The 'skip' option is a crucial fix: it disables the observer while data is loading.
+  const { ref: loaderRef, inView } = useInView({
+    threshold: 0.5,
+    skip: isLoading || !hasMore,
+    rootMargin: "0px 0px 200px 0px",
+  });
 
-  // initial loading state
-  if (loading && orphans.length === 0) {
+  useEffect(() => {
+    // Only call fetchInitial once when the component mounts
+    if (orphans.length === 0) {
+      fetchInitial(listKey, () => getOrphanFaces(null));
+    }
+  }, [fetchInitial, listKey, orphans.length]);
+
+  useEffect(() => {
+    if (inView) {
+      loadMore(listKey, (cursor) => getOrphanFaces(cursor));
+    }
+  }, [inView, loadMore, listKey]);
+
+  // --- Action Handlers ---
+  const handleBulkDelete = async () => {
+    if (
+      !window.confirm(
+        `Are you sure you want to delete ${selectedFaceIds.length} faces?`
+      )
+    )
+      return;
+    setIsProcessing(true);
+    try {
+      await deleteFace(selectedFaceIds);
+      removeItems(listKey, selectedFaceIds);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkCreate = async () => {
+    if (!newPersonName.trim()) return;
+    setIsProcessing(true);
+    try {
+      const newPerson = await createPersonFromFaces(selectedFaceIds, newPersonName);
+      if (!newPerson?.id) {
+        throw new Error("Failed to get ID for newly created person.");
+      }
+      removeItems(listKey, selectedFaceIds);
+
+      const newPersonMediaListKey = `person-${newPerson.id}-media-appearances`;
+      const newPersonFacesListKey = `/api/person/${newPerson.id}/faces`; // The key used on PersonDetailPage
+
+      clearList(newPersonMediaListKey);
+      clearList(newPersonFacesListKey);
+
+      setCreateDialogOpen(false);
+      if (newPerson?.id) navigate(`/person/${newPerson.id}`);
+    } catch (error) {
+      console.error("Failed to create and navigate to new person:", error);
+      alert("Failed to create new person.");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleOpenAssignDialog = () => {
+    searchPersonsByName("").then(setPersonOptions);
+    setAssignDialogOpen(true);
+  };
+
+  const handleConfirmAssign = async (person: Person | null) => {
+    if (!person) return;
+    setIsProcessing(true);
+    try {
+      await assignFace(selectedFaceIds, person.id);
+      removeItems(listKey, selectedFaceIds);
+      setAssignDialogOpen(false);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleToggleSelect = useCallback((faceId: number) => {
+    setSelectedFaceIds((prev) =>
+      prev.includes(faceId)
+        ? prev.filter((id) => id !== faceId)
+        : [...prev, faceId]
+    );
+  }, []);
+
+  const handleSelectAll = () => {
+    if (selectedFaceIds.length < orphans.length) {
+      setSelectedFaceIds(orphans.map((f) => f.id));
+    } else {
+      setSelectedFaceIds([]);
+    }
+  };
+
+  if (isLoading && orphans.length === 0) {
     return (
-      <Box textAlign="center" py={4}>
-        <CircularProgress color="secondary" />
+      <Box
+        display="flex"
+        justifyContent="center"
+        alignItems="center"
+        height="calc(100vh - 64px)"
+      >
+        <CircularProgress />
       </Box>
     );
   }
 
-  // no orphans
-  if (!loading && orphans.length === 0) {
-    return (
-      <Typography
-        variant="body1"
-        align="center"
-        sx={{ py: 4, color: "text.secondary" }}
-      >
-        No unassigned faces.
-      </Typography>
-    );
-  }
-
   return (
-    <Container
-      maxWidth={false}
-      sx={{ pt: 4, pb: 7, bgcolor: "background.default" }}
-    >
-      <Typography variant="h4" color="text.primary" gutterBottom>
-        Unassigned Faces
-      </Typography>
-
-      <Grid container spacing={2}>
-        {orphans.map((face) => (
-          <Grid key={face.id} size={{ xs: 4, sm: 3, md: 2, lg: 1 }}>
-            <FaceCard
-              face={face}
-              isProfile={false}
-              onSetProfile={() => {}}
-              onAssign={(pid) => assignFace(face.id, pid)}
-              onCreate={(data) => createPersonFromFace(face.id, data)}
-              onDelete={() => deleteFace(face.id)}
-              onDetach={() => detachFace(face.id)}
-            />
-          </Grid>
-        ))}
-      </Grid>
-
-      {loading && (
-        <Box textAlign="center" py={2}>
-          <CircularProgress color="secondary" />
-        </Box>
-      )}
-
-      {!loading && hasMore && (
-        <Box
-          ref={loaderRef}
-          textAlign="center"
-          py={2}
-          sx={{ color: "text.secondary" }}
+    <Container maxWidth="xl" sx={{ pt: 4, pb: 7 }}>
+      {/* The header and toolbar are now part of the page's main layout flow */}
+      <Box sx={{ display: "flex", alignItems: "center", mb: 2, gap: 2 }}>
+        <Typography variant="h4" sx={{ flexGrow: 1 }}>
+          Unassigned Faces
+        </Typography>
+        <Button
+          size="small"
+          onClick={handleSelectAll}
+          disabled={orphans.length === 0}
         >
-          Scroll to load more…
+          {selectedFaceIds.length < orphans.length
+            ? "Select All"
+            : "Select None"}
+        </Button>
+      </Box>
+
+      {selectedFaceIds.length > 0 && (
+        <Paper elevation={2} sx={{ p: 1, mb: 2, bgcolor: "action.selected" }}>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Typography sx={{ ml: 1 }} variant="subtitle1">
+              {selectedFaceIds.length} selected
+            </Typography>
+            <Box sx={{ flexGrow: 1 }} />
+            <Button
+              variant="contained"
+              size="small"
+              disabled={isProcessing}
+              onClick={handleOpenAssignDialog}
+            >
+              Assign...
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              disabled={isProcessing}
+              onClick={() => setCreateDialogOpen(true)}
+            >
+              Create...
+            </Button>
+            <Button
+              variant="outlined"
+              color="error"
+              size="small"
+              disabled={isProcessing}
+              onClick={handleBulkDelete}
+            >
+              Delete
+            </Button>
+            {isProcessing && <CircularProgress size={20} />}
+          </Stack>
+        </Paper>
+      )}
+
+      {orphans.length === 0 && !isLoading ? (
+        <Typography align="center" sx={{ py: 4 }}>
+          No unassigned faces found.
+        </Typography>
+      ) : (
+        <FaceGrid
+          faces={orphans}
+          selectedFaceIds={selectedFaceIds}
+          onToggleSelect={handleToggleSelect}
+        />
+      )}
+
+      {/* The loader and sentinel are at the page level */}
+      {isLoading && orphans.length > 0 && (
+        <Box textAlign="center" py={4}>
+          <CircularProgress />
         </Box>
       )}
+      {hasMore && <Box ref={loaderRef} sx={{ height: "50px" }} />}
+
+      {/* --- Dialogs --- */}
+      {/* Assign Dialog */}
+      <Dialog
+        open={assignDialogOpen}
+        onClose={() => setAssignDialogOpen(false)}
+        fullWidth
+      >
+        <DialogTitle>Assign {selectedFaceIds.length} faces to...</DialogTitle>
+        <DialogContent>
+          <Autocomplete
+            options={personOptions}
+            getOptionLabel={(o) => o.name || "Unknown"}
+            onChange={(_, val) => handleConfirmAssign(val)}
+            renderInput={(params) => (
+              <TextField {...params} label="Search for a person" autoFocus />
+            )}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+        </DialogActions>
+      </Dialog>
+      {/* Create Dialog */}
+      <Dialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+      >
+        <DialogTitle>Create New Person</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            label="Person Name"
+            type="text"
+            fullWidth
+            variant="standard"
+            value={newPersonName}
+            onChange={(e) => setNewPersonName(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCreateDialogOpen(false)}>Cancel</Button>
+          <Button onClick={handleBulkCreate} disabled={isProcessing}>
+            Create
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 }

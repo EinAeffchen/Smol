@@ -17,8 +17,8 @@ import PersonIcon from "@mui/icons-material/Person";
 import DeleteIcon from "@mui/icons-material/Delete";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { Tag } from "../types";
+import { deleteTag } from "../services/tagActions";
 import { API } from "../config";
-
 interface TagCardProps {
   tag: Tag;
   onTagDeleted: (tagId: number) => void;
@@ -42,11 +42,7 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
   const handleConfirmDelete = async () => {
     handleCloseConfirmDialog();
     try {
-      const response = await fetch(`${API}/api/tags/${tag.id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok)
-        throw new Error(`Failed to delete tag: ${response.status}`);
+      await deleteTag(tag.id);
       onTagDeleted(tag.id);
     } catch (error) {
       console.error("Error during tag deletion:", error);

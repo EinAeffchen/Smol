@@ -3,7 +3,6 @@ import { Box, Paper } from "@mui/material";
 import { VideoWithPreview } from "./VideoPlayer";
 import { Media } from "../types";
 import { API } from "../config";
-
 interface MediaDisplayProps {
   media: Media;
 }

@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import L from "leaflet";
 import { ClusterPoint } from "../components/ClusterMarker";
-import { MediaLocation } from "../pages/MapPage";
+import { MediaLocation } from "../types";
 
 // The size of our grid cells in pixels. A larger value means more clustering.
 const CELL_SIZE_PIXELS = 80;

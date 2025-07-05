@@ -4,16 +4,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
+
+from fastapi import HTTPException
 import ffmpeg
 import numpy as np
 import piexif
 from PIL import Image, UnidentifiedImageError, ImageOps
+from PIL.Image import Image as ImageType
 from scenedetect import AdaptiveDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlmodel import Session, select
 from tqdm import tqdm
-from sqlalchemy import text
+from sqlalchemy import delete, text
 import json
+import imagehash
 
 
 from app.config import (
@@ -27,14 +31,24 @@ from app.config import (
 from app.database import engine, safe_commit
 from app.logger import logger
 from app.models import (
+    ExifData,
     Face,
     Media,
+    MediaTagLink,
     Person,
     PersonSimilarity,
     Scene,
+    DuplicateMedia,
     ProcessingTask,
 )
 
+def get_image_taken_date(img: Image.Image, img_path: Path|None=None) -> datetime:
+    format_code = '%Y:%m:%d %H:%M:%S'
+    exif = img._getexif()
+    if exif and (creation_date:=exif.get(36867)):
+        return datetime.strptime(creation_date, format_code)
+    else:
+        return datetime.fromtimestamp(img_path.stat().st_mtime) # fallback use last modification time
 
 def process_file(filepath: Path) -> Media:
     with Session(engine) as session:
@@ -48,14 +62,10 @@ def process_file(filepath: Path) -> Media:
             duration = float(probe["format"].get("duration", 0))
         else:
             duration = None
-        creation_timestamp = filepath.stat().st_dev or filepath.stat().st_mtime
-        creation_date = datetime.fromtimestamp(
-            creation_timestamp, timezone.utc
-        )
         vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
         width = int(vs[0]["width"]) if vs else None
         height = int(vs[0]["height"]) if vs else None
-
+        img = Image.open(filepath.relative_to(MEDIA_DIR))
         media = Media(
             path=str(filepath.relative_to(MEDIA_DIR)),
             filename=filepath.name,
@@ -65,9 +75,12 @@ def process_file(filepath: Path) -> Media:
             height=height,
             faces_extracted=False,
             embeddings_created=False,
-            created_at=creation_date,
+            created_at=get_image_taken_date(img, img_path=filepath.relative_to(MEDIA_DIR)),
             embedding=None,
+            phash=None
         )
+        if media.duration is None:
+            media.phash = generate_perceptual_hash(media)
         return media
 
 
@@ -110,12 +123,23 @@ def fix_image_rotation(full_path: Path) -> None:
     transposed.save(full_path, format=img.format, exif=exif_bytes)
 
 
+def generate_perceptual_hash(media: Media) -> str:
+    full_path = MEDIA_DIR / media.path
+    try:
+        img = Image.open(full_path)
+    except UnidentifiedImageError:
+        logger.warning("Skipping %s, not an image!", media.path)
+    try:
+        return str(imagehash.phash(img))
+    except OSError:
+        logger.warning("Image %s is truncated and can't be processed:", media.path)
+
+
 def generate_thumbnail(media: Media) -> str | None:
     thumb_folder = get_thumb_folder(THUMB_DIR / "media")
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
     full_path = MEDIA_DIR / filepath
-    fix_image_rotation(full_path)
     if filepath.suffix.lower() in VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)
@@ -125,6 +149,7 @@ def generate_thumbnail(media: Media) -> str | None:
         )
     else:
         try:
+            fix_image_rotation(full_path)
             img = Image.open(full_path)
             img = ImageOps.exif_transpose(img)
         except UnidentifiedImageError:
@@ -183,10 +208,16 @@ def get_person_embedding(
 
 def update_person_embedding(session: Session, person_id: int):
     centroid = get_person_embedding(session, person_id, new=True)
-
+    logger.info("Updating person_embedding!")
+    del_sql = text(
+        """
+        DELETE FROM person_embeddings WHERE person_id=:p_id
+    """
+    ).bindparams(p_id=person_id)
+    session.exec(del_sql)
     sql = text(
         """
-        INSERT OR REPLACE INTO person_embeddings(person_id, embedding)
+        INSERT INTO person_embeddings(person_id, embedding)
         VALUES (:p_id, :emb)
     """
     ).bindparams(p_id=person_id, emb=centroid)
@@ -385,3 +416,68 @@ def refresh_similarities_for_person(person_id: int) -> None:
                     )
                 )
         safe_commit(session)
+
+
+def delete_record(media_id, session):
+    media = session.get(Media, media_id)
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    thumbnail = media.thumbnail_path
+    if not thumbnail:
+        thumbnail = str(media.id)
+    thumb = Path(THUMB_DIR / thumbnail)
+    if thumb.is_file():
+        thumb.unlink()
+    faces = session.exec(select(Face).where(Face.media_id == media.id)).all()
+    for face in faces:
+        sql = text(
+            """
+            DELETE FROM face_embeddings
+            WHERE face_id=:f_id
+            """
+        ).bindparams(f_id=face.id)
+        session.exec(sql)
+        thumb = Path(THUMB_DIR / face.thumbnail_path)
+        if thumb.is_file():
+            thumb.unlink()
+
+    sql = text(
+        """
+        DELETE FROM media_embeddings
+        WHERE media_id=:m_id
+        """
+    ).bindparams(m_id=media.id)
+    session.exec(sql)
+
+    session.exec(delete(Face).where(Face.media_id == media_id))
+    session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
+    session.exec(delete(ExifData).where(ExifData.media_id == media_id))
+    session.exec(delete(Scene).where(Scene.media_id == media.id))
+    session.exec(
+        delete(DuplicateMedia).where(DuplicateMedia.media_id == media.id)
+    )
+    session.delete(media)
+
+    safe_commit(session)
+
+
+def delete_file(session: Session, media_id: int):
+    media = session.get(Media, media_id)
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    delete_record(media_id, session)
+
+    # delete original file
+    orig = MEDIA_DIR / media.path
+    if orig.exists():
+        orig.unlink()
+
+    # delete thumbnail
+    if not media.thumbnail_path:
+        thumb = THUMB_DIR / f"{media.id}.jpg"
+    else:
+        thumb = THUMB_DIR / media.thumbnail_path
+    if thumb.exists():
+        thumb.unlink()

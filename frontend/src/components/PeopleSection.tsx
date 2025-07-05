@@ -1,6 +1,6 @@
 import React, { Suspense } from "react";
 import { Box, Typography, CircularProgress } from "@mui/material";
-import { MediaDetail, Person, Face } from "../types";
+import { Person, Face } from "../types";
 import PersonCard from "./PersonCard";
 import { READ_ONLY } from "../config";
 
@@ -9,10 +9,10 @@ const DetectedFaces = React.lazy(() => import("./DetectedFaces"));
 interface PeopleSectionProps {
   persons: Person[];
   orphans: Face[];
-  onAssign: (faceId: number, personId: number) => Promise<void>;
-  onCreateFace: (faceId: number, data: any) => Promise<any>;
-  onDeleteFace: (faceId: number) => Promise<void>;
-  onDetachFace: (faceId: number) => Promise<void>;
+  onAssign: (faceIds: number[], personId: number) => Promise<void>;
+  onCreateFace: (faceIds: number[], data: { name: string }) => Promise<any>;
+  onDeleteFace: (faceIds: number[]) => Promise<void>;
+  onDetachFace: (faceIds: number[]) => Promise<void>;
 }
 
 const SectionLoader = () => (
@@ -64,15 +64,16 @@ export function PeopleSection({
         <Box mb={4}>
           <Suspense fallback={<SectionLoader />}>
             <DetectedFaces
+              isProcessing={false}
+              allowIndividualActions={true}
+              onSingleFaceDelete={(faceId) => onDeleteFace([faceId])}
               title="Unassigned Faces"
               faces={orphans}
               onAssign={onAssign}
-              onSetProfile={() => {
-                alert("No profile to set");
-              }}
-              onCreate={onCreateFace}
+              onSetProfile={() => {}}
               onDelete={onDeleteFace}
               onDetach={onDetachFace}
+              onCreateMultiple={onCreateFace}
             />
           </Suspense>
         </Box>

@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
 import mimetypes
 
-from app.api import face, media, person, search, tags, tasks
+from app.api import face, media, person, search, tags, tasks, duplicates
 from app.api.processors import router as proc_router
 from app.config import (
     DATABASE_URL,
@@ -24,7 +24,7 @@ from app.config import (
 from app.database import init_db, init_vec_index
 from app.logger import logger
 from app.processor_registry import load_processors
-from app.api.tasks import _run_scan_and_chain
+from app.api.tasks import _run_cleanup_and_chain
 from sqlalchemy import select, or_
 from app.models import ProcessingTask
 from app.database import engine
@@ -58,13 +58,13 @@ def scheduled_scan_job():
             return
 
         # Create the first task in the chain
-        task = ProcessingTask(task_type="scan", total=0, processed=0)
+        task = ProcessingTask(task_type="clean_missing_files", total=0, processed=0)
         session.add(task)
         session.commit()
         session.refresh(task)
 
         # Start the chain
-        _run_scan_and_chain(task.id)
+        _run_cleanup_and_chain(task.id)
 
 
 @asynccontextmanager
@@ -120,11 +120,12 @@ async def add_accept_ranges_header(request: Request, call_next):
 
 app.include_router(proc_router, prefix="/api", tags=["processors"])
 app.include_router(media, prefix="/api/media", tags=["media"])
-app.include_router(person, prefix="/api/persons", tags=["persons"])
+app.include_router(person, prefix="/api/person", tags=["person"])
 app.include_router(tasks, prefix="/api/tasks", tags=["tasks"])
 app.include_router(face, prefix="/api/faces", tags=["faces"])
 app.include_router(tags, prefix="/api/tags", tags=["tags"])
 app.include_router(search, prefix="/api/search", tags=["search"])
+app.include_router(duplicates, prefix="/api/duplicates", tags=["duplicates"])
 
 app.mount(
     "/thumbnails",

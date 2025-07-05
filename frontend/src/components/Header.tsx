@@ -23,8 +23,12 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SettingsIcon from "@mui/icons-material/Settings";
 import TaskManager from "../components/TasksPanel";
 import ThemeToggleButton from "../components/ThemeToggleButton";
-import { API, READ_ONLY, ENABLE_PEOPLE } from "../config";
+import { searchByImage } from "../services/searchActions";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import { READ_ONLY, ENABLE_PEOPLE } from "../config";
+import { API } from "../config";
+
+const logoUrl = `${API}/static/logo.png`;
 
 const StyledNavLink = styled(RouterNavLink)(({ theme }) => ({
   color: theme.palette.text.primary,
@@ -70,7 +74,7 @@ function MobileDrawer({
         <Link to="/" onClick={onClose}>
           <Box
             component="img"
-            src={`${API}/static/logo.png`}
+            src={logoUrl}
             alt="SMOL logo"
             sx={{ height: 40 }}
           />
@@ -124,11 +128,12 @@ export function Header() {
     ["Faces", "/orphanfaces"],
     ["Map", "/map"],
     ["Geotagger", "/maptagger"],
+    ["Duplicates", "/duplicates"],
   ];
 
-  const pathsToExcludeInReadOnly: string[] = ["/orphanfaces", "/maptagger"];
+  const pathsToExcludeInReadOnly: string[] = ["/orphanfaces", "/maptagger", "/duplicates"];
   const pathsToExcludeInPeopleDisabled: string[] = ["/people"];
-  let visibleNavItems = allNavItems.filter(
+  const visibleNavItems = allNavItems.filter(
     ([, path]) =>
       !(READ_ONLY && pathsToExcludeInReadOnly.includes(path)) &&
       !(!ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path))
@@ -140,10 +145,10 @@ export function Header() {
     if (!trimmed) return;
     navigate(
       `/searchresults?` +
-        new URLSearchParams({ category, query: trimmed }).toString()
+        new URLSearchParams({ category, query: trimmed }).toString(),
+      { replace: true, state: { timestamp: Date.now() } }
     );
     setIsSearchVisible(false);
-    setQ("");
   }
 
   const renderDefaultHeader = () => (
@@ -151,19 +156,19 @@ export function Header() {
       <Link to="/">
         <Box
           component="img"
-          src={`${API}/static/logo.png`}
+          src={logoUrl}
           alt="SMOL logo"
           sx={{ height: 48, display: { xs: "none", sm: "block" }, mr: 2 }}
         />
         <Box
           component="img"
-          src={`${API}/static/logo.png`}
+          src={logoUrl}
           alt="SMOL logo"
           sx={{ height: 40, display: { xs: "block", sm: "none" } }}
         />
       </Link>
 
-      <Box sx={{ display: { xs: "none", md: "flex" } /* ... */ }}>
+      <Box sx={{ display: { xs: "none", lg: "flex" } /* ... */ }}>
         {renderSearchInputs()}
       </Box>
 
@@ -171,13 +176,13 @@ export function Header() {
 
       <Box
         sx={{
-          display: { xs: "none", md: "flex" },
+          display: { xs: "none", lg: "flex" },
           alignItems: "center",
           gap: 0.5,
         }}
       >
         {visibleNavItems.map(([label, to]) => (
-          <StyledNavLink key={to} to={to}>
+          <StyledNavLink key={to} to={to} state={{}} replace>
             {label}
           </StyledNavLink>
         ))}
@@ -193,7 +198,7 @@ export function Header() {
         )}
       </Box>
 
-      <Box sx={{ display: { xs: "flex", md: "none" }, alignItems: "center" }}>
+      <Box sx={{ display: { xs: "flex", lg: "none" }, alignItems: "center" }}>
         <IconButton color="primary" onClick={() => setIsSearchVisible(true)}>
           <SearchIcon />
         </IconButton>
@@ -215,7 +220,7 @@ export function Header() {
         variant="outlined"
         size="small"
         value={category}
-        onChange={(e) => setCategory(e.target.value as any)}
+        onChange={(e) => setCategory(e.target.value as "media" | "person" | "tag")}
         sx={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
       >
         <MenuItem value="media">Media</MenuItem>
@@ -263,21 +268,8 @@ export function Header() {
     const file = event.target.files?.[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      const response = await fetch(`${API}/api/search/by-image`, {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Image search failed");
-      }
-
-      const results = await response.json();
-
+      const results = await searchByImage(file);
       navigate("/searchresults?category=media&query=Image Search", {
         state: {
           items: results,

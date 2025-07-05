@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { useInView } from "react-intersection-observer";
 import {
   MapContainer,
   TileLayer,
@@ -10,18 +11,9 @@ import {
 import "leaflet/dist/leaflet.css";
 import {
   Box,
-  Drawer,
   Typography,
-  List,
-  ListItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  ListItemButton,
   TextField,
   Autocomplete,
-  Button,
   Paper,
   useTheme,
   IconButton,
@@ -30,10 +22,15 @@ import {
   CircularProgress,
 } from "@mui/material";
 import { MediaPreview } from "../types";
-import { API } from "../config";
+import {
+  getMissingGeoMedia,
+  updateMediaGeolocation,
+} from "../services/mapEditor";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import CancelIcon from "@mui/icons-material/Cancel";
 import L from "leaflet";
+import { useListStore, defaultListState } from "../stores/useListStore";
+import { API } from "../config";
 
 function MapClickHandler({
   selected,
@@ -64,7 +61,16 @@ function FitBounds({ bounds }: { bounds: any | null }) {
 
 export default function MapEditorPage() {
   // Core State
-  const [orphans, setOrphans] = useState<MediaPreview[]>([]);
+  const listKey = "media-missing-geolocation";
+
+  const {
+    items: orphans,
+    hasMore,
+    isLoading,
+  } = useListStore((state) => state.lists[listKey] || defaultListState);
+  const { fetchInitial, loadMore, removeItem } = useListStore();
+  const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
+
   const [selectedMedia, setSelectedMedia] = useState<MediaPreview | null>(null);
   const [newPosition, setNewPosition] = useState<typeof L.LatLng | null>(null);
   const [saving, setSaving] = useState(false);
@@ -86,11 +92,13 @@ export default function MapEditorPage() {
   const theme = useTheme();
 
   useEffect(() => {
-    fetch(`${API}/api/media/missing_geo`)
-      .then((res) => res.json())
-      .then(setOrphans)
-      .catch(console.error);
-  }, []);
+    fetchInitial(listKey, () => getMissingGeoMedia(null));
+  }, [listKey, fetchInitial]);
+  useEffect(() => {
+    if (inView && hasMore && !isLoading) {
+      loadMore(listKey, (cursor) => getMissingGeoMedia(cursor));
+    }
+  }, [inView, hasMore, isLoading, loadMore, listKey]);
 
   // Debounced search for locations using Nominatim API
   useEffect(() => {
@@ -126,19 +134,15 @@ export default function MapEditorPage() {
     if (!selectedMedia || !newPosition) return;
     setSaving(true);
     try {
-      const res = await fetch(
-        `${API}/api/media/${selectedMedia.id}/geolocation`,
-        {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            latitude: newPosition.lat,
-            longitude: newPosition.lng,
-          }),
-        }
+      await updateMediaGeolocation(
+        selectedMedia.id,
+        newPosition.lat,
+        newPosition.lng
       );
-      if (!res.ok) throw new Error("Save failed");
-      setOrphans((prev) => prev.filter((m) => m.id !== selectedMedia.id));
+
+      // 9. Use the store's action to optimistically update the list
+      removeItem(listKey, selectedMedia.id);
+
       setSnackbar({
         open: true,
         message: "Location saved!",
@@ -225,16 +229,18 @@ export default function MapEditorPage() {
               label="Search for a location"
               variant="outlined"
               size="small"
-              InputProps={{
-                ...params.InputProps,
-                endAdornment: (
-                  <>
-                    {searchLoading ? (
-                      <CircularProgress color="inherit" size={20} />
-                    ) : null}
-                    {params.InputProps.endAdornment}
-                  </>
-                ),
+              slotProps={{
+                input: {
+                  ...params.InputProps,
+                  endAdornment: (
+                    <>
+                      {searchLoading ? (
+                        <CircularProgress color="inherit" size={20} />
+                      ) : null}
+                      {params.InputProps.endAdornment}
+                    </>
+                  ),
+                },
               }}
             />
           )}
@@ -247,32 +253,46 @@ export default function MapEditorPage() {
               gap: 1,
             }}
           >
-            {orphans.map((m) => (
-              <Box
-                key={m.id}
-                component="img"
-                src={`${API}/thumbnails/${m.id}.jpg`}
-                alt=""
-                onClick={() => handleSelectMedia(m)}
-                sx={{
-                  width: "100%",
-                  height: "auto",
-                  aspectRatio: "1 / 1",
-                  objectFit: "cover",
-                  borderRadius: 2,
-                  cursor: "pointer",
-                  border:
-                    selectedMedia?.id === m.id
-                      ? `3px solid ${theme.palette.primary.main}`
-                      : "3px solid transparent",
-                  transition: "border 0.2s ease",
-                  "&:hover": {
-                    border: `3px solid ${theme.palette.primary.light}`,
-                  },
-                }}
-              />
-            ))}
+            {orphans.map((m) => {
+              // FIX: Determine the correct thumbnail URL
+              const thumbUrl = m.thumbnail_path
+                ? `${API}/thumbnails/${m.thumbnail_path}`
+                : `${API}/thumbnails/${m.id}.jpg`;
+
+              return (
+                <Box
+                  key={m.id}
+                  component="img"
+                  // Use the correctly determined URL
+                  src={thumbUrl}
+                  alt={`Un-located media ${m.id}`}
+                  onClick={() => handleSelectMedia(m)}
+                  sx={{
+                    width: "100%",
+                    height: "auto",
+                    aspectRatio: "1 / 1",
+                    objectFit: "cover",
+                    borderRadius: 2,
+                    cursor: "pointer",
+                    border:
+                      selectedMedia?.id === m.id
+                        ? `3px solid ${theme.palette.primary.main}`
+                        : "3px solid transparent",
+                    transition: "border 0.2s ease",
+                    "&:hover": {
+                      border: `3px solid ${theme.palette.primary.light}`,
+                    },
+                  }}
+                />
+              );
+            })}
           </Box>
+          {isLoading && (
+            <Box textAlign="center" py={2}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
+          {hasMore && <Box ref={loaderRef} sx={{ height: "1px" }} />}
         </Box>
       </Paper>
 
@@ -309,7 +329,11 @@ export default function MapEditorPage() {
                   </Typography>
                   <Box
                     component="img"
-                    src={`${API}/thumbnails/${selectedMedia.id}.jpg`}
+                    src={
+                      selectedMedia.thumbnail_path
+                        ? `${API}/thumbnails/${selectedMedia.thumbnail_path}`
+                        : `${API}/thumbnails/${selectedMedia.id}.jpg`
+                    }
                     sx={{
                       width: 100,
                       height: 100,

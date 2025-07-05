@@ -7,8 +7,8 @@ import {
   Button,
   Paper,
   useTheme,
-  Grid,
 } from "@mui/material";
+import Grid from "@mui/material/Grid";
 import { Person } from "../types";
 import { PersonEditForm } from "./PersonEditForm";
 import { API, READ_ONLY } from "../config";
@@ -75,13 +75,22 @@ export function PersonHero({
               flexWrap="wrap"
               useFlexGap
             >
-              <Button variant="outlined" onClick={onMerge}>
+              <Button variant="outlined" onClick={onMerge} disabled={saving}>
                 Merge
               </Button>
-              <Button variant="outlined" onClick={onRefreshSimilar}>
+              <Button
+                variant="outlined"
+                onClick={() => onRefreshSimilar()}
+                disabled={saving}
+              >
                 Refresh Similar
               </Button>
-              <Button variant="outlined" color="error" onClick={onDelete}>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={onDelete}
+                disabled={saving}
+              >
                 Delete
               </Button>
             </Stack>

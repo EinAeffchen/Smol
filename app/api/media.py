@@ -5,20 +5,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import and_, delete, or_, text, func, tuple_
+from sqlalchemy import and_, or_, text, func, tuple_
 from sqlalchemy.orm import selectinload, aliased
 from sqlmodel import Session, select
-from pathlib import Path
 from app.config import (
     READ_ONLY,
-    MEDIA_DIR,
     MIN_CLIP_SIMILARITY,
-    THUMB_DIR,
 )
-from app.database import get_session, safe_commit
+from app.database import get_session
 from app.logger import logger
 from app.schemas.face import FaceRead
-from app.models import ExifData, Face, Media, MediaTagLink, Person, Scene, Tag
+from app.models import ExifData, Face, Media, Person, Scene, Tag
 from app.schemas.media import (
     CursorPage,
     GeoUpdate,
@@ -33,6 +30,8 @@ from app.schemas.person import PersonRead
 from app.utils import (
     update_exif_gps,
 )
+from app.utils import delete_record
+from app.utils import delete_file
 
 router = APIRouter()
 
@@ -50,16 +49,44 @@ def format_timestamp(seconds: float) -> str:
     return f"{hrs:02d}:{mins:02d}:{secs:02d}.{ms:03d}"
 
 
-@router.get("/missing_geo", response_model=list[MediaPreview])
-def get_missing_geo(session: Session = Depends(get_session)):
+@router.get("/missing-geo", response_model=CursorPage)
+def get_missing_geo(
+    session: Session = Depends(get_session),
+    cursor: str | None = None,  # 1. Accept an optional string cursor
+    limit: int = 100,  # 2. Make the limit a parameter
+):
     stmt = (
         select(Media)
         .join(ExifData)
         .where(ExifData.lat.is_(None))
-        .order_by(Media.inserted_at.desc())
-        .limit(100)
+        # Add a secondary unique sort key for stable ordering
+        .order_by(Media.inserted_at.desc(), Media.id.desc())
     )
-    return session.exec(stmt).all()
+
+    # 3. If a cursor is provided, add it to the query
+    if cursor:
+        try:
+            # The cursor will be the `inserted_at` timestamp of the last item from the previous page
+            cursor_datetime = datetime.fromisoformat(cursor)
+            stmt = stmt.where(Media.inserted_at < cursor_datetime)
+        except ValueError:
+            # Handle invalid cursor format if necessary
+            pass
+
+    # Apply the limit to get one page of results
+    stmt = stmt.limit(limit)
+
+    results = session.exec(stmt).all()
+
+    # 4. Determine the next cursor
+    next_cursor = None
+    if len(results) == limit:
+        # If we got a full page, the next cursor is the timestamp of the last item
+        last_item_timestamp = results[-1].inserted_at
+        next_cursor = last_item_timestamp.isoformat()
+
+    # 5. Return the data in the correct object shape
+    return CursorPage(items=results, next_cursor=next_cursor)
 
 
 @router.get("/", response_model=CursorPage)
@@ -164,9 +191,7 @@ def list_locations(
     results = []
     for row in rows:
         thumbnail_path = (
-            f"/{row.id}.jpg"
-            if not row.thumbnail_path
-            else row.thumbnail_path
+            f"/{row.id}.jpg" if not row.thumbnail_path else row.thumbnail_path
         )
         results.append(
             MediaLocation(
@@ -385,27 +410,6 @@ def scenes_vtt(
     return PlainTextResponse("\n".join(lines), media_type="text/vtt")
 
 
-def delete_file(session: Session, media_id: int):
-    media = session.get(Media, media_id)
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-
-    delete_media_record(media_id, session)
-
-    # delete original file
-    orig = MEDIA_DIR / media.path
-    if orig.exists():
-        orig.unlink()
-
-    # delete thumbnail
-    if not media.thumbnail_path:
-        thumb = THUMB_DIR / f"{media.id}.jpg"
-    else:
-        thumb = THUMB_DIR / media.thumbnail_path
-    if thumb.exists():
-        thumb.unlink()
-
-
 @router.delete(
     "/{media_id}/file",
     summary="Permanently delete the media file & its thumbnail from disk",
@@ -432,43 +436,7 @@ def delete_media_record(
         return HTTPException(
             status_code=403, detail="Not allowed in READ_ONLY mode."
         )
-    media = session.get(Media, media_id)
-    if not media:
-        raise HTTPException(status_code=404, detail="Media not found")
-
-    thumbnail = media.thumbnail_path
-    thumb = Path(THUMB_DIR / thumbnail)
-    if thumb.is_file():
-        thumb.unlink()
-    faces = session.exec(select(Face).where(Face.media_id == media.id)).all()
-    for face in faces:
-        sql = text(
-            """
-            DELETE FROM face_embeddings
-            WHERE face_id=:f_id
-            """
-        ).bindparams(f_id=face.id)
-        session.exec(sql)
-        thumb = Path(THUMB_DIR / face.thumbnail_path)
-        if thumb.is_file():
-            thumb.unlink()
-
-    sql = text(
-        """
-        DELETE FROM media_embeddings
-        WHERE media_id=:m_id
-        """
-    ).bindparams(m_id=media.id)
-    session.exec(sql)
-
-    session.exec(delete(Face).where(Face.media_id == media_id))
-    session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
-    session.exec(delete(ExifData).where(ExifData.media_id == media_id))
-    session.exec(delete(Scene).where(Scene.media_id == media.id))
-    session.delete(media)
-
-    safe_commit(session)
-
+    delete_record(media_id, session)
 
 @router.get("/exif/{media_id}", response_model=ExifData)
 def read_exif(media_id: int, session=Depends(get_session)):
@@ -480,7 +448,7 @@ def read_exif(media_id: int, session=Depends(get_session)):
     return ex
 
 
-@router.get("/{media_id}/get_similar", response_model=list[MediaPreview])
+@router.get("/{media_id}/get-similar", response_model=list[MediaPreview])
 def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
     media = session.get(Media, media_id)
     if not media or not media.embedding:

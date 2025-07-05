@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Box, Typography } from "@mui/material";
 import { Media } from "../types";
 import MediaCard from "./MediaCard";
-import { API } from "../config";
+import { getSimilarMedia } from "../services/media";
 
 export default function SimilarContent({ mediaId }: { mediaId: number }) {
   const [similar, setSimilar] = useState<Media[]>([]);
@@ -11,13 +11,7 @@ export default function SimilarContent({ mediaId }: { mediaId: number }) {
     if (!mediaId) return;
     const controller = new AbortController();
 
-    fetch(`${API}/api/media/${mediaId}/get_similar`, {
-      signal: controller.signal,
-    })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load similar media");
-        return res.json() as Promise<Media[]>;
-      })
+    getSimilarMedia(mediaId)
       .then(setSimilar)
       .catch((err) => {
         // When the fetch is aborted, it throws an error. We can safely ignore it.

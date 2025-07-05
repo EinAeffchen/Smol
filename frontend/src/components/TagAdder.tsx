@@ -1,30 +1,27 @@
 import React, { useState, useEffect } from "react";
 import {
-  Box,
   TextField,
   Autocomplete,
   CircularProgress,
   createFilterOptions,
 } from "@mui/material";
 import { Tag } from "../types";
-import { CursorResponse } from "../hooks/useInfinite";
-import { API } from "../config";
+import { getTags } from "../services/tag";
+import { createTag, assignTag } from "../services/tagging";
 
-type OwnerType = "media" | "persons";
+type OwnerType = "media" | "person";
 
 interface TagAdderProps {
   ownerType: OwnerType;
   ownerId: number;
   existingTags: Tag[];
-  onTagAdded: () => void;
+  onTagAdded: (newTag: Tag) => void;
 }
 
-// A custom type for our Autocomplete options, which can be a real Tag or a "Create" action
 interface TagOption extends Partial<Tag> {
-  inputValue?: string; // This will hold the name for a new tag
+  inputValue?: string;
 }
 
-// This helper from MUI allows us to customize filtering, which we'll use to add our "Create" option
 const filter = createFilterOptions<TagOption>();
 
 export default function TagAdder({
@@ -39,9 +36,8 @@ export default function TagAdder({
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API}/api/tags/`)
-      .then((res) => res.json())
-      .then((page: CursorResponse<Tag>) => setAllTags(page.items || []))
+    getTags(1) // Assuming getTags can fetch all tags or takes a page parameter
+      .then((data) => setAllTags(data.items || []))
       .catch((error) => console.error("Failed to load all tags:", error))
       .finally(() => setLoading(false));
   }, []);
@@ -83,13 +79,7 @@ export default function TagAdder({
     );
     if (!tagToAssign) {
       try {
-        const createRes = await fetch(`${API}/api/tags/`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: finalTagName }),
-        });
-        if (!createRes.ok) throw new Error("Failed to create tag");
-        tagToAssign = await createRes.json();
+        tagToAssign = await createTag(finalTagName);
         setAllTags((prev) => [...prev, tagToAssign!]);
       } catch (error) {
         console.error("Error creating tag:", error);
@@ -99,12 +89,8 @@ export default function TagAdder({
 
     // Assign the tag
     try {
-      const assignRes = await fetch(
-        `${API}/api/tags/${ownerType}/${ownerId}/${tagToAssign!.id}`,
-        { method: "POST" }
-      );
-      if (!assignRes.ok) throw new Error("Failed to assign tag");
-      onTagAdded();
+      await assignTag(ownerType, ownerId, tagToAssign!.id);
+      onTagAdded(tagToAssign);
     } catch (error) {
       console.error("Error assigning tag:", error);
     }

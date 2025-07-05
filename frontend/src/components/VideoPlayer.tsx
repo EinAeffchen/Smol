@@ -12,6 +12,14 @@ export function VideoWithPreview({ media }: { media: Media }) {
     ? `${API}/thumbnails/${media.thumbnail_path}`
     : `${API}/thumbnails/${media.id}.jpg`;
 
+  const handlePlay = () => {
+    setIsLoading(true);
+  };
+
+  const handleReady = () => {
+    setIsLoading(false);
+  };
+
   if (!media.path) {
     return <Typography color="text.secondary">No video available</Typography>;
   }
@@ -20,9 +28,9 @@ export function VideoWithPreview({ media }: { media: Media }) {
     <Box
       sx={{
         width: "100%",
-        // Use aspect-ratio for responsive, layout-shift-free sizing
         position: "relative",
-        paddingTop: "56.25%" /* 16:9 Aspect Ratio */,
+        paddingTop: "56.25%",
+        backgroundColor: "#000",
       }}
     >
       {isLoading && (
@@ -43,7 +51,7 @@ export function VideoWithPreview({ media }: { media: Media }) {
       <ReactPlayer
         url={mediaUrl}
         controls
-        playing // Autoplay when ready
+        playing
         width="100%"
         height="100%"
         style={{
@@ -51,12 +59,22 @@ export function VideoWithPreview({ media }: { media: Media }) {
           top: 0,
           left: 0,
         }}
-        // We use these callbacks to hide our manual spinner
-        onReady={() => setIsLoading(false)}
+        light={thumbnailUrl}
+        onPlay={handlePlay}
+        onReady={handleReady}
         onError={() => setIsLoading(false)}
         config={{
           file: {
             attributes: { crossOrigin: "anonymous" },
+            tracks: [
+              {
+                kind: "thumbnails",
+                src: scenesUrl,
+                default: true,
+                srcLang: "en",
+                label: "scenes",
+              },
+            ],
           },
         }}
       />

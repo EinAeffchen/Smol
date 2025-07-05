@@ -5,11 +5,18 @@ import {
   Tab,
   CircularProgress,
   Typography,
-  Grid,
   Button,
 } from "@mui/material";
-import { Media, Person, Tag, FaceRead, SimilarPerson } from "../types";
-
+import Grid from "@mui/material/Grid";
+import {
+  Person,
+  FaceRead,
+  SimilarPerson,
+  PersonReadSimple,
+  Tag,
+  Media,
+} from "../types";
+import { TimelineTab } from "./TimelineTab";
 import MediaAppearances from "./MediaAppearances";
 import SimilarPersonCard from "./SimilarPersonCard";
 import { TagsSection } from "./TagsSection";
@@ -36,27 +43,52 @@ function TabPanel(props: TabPanelProps) {
 }
 
 interface PersonContentTabsProps {
-  onLoadSimilar: () => void;
   person: Person;
   detectedFacesList: FaceRead[];
   hasMoreFaces: boolean;
   loadingMoreFaces: boolean;
-  onTagAdded: (tag: any) => void;
+  onTagAdded: (tag: Tag) => void;
   loadMoreDetectedFaces: () => void;
   handleProfileAssignmentWrapper: (faceId: number, personId: number) => void;
-  handleAssignWrapper: (faceId: number, personId: number) => void;
-  handleCreateWrapper: (faceId: number, data: any) => Promise<Person>;
-  handleDeleteWrapper: (faceId: number) => void;
-  handleDetachWrapper: (faceId: number) => void;
+  handleAssignWrapper: (faceIds: number[], personId: number) => void;
+  handleCreateWrapper: (faceIds: number[], name?: string) => Promise<Person>;
+  handleDeleteWrapper: (faceIds: number[]) => void;
+  handleDetachWrapper: (faceIds: number[]) => void;
   suggestedFaces: FaceRead[];
   similarPersons: SimilarPerson[];
-  onTagUpdate: () => void;
+  onTagUpdate: (obj: Person | Media) => void;
   onRefreshSuggestions: () => void;
+  onLoadSimilar: () => void;
+  filterPeople: PersonReadSimple[];
+  onFilterPeopleChange: () => void;
+  mediaListKey: string;
 }
 
 export function PersonContentTabs(props: PersonContentTabsProps) {
   const [tabValue, setTabValue] = useState(0);
+  const [faceTabValue, setFaceTabValue] = useState(0);
   const [hasLoadedSimilar, setHasLoadedSimilar] = useState(false);
+  const [isProcessingFaces, setIsProcessingFaces] = useState(false);
+
+  const createActionHandler = <T extends (...args: any[]) => Promise<any> | void>(
+    action: T
+  ): ((...args: Parameters<T>) => Promise<void>) => {
+    return async (...args: Parameters<T>) => {
+      setIsProcessingFaces(true);
+      try {
+        await Promise.resolve(action(...args));
+      } catch (error) {
+        console.error("An error occurred during the face action:", error);
+        // Optionally, show an error toast to the user here
+      } finally {
+        setIsProcessingFaces(false);
+      }
+    };
+  };
+  const handleAssign = createActionHandler(props.handleAssignWrapper);
+  const handleCreate = createActionHandler(props.handleCreateWrapper);
+  const handleDelete = createActionHandler(props.handleDeleteWrapper);
+  const handleDetach = createActionHandler(props.handleDetachWrapper);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -64,6 +96,13 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
       props.onLoadSimilar();
       setHasLoadedSimilar(true);
     }
+  };
+
+  const handleFaceTabChange = (
+    event: React.SyntheticEvent,
+    newValue: number
+  ) => {
+    setFaceTabValue(newValue);
   };
   useEffect(() => {
     setHasLoadedSimilar(false);
@@ -83,6 +122,7 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
           <Tab label={`Media Appearances (${props.person.appearance_count})`} />
           <Tab label="Faces" />
           <Tab label="Similar People" />
+          <Tab label="Timeline" />
           <Tab label="Tags" />
         </Tabs>
       </Box>
@@ -91,57 +131,76 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
         <Suspense fallback={<CircularProgress />}>
           <MediaAppearances
             person={props.person}
+            filterPeople={props.filterPeople}
+            onFilterPeopleChange={props.onFilterPeopleChange}
+            mediaListKey={props.mediaListKey}
           />
         </Suspense>
       </TabPanel>
 
       <TabPanel value={tabValue} index={1}>
-        <Box
-          sx={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            mb: 2,
-          }}
-        >
-          <Typography variant="h6">Suggestions</Typography>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => props.onRefreshSuggestions()}
+        <Box sx={{ borderBottom: 1, borderColor: "divider" }}>
+          <Tabs
+            value={faceTabValue}
+            onChange={handleFaceTabChange}
+            aria-label="Faces content tabs"
           >
-            Refresh Suggestions
-          </Button>
+            <Tab label="Confirmed" />
+            <Tab label="Suggested" />
+          </Tabs>
         </Box>
-        <Suspense fallback={<CircularProgress />}>
-          <DetectedFaces
-            title="All Detected Faces"
-            faces={props.detectedFacesList}
-            profileFaceId={props.person.profile_face_id}
-            onSetProfile={(faceId) =>
-              props.handleProfileAssignmentWrapper(faceId, props.person.id)
-            }
-            onAssign={props.handleAssignWrapper}
-            onCreate={props.handleCreateWrapper}
-            onDelete={props.handleDeleteWrapper}
-            onDetach={props.handleDetachWrapper}
-            onLoadMore={props.loadMoreDetectedFaces}
-            hasMore={props.hasMoreFaces}
-            isLoadingMore={props.loadingMoreFaces}
-          />
-          {props.suggestedFaces.length > 0 && (
-            <Box mt={4}>
-              <DetectedFaces
-                faces={props.suggestedFaces}
-                title="Is this the same person?"
-                onAssign={props.handleAssignWrapper}
-                onCreate={props.handleCreateWrapper}
-                onDelete={props.handleDeleteWrapper}
-                onDetach={props.handleDetachWrapper}
-              />
-            </Box>
-          )}
-        </Suspense>
+        <TabPanel value={faceTabValue} index={0}>
+          <Suspense fallback={<CircularProgress />}>
+            <DetectedFaces
+              isProcessing={isProcessingFaces}
+              title="Confirmed Faces"
+              faces={props.detectedFacesList}
+              profileFaceId={props.person.profile_face_id}
+              onSetProfile={(faceId) =>
+                props.handleProfileAssignmentWrapper(faceId, props.person.id)
+              }
+              onAssign={handleAssign}
+              onDelete={handleDelete}
+              onDetach={handleDetach}
+              onCreateMultiple={handleCreate}
+              onLoadMore={props.loadMoreDetectedFaces}
+              hasMore={props.hasMoreFaces}
+              isLoadingMore={props.loadingMoreFaces}
+              personId={props.person.id}
+            />
+          </Suspense>
+        </TabPanel>
+        <TabPanel value={faceTabValue} index={1}>
+          <Box
+            sx={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              mb: 2,
+            }}
+          >
+            <Typography variant="h6">Suggestions</Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => props.onRefreshSuggestions()}
+            >
+              Refresh Suggestions
+            </Button>
+          </Box>
+          <Suspense fallback={<CircularProgress />}>
+            <DetectedFaces
+              isProcessing={isProcessingFaces}
+              title="Suggested Faces"
+              faces={props.suggestedFaces}
+              onAssign={handleAssign}
+              onDelete={handleDelete}
+              onDetach={handleDetach}
+              onCreateMultiple={handleCreate}
+              personId={props.person.id}
+            />
+          </Suspense>
+        </TabPanel>
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
@@ -157,11 +216,15 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
           hasLoadedSimilar && <CircularProgress />
         )}
       </TabPanel>
-
       <TabPanel value={tabValue} index={3}>
+        <Suspense fallback={<CircularProgress />}>
+          <TimelineTab person={props.person} />
+        </Suspense>
+      </TabPanel>
+      <TabPanel value={tabValue} index={4}>
         <TagsSection
           person={props.person}
-          onTagAdded={props.onTagAdded}
+          onTagAdded={(person) => props.onTagAdded(person)}
           onUpdate={props.onTagUpdate}
         />
       </TabPanel>

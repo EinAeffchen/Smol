@@ -36,7 +36,7 @@ build: install
 	cp -r frontend/dist/* "${MEDIA_DIR}/.smol/static"
 
 dev:
-	cd frontend && npm run dev
+	cd frontend && npm install && npm run dev
 
 docker-start:
 	@echo "--- Using Docker environment from $(ENV_FILE) ---"
@@ -65,3 +65,6 @@ alembic-generate:
 
 alembic-upgrade:
 	alembic upgrade head
+
+alembic-downgrade:
+	alembic downgrade -1
