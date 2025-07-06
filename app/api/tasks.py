@@ -794,7 +794,8 @@ def _run_scan(task_id: str):
             return
 
         task.status = "running"
-        sess.commit()
+        task.started_at = datetime.now()
+        safe_commit(sess)
 
         known_files = set([row for row in sess.exec(select(Media.path)).all()])
 
@@ -819,9 +820,10 @@ def _run_scan(task_id: str):
     logger.info("Found %s new files", len(media_paths))
 
     with Session(engine) as sess:
-        sess.merge(task)
+        task = sess.merge(task)
         task.total = len(media_paths)
-        sess.commit()
+        logger.info("Set total to %s", task.total)
+        safe_commit(sess)
 
         if not media_paths:
             task.status = "completed"
@@ -837,9 +839,11 @@ def _run_scan(task_id: str):
             with Session(engine) as sess:
                 task = sess.get(ProcessingTask, task_id)
                 task.processed += 100
-                sess.merge(task)
+                task = sess.merge(task)
                 if task and task.status == "cancelled":
                     break
+                logger.info("Commiting process...")
+                safe_commit(sess)
 
         media_obj = process_file(MEDIA_DIR / filepath)
         if media_obj:
@@ -857,7 +861,8 @@ def _run_scan(task_id: str):
 
             deletions: list[int] = []
             media_objs_with_thumbnails = []
-            for media in medias_to_add:
+            logger.info("Generating thumbnails")
+            for media in tqdm(medias_to_add):
                 thumbnail = generate_thumbnail(media)
                 if thumbnail:
                     media.thumbnail_path = thumbnail
@@ -873,7 +878,7 @@ def _run_scan(task_id: str):
             "completed" if task.status != "cancelled" else "cancelled"
         )
         task.finished_at = datetime.now(timezone.utc)
-        sess.commit()
+        safe_commit(sess)
 
 
 def generate_hashes():
