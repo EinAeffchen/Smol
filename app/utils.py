@@ -43,8 +43,8 @@ from app.models import (
 )
 
 def get_image_taken_date(img_path: Path|None=None) -> datetime:
-    # fallback use last modification time
-    alt_time = datetime.fromtimestamp(img_path.stat().st_mtime)
+    # fallback use creation time
+    alt_time = datetime.fromtimestamp(img_path.stat().st_ctime)
 
     try:
         img = Image.open(img_path)
@@ -60,37 +60,37 @@ def get_image_taken_date(img_path: Path|None=None) -> datetime:
         return datetime.strptime(creation_date, format_code)
     return alt_time 
 
-def process_file(filepath: Path) -> Media:
-    with Session(engine) as session:
-        try:
-            probe = ffmpeg.probe(filepath)
-        except Exception as e:
-            logger.error("Can't process %s", filepath)
-            return
-        size = os.path.getsize(filepath)
-        if filepath.suffix.lower() in VIDEO_SUFFIXES:
-            duration = float(probe["format"].get("duration", 0))
-        else:
-            duration = None
-        vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
-        width = int(vs[0]["width"]) if vs else None
-        height = int(vs[0]["height"]) if vs else None
-        media = Media(
-            path=str(filepath.relative_to(MEDIA_DIR)),
-            filename=filepath.name,
-            size=size,
-            duration=duration,
-            width=width,
-            height=height,
-            faces_extracted=False,
-            embeddings_created=False,
-            created_at=get_image_taken_date(img_path=filepath),
-            embedding=None,
-            phash=None
-        )
-        if media.duration is None:
-            media.phash = generate_perceptual_hash(media)
-        return media
+def process_file(filepath: Path) -> Media|None:
+    """Reads metadata from the file and generates a thumbnail"""
+    try:
+        probe = ffmpeg.probe(filepath)
+    except Exception as e:
+        logger.error("Can't process %s", filepath)
+        return
+    size = os.path.getsize(filepath)
+    if filepath.suffix.lower() in VIDEO_SUFFIXES:
+        duration = float(probe["format"].get("duration", 0))
+    else:
+        duration = None
+    vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
+    width = int(vs[0]["width"]) if vs else None
+    height = int(vs[0]["height"]) if vs else None
+    media = Media(
+        path=str(filepath.relative_to(MEDIA_DIR)),
+        filename=filepath.name,
+        size=size,
+        duration=duration,
+        width=width,
+        height=height,
+        faces_extracted=False,
+        embeddings_created=False,
+        created_at=get_image_taken_date(img_path=filepath),
+        embedding=None,
+        phash=None
+    )
+    if media.duration is None:
+        media.phash = generate_perceptual_hash(media)
+    return media
 
 
 def get_thumb_folder(path: Path) -> Path:
