@@ -4,7 +4,7 @@ from app.logger import logger
 from app.models import Media, ProcessingTask, DuplicateGroup, DuplicateMedia
 from sqlalchemy import func
 from datetime import datetime, timezone
-
+from app.config import DUPLICATE_AUTO_KEEP_RULE, DUPLICATE_AUTO_REMOVE
 
 class UnionFind:
     def __init__(self, elements):
@@ -62,7 +62,7 @@ class DuplicateProcessor:
             )
 
             try:
-                # --- Phase 1: Group by IDENTICAL Hashes (Very Fast) ---
+                # --- Phase 1: Group by IDENTICAL Hashes ---
 
                 # Find all hashes that appear more than once
                 stmt = (
@@ -81,8 +81,12 @@ class DuplicateProcessor:
                     media_items = session.exec(media_with_same_hash_stmt).all()
                     media_ids = [m.id for m in media_items]
 
-                    # This function will handle creating/merging groups and committing
-                    self._create_or_update_group(session, media_ids)
+                    if not DUPLICATE_AUTO_REMOVE:
+                        # This function will handle creating/merging groups and committing
+                        self._create_or_update_group(session, media_ids)
+                    else:
+                        pass#TODO
+
 
                 logger.info(
                     f"Completed grouping {len(duplicate_hashes)} sets of identical images."
@@ -90,12 +94,7 @@ class DuplicateProcessor:
                 # You can update task progress here
                 self._update_task_progress_and_check_status(
                     session, 1, 2
-                )  # Phase 1 of 2 complete
-
-                # --- Phase 2: Find NEAR-Duplicates (Slower, but now on a smaller dataset) ---
-                # This is a more advanced step. For now, focusing on identicals gives the biggest win.
-                # A full implementation would use a BK-Tree or similar structure for efficient
-                # Hamming distance search on the remaining unique hashes.
+                ) 
 
                 self._update_task_status(session, "completed")
                 logger.info("pHash duplicate detection task finished.")

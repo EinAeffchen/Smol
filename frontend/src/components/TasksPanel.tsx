@@ -95,7 +95,7 @@ export default function TaskManager() {
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {t.status}
-                    {t.status === "running" && ` (${pct}%)`}
+                    {t.status === "running" && ` (${pct}% - ${t.processed}/${t.total})`}
                   </Typography>
                 </Box>
                 <LinearProgress

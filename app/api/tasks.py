@@ -15,7 +15,7 @@ from app.models import DuplicateMedia
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
-
+import time
 from app.api.media import delete_record
 from app.config import (
     AUTO_CLUSTER,
@@ -35,10 +35,10 @@ from app.processor_registry import processors
 from app.processors.duplicates import DuplicateProcessor
 from app.utils import (
     complete_task,
-    generate_thumbnail,
     generate_perceptual_hash,
     process_file,
     split_video,
+    generate_thumbnail,
     get_image_taken_date
 )
 
@@ -623,10 +623,13 @@ def list_tasks(session: Session = Depends(get_session)):
     summary="List all active tasks",
 )
 def list_active_tasks(session: Session = Depends(get_session)):
-    return session.exec(
-        select(ProcessingTask).where(ProcessingTask.status == "running")
-    ).all()
-
+    try:
+        return session.exec(
+            select(ProcessingTask).where(ProcessingTask.status == "running")
+        ).all()
+    except OperationalError:
+        time.sleep(10)
+        return list_active_tasks(session)
 
 @router.get(
     "/{task_id}", response_model=ProcessingTask, summary="Get task status"
@@ -842,7 +845,6 @@ def _run_scan(task_id: str):
                 task = sess.merge(task)
                 if task and task.status == "cancelled":
                     break
-                logger.info("Commiting process...")
                 safe_commit(sess)
 
         media_obj = process_file(MEDIA_DIR / filepath)
@@ -851,35 +853,21 @@ def _run_scan(task_id: str):
 
     with Session(engine) as sess:
         task = sess.merge(task)
-        task.processed = 0
-        if task.status == "cancelled":
-            medias_to_add.clear()
-        else:
-            sess.add_all(medias_to_add)
-            task.processed += len(medias_to_add)
-            sess.flush()
-
-            deletions: list[int] = []
-            media_objs_with_thumbnails = []
-            logger.info("Generating thumbnails")
-            for media in tqdm(medias_to_add):
-                thumbnail = generate_thumbnail(media)
-                if thumbnail:
-                    media.thumbnail_path = thumbnail
-                    media_objs_with_thumbnails.append(media)
-                else:
-                    deletions.append(media.id)
-
-            sess.add_all(media_objs_with_thumbnails)
-            if deletions:
-                sess.exec(delete(Media).where(Media.id.in_(deletions)))
-
-        task.status = (
-            "completed" if task.status != "cancelled" else "cancelled"
-        )
+        sess.add_all(medias_to_add)
+        sess.flush(medias_to_add)
+        broken_files = []
+        for media in medias_to_add:
+            thumbnail_path = generate_thumbnail(media)
+            if not thumbnail_path:
+                broken_files.append(thumbnail_path)
+                continue
+            media.thumbnail_path = thumbnail_path
+        for broken_media in broken_files:
+            sess.delete(broken_media)
+        task.processed = len(medias_to_add)
+        task.status = "completed" if task.status != "cancelled" else "cancelled"
         task.finished_at = datetime.now(timezone.utc)
         safe_commit(sess)
-
 
 def generate_hashes():
     """A task to find all media without a pHash and generate one."""

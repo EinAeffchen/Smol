@@ -71,7 +71,7 @@ export function MediaHeader({
       </Box>
       <Box>
         <IconButton onClick={handleMenuClick}>
-          <MoreVert sx={{ color: "white" }} />
+          <MoreVert sx={{ color: "primary" }} />
         </IconButton>
 
         {!READ_ONLY && (

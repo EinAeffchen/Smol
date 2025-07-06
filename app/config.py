@@ -2,6 +2,98 @@ import os
 from pathlib import Path
 import open_clip
 from app.logger import logger
+from enum import Enum
+from typing import TypeVar
+
+E = TypeVar("E", bound=Enum)
+
+class DuplicateKeepRule(Enum):
+    """Defines the set of valid rules for keeping a duplicate file."""
+    BIGGEST = "biggest"
+    SMALLEST = "smallest"
+    HIGHEST_RES = "highest_res"
+    LOWEST_RES = "lowest_res"
+    OLDEST = "oldest"
+    NEWEST = "newest"
+
+    @classmethod
+    def get_default(cls):
+        return cls.OLDEST
+    
+    def __str__(self):
+        return self.value
+
+class ClipModel(Enum):
+    ROBERTA_LARGE_VIT_H_14 = (
+        "xlm-roberta-large-ViT-H-14", 1024, "frozen_laion5b_s13b_b90k"
+    )
+    ROBERTA_BASE_VIT_B_32 = (
+        "xlm-roberta-base-ViT-B-32", 512, "laion5b_s13b_b90k"
+    )
+    VIT_L_14 = (
+        "ViT-L-14", 768, "laion2b_s32b_b82k"
+    )
+    VIT_B_32 = (
+        "ViT-B-32", 512, "laion2b_s34b_b79k" 
+    )
+    CONVNEXT_BASE_W = (
+        "convnext_base_w", 640, "laion2b_s13b_b82k_augreg"
+    )
+    
+    def __init__(self, model_name: str, embedding_size: int, pretrained: str):
+        """
+        This initializer is called for each member, assigning the tuple
+        values to attributes on the member itself.
+        """
+        self.model_name = model_name
+        self.embedding_size = embedding_size
+        self.pretrained = pretrained
+
+    @classmethod
+    def _missing_(cls, value: object):
+        """
+        Custom hook for looking up a member by its model_name string.
+        """
+        if not isinstance(value, str):
+            return None
+        
+        for member in cls:
+            if member.model_name.lower() == value.lower():
+                return member
+        return None
+    
+    @classmethod
+    def get_default(cls):
+        # Define the default model
+        return cls.ROBERTA_LARGE_VIT_H_14
+    
+    def __str__(self):
+        return self.model_name
+
+def parse_env_into_enum(env_name: str, enum_class: type[E]) -> E:
+    default_value_str = enum_class.get_default().value
+    value_str = os.environ.get(env_name, default_value_str)
+
+    try:
+        enum_member = enum_class(value_str.lower())
+        if enum_member is None:
+            # This handles the case where _missing_ returns None
+            raise ValueError(f"No matching enum member found for '{value_str}'")
+        return enum_member
+    except ValueError:
+        valid_options = ", ".join([member.value for member in enum_class])
+        raise ValueError(
+            f"Invalid value for {env_name}: '{value_str}'. "
+            f"Must be one of: {valid_options}"
+        )
+
+def parse_env_into_bool(env_name: str, default: str) -> bool:
+    bool_env = os.environ.get(env_name, default)
+    if bool_env.lower() == "true":
+        bool_env = True
+    else:
+        bool_env = False
+    return bool_env
 
 MEDIA_DIR = Path(os.getenv("MEDIA_DIR", "/app/media"))
 DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
@@ -52,16 +144,8 @@ IMAGE_SUFFIXES = [
     ".gif",
     ".bmp",
 ]
-READ_ONLY = os.environ.get("READ_ONLY", "False")
-if READ_ONLY.lower() == "true":
-    READ_ONLY = True
-else:
-    READ_ONLY = False
-AUTO_SCAN = os.environ.get("AUTO_SCAN", "False")
-if AUTO_SCAN.lower() == "true":
-    AUTO_SCAN = True
-else:
-    AUTO_SCAN = False
+READ_ONLY = parse_env_into_bool("READ_ONLY", "false")
+AUTO_SCAN = parse_env_into_bool("AUTO_SCAN", "false")
 
 AUTO_SCAN_TIMEFRAME = int(os.environ.get("AUTO_SCAN_TIMEFRAME", 15))
 
@@ -70,44 +154,18 @@ AUTO_SCAN_TIMEFRAME = int(os.environ.get("AUTO_SCAN_TIMEFRAME", 15))
 MIN_CLIP_SEARCH_SIMILARITY = float(os.environ.get("MIN_SEARCH_DIST", 0.1))
 MIN_CLIP_SIMILARITY = float(os.environ.get("MIN_SIMILARITY_DIST", 0.1))
 
-ENABLE_PEOPLE = os.environ.get("ENABLE_PEOPLE", "False")
-if ENABLE_PEOPLE.lower() == "true":
-    ENABLE_PEOPLE = True
-else:
-    ENABLE_PEOPLE = False
+ENABLE_PEOPLE = parse_env_into_bool("ENABLE_PEOPLE", "false")
+AUTO_ROTATE = parse_env_into_bool("AUTO_ROTATE", "false")
 
-AUTO_ROTATE = os.environ.get("AUTO_ROTATE", "True")
-if AUTO_ROTATE.lower() == "true":
-    AUTO_ROTATE = True
-else:
-    AUTO_ROTATE = False
+AUTO_CLUSTER = parse_env_into_bool("AUTO_CLUSTER", "false")
 
-AUTO_CLUSTER = os.environ.get("AUTO_CLUSTER", "False")
-if AUTO_CLUSTER.lower() == "true":
-    AUTO_CLUSTER = True
-else:
-    AUTO_CLUSTER = False
 CLUSTER_BATCH_SIZE = int(os.environ.get("CLUSTER_BATCH_SIZE", 10000))
 
 
-CLIP_MODEL = os.environ.get("CLIP_MODEL", "xlm-roberta-large-ViT-H-14")
-SCENE_EMBEDDING_SIZE = 1024
-if CLIP_MODEL == "xlm-roberta-large-ViT-H-14":
-    PRETRAINED = "frozen_laion5b_s13b_b90k"
-elif CLIP_MODEL == "xlm-roberta-base-ViT-B-32":
-    SCENE_EMBEDDING_SIZE = 512
-    PRETRAINED = "laion5b_s13b_b90k"
-elif CLIP_MODEL == "ViT-L-14":
-    PRETRAINED = "laion2b_s32b_b82k"
-elif CLIP_MODEL == "ViT-B-32":
-    PRETRAINED = "laion2b_s34b_b79k"
-elif CLIP_MODEL == "convnext_base_w":
-    PRETRAINED = "laion2b_s13b_b82k_augreg"
-else:
-    logger.error(
-        "Not a valid model name: '%s' Please check the tample.env for valid models!",
-        CLIP_MODEL,
-    )
+SELECTED_MODEL: ClipModel = parse_env_into_enum("CLIP_MODEL", ClipModel)
+CLIP_MODEL = SELECTED_MODEL.model_name
+SCENE_EMBEDDING_SIZE = SELECTED_MODEL.embedding_size
+PRETRAINED = SELECTED_MODEL.pretrained
 model, preprocess, _ = open_clip.create_model_and_transforms(
     CLIP_MODEL,
     pretrained=PRETRAINED,
@@ -127,3 +185,8 @@ FACE_RECOGNITION_MIN_FACE_PIXELS = int(
     os.environ.get("FACE_RECOGNITION_MIN_FACE_PIXELS", 80 * 80)
 )
 PERSON_MIN_FACE_COUNT = int(os.environ.get("PERSON_MIN_FACE_COUNT", 2))
+
+# duplicate settings
+DUPLICATE_AUTO_REMOVE = parse_env_into_bool("DUPLICATE_AUTO_REMOVE", "false")
+
+DUPLICATE_AUTO_KEEP_RULE = parse_env_into_enum("DUPLICATE_AUTO_KEEP_RULE", DuplicateKeepRule)
