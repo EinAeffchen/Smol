@@ -419,7 +419,7 @@ def _assign_faces_to_clusters(
 
             person_del = text(
                 """
-                DELETE FROM person_embeddings(person_id, embedding) WHERE person_id=:p_id
+                DELETE FROM person_embeddings WHERE person_id=:p_id
                 """
             ).bindparams(p_id=new_person.id)
             session.exec(person_del)
