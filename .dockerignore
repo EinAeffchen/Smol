@@ -1,3 +1,25 @@
 node_modules
 media/
 mnt/
+# Git
+.git
+.gitignore
+
+# Docker
+.dockerignore
+Dockerfile
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Node.js - CRITICAL
+node_modules/
+frontend/node_modules/
+npm-debug.log
+
+# IDE / OS specific
+.vscode/
+.idea/

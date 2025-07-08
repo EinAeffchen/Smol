@@ -388,7 +388,7 @@ def split_video(
         ),
         show_progress=True,
     )
-    logger.error("Detecting scenes...")
+    logger.debug("Detecting scenes...")
     if len(scenes) >= 10:
         return _split_by_scenes(media, scenes)
     else:
