@@ -61,7 +61,8 @@ async def assign_faces(
         if original_person_id and original_person_id != body.person_id:
             old_person_can_be_deleted(session, original_person_id)
         update_face_embedding(session, face_id, new_person_id)
-    
+    if new_person_id and new_person_id > 0:
+        update_person_embedding(session, new_person_id)
     safe_commit(session)
     return {"message": "Faces assigned successfully"}
 
@@ -102,8 +103,8 @@ async def detach_faces(
             session, face_id, -1
         )  # -1 detaches face from person in embedding table
         # update embedding of person to fix suggested faces after detach
-        if person_id:
-            update_person_embedding(session, person_id)
+    if person_id:
+        update_person_embedding(session, person_id)
     safe_commit(session)
     return {"message": "Faces detached successfully"}
 
@@ -132,8 +133,6 @@ def update_face_embedding(
                    WHERE face_id=:f_id"""
         ).bindparams(f_id=face_id)
     safe_execute(session, sql)
-    if person_id and person_id > 0:
-        update_person_embedding(session, person_id)
 
 
 @router.delete(
@@ -168,6 +167,8 @@ def delete_faces(face_ids: list[int] = Query(..., alias="face_ids"), session: Se
         update_face_embedding(session, face_id, person_id, delete_face=True)
         if person_id:
             old_person_can_be_deleted(session, person_id)
+    if person_id:
+        update_person_embedding(session, person_id)
     safe_commit(session)
     return {"message": "Faces deleted successfully"}
 
@@ -253,55 +254,11 @@ async def create_person_from_faces(
             session.add(previous_person)
             old_person_can_be_deleted(session, previous_person.id)
         update_face_embedding(session, face.id, person_id)
-    
+    if person_id:
+        update_person_embedding(session, person_id)
     safe_commit(session)
     session.close()
     return PersonMinimal(id=person_id)
-
-
-@router.post(
-    "/{face_id}/create_person",
-    summary="Create a new person from this face and assign",
-    response_model=PersonMinimal,
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_person_from_face(
-    face_id: int,
-    body: FaceCreatePerson = Body(...),
-    session: Session = Depends(get_session),
-):
-    if READ_ONLY:
-        return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
-        )
-    face = session.get(Face, face_id)
-    if not face:
-        raise HTTPException(status_code=404, detail="Face not found")
-
-    previous_person = face.person
-    # 1) Create the Person
-    person = Person(
-        name=body.name,
-        profile_face_id=face.id,
-        appearance_count=1
-    )
-    session.add(person)
-    session.flush()
-    return_obj = PersonMinimal(id=person.id)
-    person_id = person.id
-    face.person_id = person_id
-    session.add(face)
-    if previous_person:
-        previous_person_id = previous_person.id
-    else:
-        previous_person_id = None
-
-    if previous_person_id and previous_person_id != person_id:
-        old_person_can_be_deleted(session, previous_person_id)
-    update_face_embedding(session, face_id, person_id)
-    safe_commit(session)
-    session.close()
-    return return_obj
 
 
 def old_person_can_be_deleted(session: Session, person_id: int | None):
