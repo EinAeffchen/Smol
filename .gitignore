@@ -131,6 +131,7 @@ dmypy.json
 
 smol.db
 .venv
+.env
 **/viewer/images
 media
 media2

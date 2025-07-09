@@ -2,10 +2,8 @@ services:
   smol:
     image: einaeffchen2/smol
     container_name: smol
-    user: "${PUID}:${PGID}"
-    # entrypoint: ["tail", "-f", "/dev/null"]
     ports:
-      - "${PORT}:${PORT}" # Or your preferred host port
+      - "${PORT}:${PORT}"
     # to mount multipe volumes for processing, mount them into
     # various sub-folders of /app/media
     # e.g. /local/video/folder:/app/media/videos
@@ -13,5 +11,5 @@ services:
     volumes:
       - ${HOST_MEDIA_DIR}:/app/media
       - ${HOST_DATA_DIR}:/app/data
-    env_file: smol.env
+    env_file: ${ENV_FILE}
     restart: unless-stopped

@@ -1,12 +1,14 @@
-SHELL := /usr/bin/bash
-.SHELLFLAGS := -ec
+# SHELL := /usr/bin/bash
+# .SHELLFLAGS := -ec
 
 ENV_FILE ?= local.env
 
 DOCKER_TARGETS := docker-start docker-down push
 
 ifneq (,$(filter $(DOCKER_TARGETS),$(MAKECMDGOALS)))
-	ENV_FILE := smol.env
+	ifndef ENV_FILE
+		ENV_FILE := smol.env
+	endif
 endif
 
 ifneq ($(strip $(wildcard $(ENV_FILE))),)
