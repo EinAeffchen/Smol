@@ -64,55 +64,29 @@ This project is a powerful, self-contained media management system designed to r
 This application can be run directly on your machine or as a Docker container.
 
 > For arm64 support, update the sqlite-vec version in the requirements.txt to 0.1.7a2 and build with `docker buildx build --platform linux/arm64 <name>`
- 
-### Without Docker (Directly on Host)
 
-This method is ideal for a dedicated machine or standard development.
-
-1.  **Create Environment File:**
-    Copy the needed parameters from the template.env into the local.env
-    and adjust the `MEDIA_DIR` to your media folder and the `DATA_DIR` to wherever
-    you want to save the database, thumbnails, models etc.
-
-2.  **Build the Application:**
-    This command will install dependencies and compile the necessary components.
+1. **Create .env for docker-compose**
+    Copy the .env.template file and rename it `.env`.
     ```bash
-    make build
+    cp .env.template .env
     ```
+    Set the variables as described within the <> in your new .env file
 
-3.  **Run the Application:**
-    Once the build is complete, start the server.
-    ```bash
-    make up
-    ```
-
-Your media manager should now be running and be accssible at **[http://localhost:8000](http://localhost:8000)**.
-
-### With Docker (Recommended for Portability)
-
-This is the easiest and most reliable way to run the application, as it includes all dependencies in a self-contained environment.
-
-1.  **Create Environment File:**
-    Just like the non-Docker setup, copy the template to create your local `smol.env` file.
+2.  **Create Environment File for smol:**
+    Copy the `template.env` and rename it `smol.env` file.
     ```bash
     cp template.env smol.env
     ```
-
-2.  **Configure Host Directories:**
-    Open the `smol.env` file and make the following adjustments:
-    -   Set `HOST_MEDIA_DIR` to the absolute path of your media library on your host machine.
-    -   Set `HOST_DATA_DIR` to a path on your host machine where you want the application's database and index files to be stored persistently.
-
-    ```env
-    # Example:
-    HOST_MEDIA_DIR=/home/user/Pictures
-    HOST_DATA_DIR=/home/user/media_app_data
-    ```
+    Adjust the newly created template file to your liking. By default it is set to run in read/write mode with people tracking enabled, as well as regular auto scans on your mounted volume. 
 
 3.  **Start the Container:**
     This command will build the Docker image (if it doesn't exist) and start the container.
     ```bash
-    ENV_FILE=smol.env make docker-start
+    make docker-start
+    ```
+    or 
+    ```bash
+    docker compose up -d
     ```
 
 4.  **Access the Application:**
