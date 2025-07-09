@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
+from datetime import datetime, timedelta
 import mimetypes
 
 from app.api import face, media, person, search, tags, tasks, duplicates
@@ -25,7 +26,7 @@ from app.database import init_db, init_vec_index
 from app.logger import logger
 from app.processor_registry import load_processors
 from app.api.tasks import _run_cleanup_and_chain
-from sqlalchemy import select, or_
+from sqlalchemy import select, or_, and_
 from app.models import ProcessingTask
 from app.database import engine
 
@@ -40,16 +41,19 @@ scheduler = AsyncIOScheduler()
 
 
 def scheduled_scan_job():
-    logger.info("Running scheduled scan and process chain...")
+    logger.info("Running scheduled cleanup and process chain...")
     with Session(engine) as session:
         # Check if any part of the chain is already running
         running_task = session.exec(
             select(ProcessingTask).where(
-                or_(
-                    ProcessingTask.status == "running",
-                    ProcessingTask.status == "pending",
+                and_(
+                    or_(
+                        ProcessingTask.status == "running",
+                        ProcessingTask.status == "pending",
+                    ),
+                    ProcessingTask.created_at > datetime.now()-timedelta(hours=6)
                 )
-            )
+            )       
         ).first()
         if running_task:
             logger.info(
@@ -71,10 +75,10 @@ def scheduled_scan_job():
 async def lifespan(app: FastAPI):
     # Load the ML model
     logging.info("Running in READ_ONLY mode: %s", READ_ONLY)
+    load_processors()
     if not READ_ONLY:
         init_db()
         init_vec_index()
-        load_processors()
     if AUTO_SCAN:
         scheduler.add_job(
             scheduled_scan_job,

@@ -82,8 +82,6 @@ class SceneTagger(MediaProcessor):
             if norm > 0:
                 avg /= norm
             media.embedding = avg.tolist()
-        # TODO add auto tags as config and perform one-shot tagging
-        # TODO add search over embedding
         media.ran_auto_tagging = True
         session.add(media)
         sql = text(
