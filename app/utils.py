@@ -57,7 +57,10 @@ def get_image_taken_date(img_path: Path|None=None) -> datetime:
     except AttributeError:
         exif = None
     if exif and (creation_date:=exif.get(36867)):
-        return datetime.strptime(creation_date, format_code)
+        try:
+            return datetime.strptime(creation_date, format_code)
+        except ValueError:
+            logger.debug("Received invalid time for %s: %s", img_path, creation_date)
     return alt_time 
 
 def process_file(filepath: Path) -> Media|None:
