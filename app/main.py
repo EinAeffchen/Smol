@@ -8,9 +8,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlmodel import Session
+from fastapi.responses import HTMLResponse
 from datetime import datetime, timedelta
 import mimetypes
-
+from fastapi import Response
+import json
 from app.api import face, media, person, search, tags, tasks, duplicates
 from app.api.processors import router as proc_router
 from app.config import (
@@ -29,7 +31,6 @@ from app.api.tasks import _run_cleanup_and_chain
 from sqlalchemy import select, or_, and_
 from app.models import ProcessingTask
 from app.database import engine
-
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -74,7 +75,6 @@ def scheduled_scan_job():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
-    logging.info("Running in READ_ONLY mode: %s", READ_ONLY)
     load_processors()
     if not READ_ONLY:
         init_db()
@@ -96,6 +96,7 @@ async def lifespan(app: FastAPI):
 
 logger.info("MEDIA_DIR: %s", MEDIA_DIR)
 logger.info("DATABASE DIR: %s", DATABASE_URL)
+logger.info("Running in READ_ONLY mode: %s", READ_ONLY)
 
 app = FastAPI(lifespan=lifespan, redoc_url=None)
 origins = [os.environ.get("DOMAIN", ""), "http://localhost:5173"]
@@ -173,7 +174,23 @@ app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa_catch_all(full_path: str):
-    return FileResponse(
-        STATIC_DIR / "index.html",
+    index_html_path = STATIC_DIR / "index.html"
+
+    try:
+        # 1. Read the static index.html file content
+        with open(index_html_path, "r") as f:
+            html_content = f.read()
+    except FileNotFoundError:
+        return Response(content="Frontend not found", status_code=404)
+    config = {
+        "VITE_API_READ_ONLY": os.environ.get("READ_ONLY", "false"),
+        "VITE_API_ENABLE_PEOPLE": os.environ.get("ENABLE_PEOPLE", "true"),
+    }
+    config_script = f'<script>window.runtimeConfig = {json.dumps(config)};</script>'
+    modified_html = html_content.replace("</head>", f"{config_script}</head>", 1)
+
+
+    return HTMLResponse(
+        content=modified_html,
         headers={"Cache-Control": "no-cache, max-age=0, must-revalidate"},
     )

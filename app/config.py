@@ -116,7 +116,7 @@ THUMB_DIR_FOLDER_SIZE = (
     1000  # defines max number of thumbnails in single folder
 )
 
-STATIC_DIR: Path = SMOL_DIR / "static"
+STATIC_DIR: Path = Path(os.environ.get("STATIC_ASSETS_PATH", "/app/static"))
 STATIC_DIR.mkdir(exist_ok=True, parents=True)
 # Where thumbnails are written
 MODELS_DIR = SMOL_DIR / "models"

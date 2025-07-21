@@ -4,7 +4,10 @@ import logging
 def setup_logger():
     logging.getLogger("PIL.PngImagePlugin").setLevel(logging.CRITICAL + 1)
     logging.getLogger("PIL.TiffImagePlugin").setLevel(logging.CRITICAL + 1)
-
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
     logger.propagate = False

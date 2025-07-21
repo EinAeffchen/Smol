@@ -11,8 +11,11 @@ const getBooleanEnv = (envVar: string | undefined): boolean => {
 }
 
 export const API = API_BASE_URL;
-export const READ_ONLY = getBooleanEnv(import.meta.env.VITE_API_READ_ONLY);
-export const ENABLE_PEOPLE = getBooleanEnv(import.meta.env.VITE_API_ENABLE_PEOPLE);
+// export const READ_ONLY = getBooleanEnv(import.meta.env.VITE_API_READ_ONLY);
+export const READ_ONLY = getBooleanEnv(window.runtimeConfig?.VITE_API_READ_ONLY);
+console.log("[App Config] Read-Only Mode:", READ_ONLY);
+// export const ENABLE_PEOPLE = getBooleanEnv(import.meta.env.VITE_API_ENABLE_PEOPLE);
+export const ENABLE_PEOPLE = getBooleanEnv(window.runtimeConfig?.VITE_API_ENABLE_PEOPLE);
 
 if (import.meta.env.DEV) {
   console.log("[App Config] API Base URL:", API);
