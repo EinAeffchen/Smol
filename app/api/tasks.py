@@ -19,6 +19,7 @@ import time
 from app.api.media import delete_record
 from app.config import (
     AUTO_CLUSTER,
+    AUTO_CLEAN,
     CLUSTER_BATCH_SIZE,
     ENABLE_PEOPLE,
     FACE_MATCH_COSINE_THRESHOLD,
@@ -27,6 +28,7 @@ from app.config import (
     PERSON_MIN_FACE_COUNT,
     READ_ONLY,
     VIDEO_SUFFIXES,
+
 )
 from app.database import engine, get_session, safe_commit
 from app.logger import logger
@@ -149,7 +151,8 @@ async def start_creation_refresh(
 
 
 def _run_cleanup_and_chain(task_id: str):
-    _clean_missing_files(task_id)
+    if AUTO_CLEAN:
+        _clean_missing_files(task_id)
 
     logger.info("Cleanup task finished, starting scan task.")
     with Session(engine) as new_session:

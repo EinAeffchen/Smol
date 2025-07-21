@@ -158,6 +158,7 @@ ENABLE_PEOPLE = parse_env_into_bool("ENABLE_PEOPLE", "false")
 AUTO_ROTATE = parse_env_into_bool("AUTO_ROTATE", "false")
 
 AUTO_CLUSTER = parse_env_into_bool("AUTO_CLUSTER", "false")
+AUTO_CLEAN = parse_env_into_bool("AUTO_CLEAN", "false")
 
 CLUSTER_BATCH_SIZE = int(os.environ.get("CLUSTER_BATCH_SIZE", 10000))
 

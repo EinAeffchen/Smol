@@ -20,6 +20,8 @@ from app.config import (
     MEDIA_DIR,
     READ_ONLY,
     AUTO_SCAN,
+    AUTO_CLUSTER,
+    AUTO_CLEAN,
     STATIC_DIR,
     THUMB_DIR,
     AUTO_SCAN_TIMEFRAME,
@@ -94,9 +96,14 @@ async def lifespan(app: FastAPI):
     yield
 
 
-logger.info("MEDIA_DIR: %s", MEDIA_DIR)
-logger.info("DATABASE DIR: %s", DATABASE_URL)
-logger.info("Running in READ_ONLY mode: %s", READ_ONLY)
+logger.debug("MEDIA_DIR: %s", MEDIA_DIR)
+logger.debug("DATABASE DIR: %s", DATABASE_URL)
+logger.debug("Running in READ_ONLY mode: %s", READ_ONLY)
+
+logger.debug("--- AUTO SCAN STATUS ---")
+logger.debug("Automatic scanning: %s", AUTO_SCAN)
+logger.debug("Automatic cleaning: %s", AUTO_CLEAN)
+logger.debug("Automatic clustering: %s", AUTO_CLUSTER)
 
 app = FastAPI(lifespan=lifespan, redoc_url=None)
 origins = [os.environ.get("DOMAIN", ""), "http://localhost:5173"]
