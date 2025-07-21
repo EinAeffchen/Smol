@@ -13,8 +13,6 @@ echo "--- Entrypoint: Starting with UID: $USER_ID, GID: $GROUP_ID ---"
 groupmod -g $GROUP_ID appgroup
 usermod -u $USER_ID -g appgroup appuser
 
-echo "--- Entrypoint: Updating ownership of internal app directories ---"
-chown -R appuser:appgroup /app
 chown appuser:appgroup /entrypoint.sh
 
 echo "--- Entrypoint: Running Migrations ---"
