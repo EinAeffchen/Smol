@@ -3,7 +3,8 @@ services:
     image: einaeffchen2/smol
     container_name: smol
     ports:
-      - "${PORT}:${PORT}"
+      - "${PORT}:8000"
+    # entrypoint: ["tail","-f", "/dev/null"]
     # to mount multipe volumes for processing, mount them into
     # various sub-folders of /app/media
     # e.g. /local/video/folder:/app/media/videos
