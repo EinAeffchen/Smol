@@ -41,10 +41,7 @@ dev:
 	cd frontend && npm install && npm run dev
 
 docker-start:
-	@echo "--- Using Docker environment from $(ENV_FILE) ---"
-	@test -n "$(HOST_MEDIA_DIR)" || (echo "HOST_MEDIA_DIR from smol.env is not set"; exit 1)
-	mkdir -p ${HOST_DATA_DIR}
-	PUID=$(shell id -u) PGID=$(shell id -g) docker compose up -d
+	docker compose up -d
 
 docker-down:
 	@echo "--- Using Docker environment from $(ENV_FILE) ---"

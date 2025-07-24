@@ -1,3 +1,11 @@
+# ---- Stage 0: UV Installer ----
+FROM debian:bookworm-slim AS uv-installer
+ARG UV_VERSION=0.8.3
+RUN apt-get update && apt-get install -y curl ca-certificates --no-install-recommends && \
+    mkdir -p /opt/uv && \
+    curl -LsSf "https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-x86_64-unknown-linux-gnu.tar.gz" | tar -zxvf - -C /opt/uv && \
+    rm -rf /var/lib/apt/lists/*
+
 # ---- Stage 1: Build Frontend (No changes here) ----
 FROM node:20-slim AS frontend-builder
 WORKDIR /app/frontend
@@ -24,15 +32,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
+COPY --from=uv-installer /opt/uv/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/uv
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=true \
-    PIP_DISABLE_PIP_VERSION_CHECK=on \
     VENV_PATH=/app/venv \
     PORT=8000 \
     MEDIA_DIR=/app/media \
     DATA_DIR=/app/data \
     STATIC_ASSETS_PATH=/app/static
+
 ENV PATH="$VENV_PATH/bin:$PATH"
 # Further ENV VARS for application
 ENV SQLITE_VEC_PATH=${VENV_PATH}/lib/python3.12/site-packages/sqlite_vec/vec0
@@ -42,15 +51,17 @@ ENV HF_HOME=${DATA_DIR}/.smol/models \
 
 # --- OPTIMIZED LAYER ORDER ---
 
-# 1. Create the virtual environment
 RUN python3 -m venv $VENV_PATH
 
 # 2. Copy only the requirements file and install dependencies.
 # This layer is now cached and will only be rebuilt if requirements.txt changes.
 COPY requirements.txt .
-RUN pip install --no-cache-dir --no-compile torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --no-cache-dir --no-compile --upgrade pip && pip install -r requirements.txt && \
-    apt-get remove -y build-essential
+RUN uv pip install \
+        --no-cache \
+        --no-compile \
+        -r requirements.txt \
+        torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu \
+    && apt-get remove -y build-essential
 
 # 4. Copy application source code, setting ownership directly.
 # This is now separate from the dependency layers.
