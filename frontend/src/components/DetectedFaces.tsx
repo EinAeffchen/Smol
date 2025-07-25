@@ -12,10 +12,14 @@ import {
   DialogContent,
   TextField,
   DialogActions,
+  List,
+  ListItemButton,
+  ListItemText,
 } from "@mui/material";
 import { FaceRead, Person } from "../types";
 import FaceCard from "./FaceCard";
 import { useFaceSelection } from "../hooks/useFaceSelection";
+import { searchPersonsByName } from "../services/personActions";
 
 interface DetectedFacesProps {
   isProcessing: boolean;
@@ -64,6 +68,19 @@ export default function DetectedFaces({
     onClearSelection,
     setSelectedFaceIds,
   } = useFaceSelection();
+
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [assignSearchTerm, setAssignSearchTerm] = useState("");
+  const [assignCandidates, setAssignCandidates] = useState<Person[]>([]);
+  const [assignTargetPerson, setAssignTargetPerson] = useState<Person | null>(
+    null
+  );
+  const [isSearching, setIsSearching] = useState(false);
+  const [openCreateDialog, setOpenCreateDialog] = useState(false);
+  const [newPersonName, setNewPersonName] = useState("");
+
+  const isAnythingSelected = selectedFaceIds.length > 0;
+
   const lastCardRef = useCallback(
     (node: HTMLDivElement | null) => {
       if (isLoadingMore) return;
@@ -87,13 +104,34 @@ export default function DetectedFaces({
     },
     [isLoadingMore, hasMore, onLoadMore]
   );
-
-  const [openCreateDialog, setOpenCreateDialog] = useState(false);
-  const [newPersonName, setNewPersonName] = useState("");
-  const isAnythingSelected = selectedFaceIds.length > 0;
   useEffect(() => {
     onClearSelection();
   }, [personId]);
+
+  useEffect(() => {
+    if (!assignSearchTerm.trim()) {
+      setAssignCandidates([]);
+      return;
+    }
+
+    const handler = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        // Assumes a service function that returns a list of people
+        const results = await searchPersonsByName(assignSearchTerm);
+        setAssignCandidates(results);
+      } catch (error) {
+        console.error("Failed to search for people:", error);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 300); // 300ms debounce
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [assignSearchTerm]);
+
   if (
     faces.length === 0 &&
     !isLoadingMore &&
@@ -102,6 +140,7 @@ export default function DetectedFaces({
   ) {
     return null;
   }
+
   if (faces.length === 0 && isLoadingMore && onLoadMore) {
     return null;
   }
@@ -112,6 +151,29 @@ export default function DetectedFaces({
   ) => {
     onClearSelection();
     await onAssign(faceIds, assignedToPersonId);
+  };
+  // --- NEW: Handlers for the assign dialog ---
+  const handleCloseAssignDialog = () => {
+    setIsAssignDialogOpen(false);
+    setAssignSearchTerm("");
+    setAssignCandidates([]);
+    setAssignTargetPerson(null);
+  };
+
+  const handleConfirmAssign = async () => {
+    if (!assignTargetPerson) return;
+    await handleAssign(selectedFaceIds, assignTargetPerson.id);
+    handleCloseAssignDialog();
+  };
+
+  const handleAssignClick = () => {
+    if (personId) {
+      // Context: We are on a person's page. Assign directly.
+      handleAssign(selectedFaceIds, personId);
+    } else {
+      // Context: We are on a page with unassigned faces. Open the search dialog.
+      setIsAssignDialogOpen(true);
+    }
   };
 
   const scrollContainerSx = !disableInternalScroll
@@ -147,16 +209,14 @@ export default function DetectedFaces({
             </Button>
             <Box sx={{ flexGrow: 1 }} />
 
-            {personId && (
-              <Button
-                variant="contained"
-                size="small"
-                disabled={isProcessing}
-                onClick={() => handleAssign(selectedFaceIds, personId)}
-              >
-                Assign
-              </Button>
-            )}
+            <Button
+              variant="contained"
+              size="small"
+              disabled={isProcessing}
+              onClick={handleAssignClick}
+            >
+              Assign
+            </Button>
             {onCreateMultiple && (
               <Button
                 variant="contained"
@@ -226,6 +286,51 @@ export default function DetectedFaces({
             }}
           >
             Create
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Dialog
+        open={isAssignDialogOpen}
+        onClose={handleCloseAssignDialog}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle>Assign to Person</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Search for a person"
+            type="text"
+            fullWidth
+            variant="standard"
+            value={assignSearchTerm}
+            onChange={(e) => setAssignSearchTerm(e.target.value)}
+          />
+          {isSearching && (
+            <Box sx={{ display: "flex", justifyContent: "center", my: 1 }}>
+              <CircularProgress size={24} />
+            </Box>
+          )}
+          <List>
+            {assignCandidates.map((person) => (
+              <ListItemButton
+                key={person.id}
+                selected={assignTargetPerson?.id === person.id}
+                onClick={() => setAssignTargetPerson(person)}
+              >
+                <ListItemText primary={person.name} />
+              </ListItemButton>
+            ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseAssignDialog}>Cancel</Button>
+          <Button
+            onClick={handleConfirmAssign}
+            disabled={!assignTargetPerson || isProcessing}
+          >
+            Assign
           </Button>
         </DialogActions>
       </Dialog>
