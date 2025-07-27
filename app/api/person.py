@@ -163,7 +163,7 @@ def get_person_timeline(
             except ValueError:
                 continue
 
-    def get_date(item):
+    def get_date(item: Media|TimelineEvent) -> date:
         return (
             item.created_at.date()
             if isinstance(item, Media)
