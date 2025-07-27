@@ -1,7 +1,7 @@
 import React from "react";
 import { Box, Typography } from "@mui/material";
 import { Media, Person, Tag } from "../types";
-import { READ_ONLY } from "../config";
+import config from "../config";
 import TagAdder from "./TagAdder";
 import { Tags } from "./Tags";
 
@@ -24,7 +24,7 @@ export function TagsSection({
   const ownerId = owner.id;
   return (
     <Box mt={4}>
-      {!READ_ONLY && (
+      {!config.READ_ONLY && (
         <Box mb={2}>
           <Typography variant="h6" gutterBottom>
             Add tag to media

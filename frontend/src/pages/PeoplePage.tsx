@@ -2,14 +2,9 @@ import React, { useCallback } from "react";
 import { useInfinite, CursorResponse } from "../hooks/useInfinite";
 import PersonCard from "../components/PersonCard";
 import { PersonReadSimple } from "../types";
-import {
-  Container,
-  Box,
-  Typography,
-  CircularProgress,
-} from "@mui/material";
+import { Container, Box, Typography, CircularProgress } from "@mui/material";
 import Grid from "@mui/material/Grid";
-import { ENABLE_PEOPLE } from "../config";
+import config from "../config";
 import { getPeople } from "../services/person";
 
 export default function PeoplePage() {
@@ -35,7 +30,7 @@ export default function PeoplePage() {
       </Box>
     );
   }
-  if (!ENABLE_PEOPLE) {
+  if (!config.ENABLE_PEOPLE) {
     return (
       <Typography variant="h5" color="text.primary" gutterBottom>
         People disabled!

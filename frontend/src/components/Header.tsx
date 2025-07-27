@@ -25,7 +25,7 @@ import TaskManager from "../components/TasksPanel";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { searchByImage } from "../services/searchActions";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
-import { READ_ONLY, ENABLE_PEOPLE } from "../config";
+import config from "../config";
 import { API } from "../config";
 
 const logoUrl = `${API}/static/logo.png`;
@@ -92,7 +92,7 @@ function MobileDrawer({
         ))}
       </List>
 
-      {!READ_ONLY && (
+      {!config.READ_ONLY && (
         <>
           <Divider />
           <Box sx={{ p: 2 }}>
@@ -131,12 +131,16 @@ export function Header() {
     ["Duplicates", "/duplicates"],
   ];
 
-  const pathsToExcludeInReadOnly: string[] = ["/orphanfaces", "/maptagger", "/duplicates"];
+  const pathsToExcludeInReadOnly: string[] = [
+    "/orphanfaces",
+    "/maptagger",
+    "/duplicates",
+  ];
   const pathsToExcludeInPeopleDisabled: string[] = ["/people"];
   const visibleNavItems = allNavItems.filter(
     ([, path]) =>
-      !(READ_ONLY && pathsToExcludeInReadOnly.includes(path)) &&
-      !(!ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path))
+      !(config.READ_ONLY && pathsToExcludeInReadOnly.includes(path)) &&
+      !(!config.ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path))
   );
 
   function onSearchSubmit(e: React.FormEvent) {
@@ -187,7 +191,7 @@ export function Header() {
           </StyledNavLink>
         ))}
         <ThemeToggleButton />
-        {!READ_ONLY && (
+        {!config.READ_ONLY && (
           <IconButton
             onClick={() => setIsControlPanelOpen(true)}
             color="primary"
@@ -220,7 +224,9 @@ export function Header() {
         variant="outlined"
         size="small"
         value={category}
-        onChange={(e) => setCategory(e.target.value as "media" | "person" | "tag")}
+        onChange={(e) =>
+          setCategory(e.target.value as "media" | "person" | "tag")
+        }
         sx={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
       >
         <MenuItem value="media">Media</MenuItem>
@@ -325,7 +331,7 @@ export function Header() {
           },
         }}
       >
-        {!READ_ONLY && (
+        {!config.READ_ONLY && (
           <Box sx={{ p: 2 }}>
             <Typography
               variant="overline"

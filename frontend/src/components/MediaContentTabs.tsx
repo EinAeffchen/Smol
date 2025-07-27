@@ -6,7 +6,7 @@ import SimilarContent from "./MediaRelatedContent";
 import { MediaExif } from "./MediaExif";
 import { MediaDetail, Tag } from "../types";
 import { Media } from "../types";
-import { ENABLE_PEOPLE } from "../config";
+import config from "../config";
 import { PeopleTabContent } from "./PeopleTabContent";
 import TagIcon from "@mui/icons-material/Tag";
 import PeopleIcon from "@mui/icons-material/People";
@@ -52,9 +52,9 @@ export function MediaContentTabs(props: MediaContentTabsProps) {
   );
   const tabIndices = {
     similar: 0,
-    people: ENABLE_PEOPLE ? 1 : -1, // -1 if not rendered
-    tags: ENABLE_PEOPLE ? 2 : 1,
-    exif: ENABLE_PEOPLE ? 3 : 2,
+    people: config.ENABLE_PEOPLE ? 1 : -1, // -1 if not rendered
+    tags: config.ENABLE_PEOPLE ? 2 : 1,
+    exif: config.ENABLE_PEOPLE ? 3 : 2,
   };
 
   return (
@@ -68,7 +68,7 @@ export function MediaContentTabs(props: MediaContentTabsProps) {
           scrollButtons="auto"
         >
           {renderTab("Similar", <CollectionsIcon />)}
-          {ENABLE_PEOPLE &&
+          {config.ENABLE_PEOPLE &&
             renderTab(`People (${persons.length})`, <PeopleIcon />)}
           {renderTab("Tags", <TagIcon />)}
           {renderTab("Exif Data", <DataObjectIcon />)}
@@ -80,7 +80,7 @@ export function MediaContentTabs(props: MediaContentTabsProps) {
           <SimilarContent mediaId={media.id} />
         </Suspense>
       </TabPanel>
-      {ENABLE_PEOPLE && (
+      {config.ENABLE_PEOPLE && (
         <TabPanel value={tabValue} index={tabIndices.people}>
           {/* The People tab now uses its own smart component */}
           <PeopleTabContent

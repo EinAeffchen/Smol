@@ -2,7 +2,7 @@ import React, { Suspense } from "react";
 import { Box, Typography, CircularProgress } from "@mui/material";
 import { Person, Face } from "../types";
 import PersonCard from "./PersonCard";
-import { READ_ONLY } from "../config";
+import config from "../config";
 
 const DetectedFaces = React.lazy(() => import("./DetectedFaces"));
 
@@ -60,7 +60,7 @@ export function PeopleSection({
       )}
 
       {/* Unassigned Faces Section */}
-      {orphans.length > 0 && !READ_ONLY && (
+      {orphans.length > 0 && !config.READ_ONLY && (
         <Box mb={4}>
           <Suspense fallback={<SectionLoader />}>
             <DetectedFaces

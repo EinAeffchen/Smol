@@ -30,12 +30,10 @@ export default function IndexPage() {
   const [sortMenuAnchorEl, setSortMenuAnchorEl] = useState<null | HTMLElement>(
     null
   );
-
   const mediaListKey = useMemo(() => {
     const tagString = tags.sort().join(",");
     return `all-media-${sortOrder}-${tagString}`;
   }, [sortOrder, tags]);
-
   const listState = useListStore(
     (state) => state.lists[mediaListKey]
   );

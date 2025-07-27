@@ -6,7 +6,7 @@ import {
   TextField,
   CircularProgress, // ADDED: For the saving indicator
 } from "@mui/material";
-import { READ_ONLY } from "../config";
+import config from "../config";
 
 export function PersonEditForm({
   initialPersonData,
@@ -36,8 +36,8 @@ export function PersonEditForm({
     onSave(form);
   };
 
-  // This component is now self-contained and doesn't render if in READ_ONLY mode
-  if (READ_ONLY) {
+  // This component is now self-contained and doesn't render if in config.READ_ONLY mode
+  if (config.READ_ONLY) {
     return null;
   }
 

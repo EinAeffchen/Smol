@@ -11,7 +11,7 @@ import {
 import Grid from "@mui/material/Grid";
 import { Person } from "../types";
 import { PersonEditForm } from "./PersonEditForm";
-import { API, READ_ONLY } from "../config";
+import config, { API } from "../config";
 
 interface PersonHeroProps {
   person: Person;
@@ -66,7 +66,7 @@ export function PersonHero({
               : "No appearances"}
           </Typography>
 
-          {!READ_ONLY && (
+          {!config.READ_ONLY && (
             <Stack
               direction="row"
               spacing={1}
@@ -99,7 +99,7 @@ export function PersonHero({
       </Grid>
 
       {/* The Edit Form is now more cleanly integrated */}
-      {!READ_ONLY && (
+      {!config.READ_ONLY && (
         <Paper
           sx={{
             p: { xs: 2, md: 3 },

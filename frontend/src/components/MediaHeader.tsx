@@ -11,7 +11,7 @@ import {
 } from "@mui/material";
 import { MoreVert, Vrpano, Delete } from "@mui/icons-material";
 import { Media } from "../types";
-import { READ_ONLY } from "../config";
+import config from "../config";
 const ERROR_COLOR = "error.main";
 
 interface MediaHeaderProps {
@@ -74,7 +74,7 @@ export function MediaHeader({
           <MoreVert sx={{ color: "primary" }} />
         </IconButton>
 
-        {!READ_ONLY && (
+        {!config.READ_ONLY && (
           <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose}>
             <>
               <Divider />

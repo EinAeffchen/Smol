@@ -10,7 +10,7 @@ import {
 import { useListStore, defaultListState } from "../stores/useListStore";
 import { getDuplicates, startDuplicateDetection } from "../services/duplicates";
 import { DuplicateGroup } from "../components/DuplicateGroup"; // Our new smart component
-import { READ_ONLY } from "../config";
+import config from "../config";
 
 const DuplicatesPage: React.FC = () => {
   const listKey = "duplicate-groups";
@@ -63,7 +63,7 @@ const DuplicatesPage: React.FC = () => {
         Potential Duplicates
       </Typography>
 
-      {!READ_ONLY && (
+      {!config.READ_ONLY && (
         <Box sx={{ mb: 3 }}>
           <Button
             variant="contained"
