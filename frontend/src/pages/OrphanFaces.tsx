@@ -91,7 +91,10 @@ export default function OrphanFacesPage() {
     if (!newPersonName.trim()) return;
     setIsProcessing(true);
     try {
-      const newPerson = await createPersonFromFaces(selectedFaceIds, newPersonName);
+      const newPerson = await createPersonFromFaces(
+        selectedFaceIds,
+        newPersonName
+      );
       if (!newPerson?.id) {
         throw new Error("Failed to get ID for newly created person.");
       }
@@ -110,11 +113,14 @@ export default function OrphanFacesPage() {
       alert("Failed to create new person.");
     } finally {
       setIsProcessing(false);
+      setSelectedFaceIds([]);
     }
   };
 
-  const handleOpenAssignDialog = () => {
-    searchPersonsByName("").then(setPersonOptions);
+  const handleOpenAssignDialog = (name: string = "") => {
+    if (name) {
+      searchPersonsByName(name).then(setPersonOptions);
+    }
     setAssignDialogOpen(true);
   };
 
@@ -127,6 +133,7 @@ export default function OrphanFacesPage() {
       setAssignDialogOpen(false);
     } finally {
       setIsProcessing(false);
+      setSelectedFaceIds([]);
     }
   };
 
@@ -188,7 +195,7 @@ export default function OrphanFacesPage() {
               variant="contained"
               size="small"
               disabled={isProcessing}
-              onClick={handleOpenAssignDialog}
+              onClick={() => handleOpenAssignDialog()}
             >
               Assign...
             </Button>
@@ -248,7 +255,12 @@ export default function OrphanFacesPage() {
             getOptionLabel={(o) => o.name || "Unknown"}
             onChange={(_, val) => handleConfirmAssign(val)}
             renderInput={(params) => (
-              <TextField {...params} label="Search for a person" autoFocus />
+              <TextField
+                {...params}
+                onChange={(event) => handleOpenAssignDialog(event.target.value)}
+                label="Search for a person"
+                autoFocus
+              />
             )}
           />
         </DialogContent>
