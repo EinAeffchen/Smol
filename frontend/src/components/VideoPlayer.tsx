@@ -68,12 +68,9 @@ export function VideoWithPreview({ media }: { media: Media }) {
 
     const progressBarStart = PROGRESS_BAR_LEFT_OFFSET;
     let progressBarEnd = rect.width - PROGRESS_BAR_RIGHT_OFFSET;
-    console.log(`has audio: ${hasAudio}`);
-    console.log(progressBarEnd);
     if (!hasAudio) {
       progressBarEnd = progressBarEnd+70;
     }
-    console.log(progressBarEnd);
     const progressBarWidth = progressBarEnd - progressBarStart;
 
     const mouseX = e.clientX - rect.left;
@@ -113,12 +110,9 @@ export function VideoWithPreview({ media }: { media: Media }) {
   };
 
   const handleReady = () => {
-    console.log("READY!");
     setIsLoading(false);
     const internalPlayer = playerRef.current?.getInternalPlayer();
-    console.log(internalPlayer);
     if (internalPlayer) {
-      console.log(internalPlayer.mozHasAudio);
       setHasAudio(internalPlayer.mozHasAudio);
     }
   };
