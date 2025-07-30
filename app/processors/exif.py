@@ -4,7 +4,7 @@ from PIL import ExifTags, ImageFile
 from sqlmodel import select
 from app.processors.base import MediaProcessor
 from app.models import Media, ExifData, Scene
-from app.config import VIDEO_SUFFIXES, MEDIA_DIR
+from app.config import VIDEO_SUFFIXES, MEDIA_DIR, EXIF_PROCESSOR_ACTIVE
 from cv2.typing import MatLike
 from PIL.MpoImagePlugin import MpoImageFile
 from app.database import safe_commit
@@ -32,6 +32,7 @@ def _to_decimal(coord, ref):
 
 class ExifProcessor(MediaProcessor):
     name = "exif"
+    order = 0
 
     def _process_image(
         self, img: MpoImageFile, session: Session, media: Media
@@ -145,7 +146,7 @@ class ExifProcessor(MediaProcessor):
         if session.exec(
             select(ExifData).where(ExifData.media_id == media.id)
         ).first():
-            return
+            return True
 
         fn = Path(media.filename)
         suffix = fn.suffix.lower()
@@ -157,6 +158,8 @@ class ExifProcessor(MediaProcessor):
 
     def load_model(self):
         """Doesn't need a model"""
+        if EXIF_PROCESSOR_ACTIVE:
+            self.active = True
 
     def unload(self):
         """Doesn't need a model"""

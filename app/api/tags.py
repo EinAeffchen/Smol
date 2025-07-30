@@ -53,7 +53,12 @@ def get_or_create_tag(name: str, session: Session) -> Tag:
     return tag
 
 
-def attach_tag_to_media(media_id: int, tag_id: int, session: Session) -> None:
+def attach_tag_to_media(
+    media_id: int,
+    tag_id: int,
+    session: Session,
+    score: float | None = None,
+) -> None:
     # avoid dupes
     # ensure both exist
     if not session.get(Media, media_id):
@@ -66,7 +71,7 @@ def attach_tag_to_media(media_id: int, tag_id: int, session: Session) -> None:
         )
     ).first():
         return
-    link = MediaTagLink(media_id=media_id, tag_id=tag_id)
+    link = MediaTagLink(media_id=media_id, tag_id=tag_id, auto_score=score)
     session.add(link)
     safe_commit(session)
 
@@ -75,7 +80,7 @@ def attach_tag_to_media(media_id: int, tag_id: int, session: Session) -> None:
 def create_tag(
     *,
     name: str = Body(..., embed=True),
-    session: Session = Depends(get_session)
+    session: Session = Depends(get_session),
 ):
     if READ_ONLY:
         return HTTPException(

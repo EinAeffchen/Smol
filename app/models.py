@@ -21,30 +21,27 @@ class TimelineEvent(SQLModel, table=True):
 
 
 class MediaTagLink(SQLModel, table=True):
-    media_id: int | None = Field(
+    media_id: int = Field(
         default=None, foreign_key="media.id", primary_key=True
     )
-    tag_id: int | None = Field(
-        default=None, foreign_key="tag.id", primary_key=True
-    )
+    tag_id: int = Field(default=None, foreign_key="tag.id", primary_key=True)
+    auto_score: float | None = Field(default=None)
 
 
 class Blacklist(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     path: str = Field(unique=True)
 
 
 class PersonTagLink(SQLModel, table=True):
-    person_id: int | None = Field(
+    person_id: int = Field(
         default=None, foreign_key="person.id", primary_key=True
     )
-    tag_id: int | None = Field(
-        default=None, foreign_key="tag.id", primary_key=True
-    )
+    tag_id: int = Field(default=None, foreign_key="tag.id", primary_key=True)
 
 
 class Tag(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
 
     media: list["Media"] = Relationship(
@@ -63,7 +60,7 @@ class Tag(SQLModel, table=True):
 
 
 class Face(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     media_id: int = Field(foreign_key="media.id")
     person_id: int | None = Field(foreign_key="person.id", default=None)
     thumbnail_path: str
@@ -83,7 +80,7 @@ class Face(SQLModel, table=True):
 
 
 class Media(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     path: str = Field(unique=True)
     filename: str = Field(index=True)
     thumbnail_path: str = Field(default=None)
@@ -128,7 +125,7 @@ class Media(SQLModel, table=True):
 
 
 class Scene(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     media_id: int = Field(foreign_key="media.id", index=True)
     start_time: float  # in seconds
     end_time: float  # in seconds
@@ -142,7 +139,7 @@ class Scene(SQLModel, table=True):
 
 
 class Person(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     name: str | None = None
     age: int | None = None
     gender: str | None = None
@@ -206,7 +203,7 @@ class PersonSimilarity(SQLModel, table=True):
 
 
 class ExifData(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     media_id: int = Field(foreign_key="media.id", index=True)
 
     # camera & capture
@@ -228,7 +225,7 @@ class ExifData(SQLModel, table=True):
 
 
 class DuplicateGroup(SQLModel, table=True):
-    id: int | None = Field(default=None, primary_key=True)
+    id: int = Field(default=None, primary_key=True)
     created_at: datetime = Field(default_factory=datetime.now)
 
     media_links: list["DuplicateMedia"] = Relationship(back_populates="group")

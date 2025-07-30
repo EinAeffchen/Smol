@@ -10,7 +10,7 @@ from app.models import Media, Scene, Tag
 from app.processors.base import MediaProcessor
 from app.logger import logger
 import numpy as np
-from app.config import preprocess, model
+from app.config import preprocess, model, IMAGE_EMBEDDING_PROCESSOR_ACTIVE
 from sqlalchemy import text
 import json
 from tqdm import tqdm
@@ -18,11 +18,13 @@ from app.api.media import delete_media_record
 from app.utils import safe_commit
 
 
-class SceneTagger(MediaProcessor):
-    name = "scene_tagger"
+class EmbeddingExtractor(MediaProcessor):
+    name = "embedding_extractor"
+    order = 10
 
     def load_model(self):
-        pass
+        if IMAGE_EMBEDDING_PROCESSOR_ACTIVE:
+            self.active = True
 
     def unload(self):
         pass
@@ -51,10 +53,10 @@ class SceneTagger(MediaProcessor):
         # 1) skip if already extracted
         if session.exec(
             select(Media).where(
-                Media.ran_auto_tagging.is_(True), Media.id == media.id
+                Media.embeddings_created.is_(True), Media.id == media.id
             )
         ).first():
-            return
+            return True
         embeddings = list()
         for scene in tqdm(scenes):
             if isinstance(scene, ImageFile):
@@ -82,7 +84,7 @@ class SceneTagger(MediaProcessor):
             if norm > 0:
                 avg /= norm
             media.embedding = avg.tolist()
-        media.ran_auto_tagging = True
+        media.embeddings_created = True
         session.add(media)
         sql = text(
             """

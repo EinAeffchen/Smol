@@ -10,12 +10,9 @@ class MediaProcessor(ABC):
     A piece of logic that, given a Media row,
     may insert or update other tables to enrich it.
     """
-
-    @property
-    @abstractmethod
-    def name(self) -> str:
-        """unique key, e.g. "exif" or "face_extraction" """
-
+    name: str   #unique key, e.g. "exif" or "face_extraction"
+    active: bool = False
+    order: int = -1 # order in which to run processors
     @abstractmethod
     def load_model(self):
         """Used to load models into memory before use"""
@@ -30,7 +27,7 @@ class MediaProcessor(ABC):
         media: Media,
         session: Session,
         scenes: list[tuple[Scene, MatLike]] | list[ImageFile] | list[Scene],
-    ) -> None:
+    ) -> bool|None:
         """
         Called once for each new or updated Media.
         Should commit its own changes (e.g. write to its own tables).

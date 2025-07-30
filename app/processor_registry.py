@@ -19,6 +19,7 @@ def load_processors() -> list[MediaProcessor]:
         return processors
 
     pkg_path = Path(__file__).parent / "processors"
+    loaded_processors = []
     for finder, name, ispkg in pkgutil.iter_modules([str(pkg_path)]):
         module = importlib.import_module(f"app.processors.{name}")
         for attr in dir(module):
@@ -28,5 +29,8 @@ def load_processors() -> list[MediaProcessor]:
                 and issubclass(cls, MediaProcessor)
                 and cls is not MediaProcessor
             ):
-                processors.append(cls())
+                loaded_processors.append(cls())
+    loaded_processors.sort(key=lambda p: p.order)
+    processors.extend(loaded_processors)
+    logger.info("Processors loaded in order: %s", [p.name for p in processors])
     return processors

@@ -28,7 +28,6 @@ from app.config import (
     PERSON_MIN_FACE_COUNT,
     READ_ONLY,
     VIDEO_SUFFIXES,
-
 )
 from app.database import engine, get_session, safe_commit
 from app.logger import logger
@@ -41,7 +40,7 @@ from app.utils import (
     process_file,
     split_video,
     generate_thumbnail,
-    get_image_taken_date
+    get_image_taken_date,
 )
 
 router = APIRouter()
@@ -53,7 +52,11 @@ def create_and_run_task(
     session: Session,
     background_tasks: BackgroundTasks,
     task_type: Literal[
-        "scan", "process_media", "cluster_persons", "find_duplicates", "clean_missing_files"
+        "scan",
+        "process_media",
+        "cluster_persons",
+        "find_duplicates",
+        "clean_missing_files",
     ],
     callable_task: Callable,
 ):
@@ -111,6 +114,7 @@ async def start_media_processing(
         callable_task=_run_media_processing,
     )
 
+
 @router.post(
     "/refresh_creation_date",
     summary="Detect faces and compute embeddings for all unprocessed media",
@@ -124,14 +128,12 @@ async def start_creation_refresh(
     offset = 0
     while True:
         media_batch = session.exec(
-            select(Media)
-            .offset(offset)
-            .limit(batch_size)
+            select(Media).offset(offset).limit(batch_size)
         ).all()
-        
+
         if not media_batch:
             break
-            
+
         for media in media_batch:
             full_path = MEDIA_DIR / media.path
             if media.duration is not None:
@@ -143,11 +145,9 @@ async def start_creation_refresh(
 
         offset += batch_size
         session.commit()
-        batch_count+=1
+        batch_count += 1
         logger.info("Finished batch: %s", batch_count)
-    return {"Done":"OK"}
-
-
+    return {"Done": "OK"}
 
 
 def _run_cleanup_and_chain(task_id: str):
@@ -156,15 +156,14 @@ def _run_cleanup_and_chain(task_id: str):
 
     logger.info("Cleanup task finished, starting scan task.")
     with Session(engine) as new_session:
-        next_task = ProcessingTask(
-            task_type="scan", total=0, processed=0
-        )
+        next_task = ProcessingTask(task_type="scan", total=0, processed=0)
         new_session.add(next_task)
         new_session.commit()
         new_session.refresh(next_task)
 
         # Call the next worker in the chain
         _run_scan_and_chain(next_task.id)
+
 
 def _run_scan_and_chain(task_id: str):
     _run_scan(task_id)
@@ -200,16 +199,9 @@ def _run_media_processing_and_chain(task_id: str):
     logger.info("Task chain completed")
 
 
-def _run_media_processing(task_id: str):
-    session = Session(engine)
-    task = session.get(ProcessingTask, task_id)
-    if not task:
-        raise ValueError("Task with id %s not found!", task_id)
-    task.status = "running"
-    task.started_at = datetime.now(timezone.utc)
-
-    # iterate unprocessed media
-    medias = session.exec(
+def _get_media_to_process(session: Session) -> list[Media]:
+    """Fetches all media records that require processing."""
+    return session.exec(
         select(Media)
         .where(
             or_(
@@ -221,82 +213,141 @@ def _run_media_processing(task_id: str):
         )
         .order_by(Media.duration.asc())
     ).all()
-    task.total = len(medias)
-    session.add(task)
-    safe_commit(session)
 
-    for proc in processors:
-        proc.load_model()
 
-    for media in medias:
-        logger.info("Processing: %s", media.filename)
-        # refresh task status to check for cancellation
-        task = session.get(ProcessingTask, task_id)
-        assert task
+def _get_or_extract_scenes(
+    media: Media, session: Session
+) -> list[Image.Image | tuple]:
+    """
+    Returns existing scenes or extracts them from the media file.
+    Handles file errors by logging or deleting the record.
+    Returns an empty list if processing cannot continue.
+    """
+    full_path = MEDIA_DIR / media.path
+    suffix = full_path.suffix.lower()
 
-        if task.status == "cancelled":
-            break
-        full_path = MEDIA_DIR / media.path
-        suffix = full_path.suffix.lower()
-        if media.scenes or suffix in IMAGE_SUFFIXES:
-            media.extracted_scenes = True
-        if not media.extracted_scenes or suffix in IMAGE_SUFFIXES:
-            if suffix in IMAGE_SUFFIXES:
-                try:
-                    scenes = [Image.open(full_path)]
-                except UnidentifiedImageError:
-                    logger.warning(
-                        "Skipping %s, broken image file.", full_path
-                    )
-                    continue
-                except FileNotFoundError:
-                    delete_record(media.id, session)
-                    logger.warning(
-                        "Couldn't find file %s, deleting record", media.path
-                    )
-                    continue
-            else:
-                scenes = split_video(media, full_path)
+    # If scenes are already extracted, return them.
+    # For images, we always re-open, so we don't check media.scenes.
+    if media.extracted_scenes and suffix not in IMAGE_SUFFIXES:
+        return media.scenes
+
+    try:
+        if suffix in IMAGE_SUFFIXES:
+            scenes = [Image.open(full_path)]
         else:
-            scenes = media.scenes
+            scenes = split_video(media, full_path)
+    except FileNotFoundError:
+        logger.warning("File not found: %s. Deleting record.", media.path)
+        delete_record(media.id, session)
+        return []  # Return empty list to skip further processing
+    except UnidentifiedImageError:
+        logger.warning("Skipping broken image file: %s.", full_path)
+        # Mark as processed to avoid re-trying a broken file
         media.extracted_scenes = True
         session.add(media)
-        safe_commit(session)
-        for scene in scenes:
-            if isinstance(scene, tuple):
-                session.add(scene[0])
-        safe_commit(session)
+        return []
+    except Exception:
+        logger.exception("Failed to extract scenes for %s.", media.path)
+        return []
 
-        broken = False
-        for proc in processors:
-            try:
-                result = proc.process(media, session, scenes=scenes)
-                if not result:
-                    broken = True
-                    break
-            except Exception as e:
-                logger.exception(
-                    "processor %r failed on media %d with %s",
+    media.extracted_scenes = True
+    session.add(media)
+
+    # Add new scene objects to the session if they are ORM models
+    for scene in scenes:
+        if isinstance(scene, tuple) and hasattr(scene[0], "id"):
+            session.add(scene[0])
+
+    return scenes
+
+
+def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
+    """
+    Applies all active processors to the media and its scenes.
+    Returns True if all processors succeeded, False otherwise.
+    """
+    if not scenes:
+        logger.warning(
+            "Skipping processors for %s due to no scenes.", media.filename
+        )
+        # Mark as processed to avoid retrying if scenes failed extraction
+        media.faces_extracted = True
+        media.ran_auto_tagging = True
+        media.embeddings_created = True
+        return True
+
+    for proc in processors:
+        if not proc.active:
+            continue
+        try:
+            if not proc.process(media, session, scenes=scenes):
+                logger.error(
+                    "Processor '%s' failed for media %s.",
                     proc.name,
                     media.path,
-                    e,
                 )
-        if not broken:
-            session.add(media)
-        broken = False
-        # 4) update task progress
-        task.processed += 1
+                return False  # Stop processing this media item on failure
+        except Exception as e:
+            logger.exception(
+                "Processor '%s' raised an exception on media %s: %s",
+                proc.name,
+                media.path,
+                e,
+            )
+            return False
+    return True
+
+
+def _run_media_processing(task_id: str):
+    with Session(engine) as session:
+        task = session.get(ProcessingTask, task_id)
+        if not task:
+            logger.error("Task with id %s not found!", task_id)
+            return
+        
+        task.status = "running"
+        task.started_at = datetime.now(timezone.utc)
+        medias_to_process = _get_media_to_process(session)
+        task.total = len(medias_to_process)
         session.add(task)
         safe_commit(session)
-    for proc in processors:
-        proc.unload()
 
-    # finalize
-    task.status = "cancelled" if task.status == "cancelled" else "completed"
-    task.finished_at = datetime.now(timezone.utc)
-    session.add(task)
-    safe_commit(session)
-    session.close()
+        for proc in processors:
+            proc.load_model()
+
+        for media in medias_to_process:
+            session.refresh(task)  # Check for cancellation
+            if task.status == "cancelled":
+                logger.info("Task cancelled. Stopping processing.")
+                break
+
+            logger.info("Processing: %s", media.filename)
+
+            scenes = _get_or_extract_scenes(media, session)
+            if not scenes and not Path(MEDIA_DIR / media.path).exists():
+                # If scenes are empty because the file was deleted, commit and continue
+                safe_commit(session)
+                continue
+
+            all_processors_succeeded = _apply_processors(media, scenes, session)
+
+            if all_processors_succeeded:
+                session.add(media) # Add the updated media object
+
+            task.processed += 1
+            session.add(task)
+            safe_commit(session) # Commit after each media item is fully processed
+
+        # 4. Unload Models
+        for proc in processors:
+            proc.unload()
+
+        # 5. Finalize Task
+        session.refresh(task) # Get final status before updating
+        task.status = "completed" if task.status != "cancelled" else "cancelled"
+        task.finished_at = datetime.now(timezone.utc)
+        session.add(task)
+        safe_commit(session)
 
 
 # ─── 2) CLUSTER PERSONS ────────────────────────────────────────────────────────
@@ -326,7 +377,9 @@ def _fetch_faces_and_embeddings(
     results = session.exec(
         select(Face.id, Face.embedding)
         .where(
-            Face.embedding.is_not(None), Face.person_id.is_(None), Face.id > last_id
+            Face.embedding.is_not(None),
+            Face.person_id.is_(None),
+            Face.id > last_id,
         )
         .order_by(Face.id.asc())
         .limit(limit)
@@ -450,7 +503,6 @@ def assign_to_existing_persons(
     unassigned: list[int] = []
 
     with Session(engine) as session:
-
         for face_id, emb in tqdm(zip(face_ids, embs), total=len(face_ids)):
             face = session.get(Face, face_id)
             task = session.get(ProcessingTask, task_id)
@@ -488,7 +540,6 @@ def assign_to_existing_persons(
                 person.appearance_count += 1
                 session.exec(sql)
             else:
-
                 unassigned.append(face_id)
 
             task.processed += 1
@@ -634,6 +685,7 @@ def list_active_tasks(session: Session = Depends(get_session)):
         time.sleep(10)
         return list_active_tasks(session)
 
+
 @router.get(
     "/{task_id}", response_model=ProcessingTask, summary="Get task status"
 )
@@ -673,7 +725,7 @@ def start_duplicate_detection(
     session: Session = Depends(get_session),
     threshold: int = 2,
 ):
-    #TODO add auto-cleanup with options (keep oldest, newest, biggest, smallest)
+    # TODO add auto-cleanup with options (keep oldest, newest, biggest, smallest)
     task = create_and_run_task(
         session=session,
         background_tasks=background_tasks,
@@ -692,7 +744,7 @@ def _run_duplicate_detection(task_id: str, threshold: int):
     generate_hashes()
     processor = DuplicateProcessor(task_id, threshold)
     processor.process()
-    
+
     # Clean up any empty duplicate groups that were created
     with Session(engine) as session:
         empty_groups = session.exec(
@@ -705,10 +757,15 @@ def _run_duplicate_detection(task_id: str, threshold: int):
             """)
         ).all()
         if empty_groups:
-            logger.info(f"Cleaning up {len(empty_groups)} empty duplicate groups")
+            logger.info(
+                f"Cleaning up {len(empty_groups)} empty duplicate groups"
+            )
             session.exec(
-                delete(DuplicateMedia)
-                .where(DuplicateMedia.group_id.in_([row[0] for row in empty_groups]))
+                delete(DuplicateMedia).where(
+                    DuplicateMedia.group_id.in_([
+                        row[0] for row in empty_groups
+                    ])
+                )
             )
             session.commit()
 
@@ -758,29 +815,31 @@ def _clean_missing_files(task_id: str):
 
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
-        task.total = session.exec(select(func.count()).select_from(Media)).first()
+        task.total = session.exec(
+            select(func.count()).select_from(Media)
+        ).first()
         session.commit()
 
         deleted_count = 0
         batch_size = 100
         offset = 0
-        
+
         while True:
             media_batch = session.exec(
-                select(Media)
-                .offset(offset)
-                .limit(batch_size)
+                select(Media).offset(offset).limit(batch_size)
             ).all()
-            
+
             if not media_batch:
                 break
-                
+
             for media in media_batch:
                 full_path = MEDIA_DIR / media.path
                 if not full_path.exists():
                     delete_record(media.id, session)
                     deleted_count += 1
-                    logger.info("Deleted record for missing file: %s", media.path)
+                    logger.info(
+                        "Deleted record for missing file: %s", media.path
+                    )
 
             offset += batch_size
             task.processed = offset
@@ -790,6 +849,7 @@ def _clean_missing_files(task_id: str):
         task.finished_at = datetime.now(timezone.utc)
         session.commit()
         logger.info("Cleaned %d missing file records", deleted_count)
+
 
 def _run_scan(task_id: str):
     with Session(engine) as sess:
@@ -840,7 +900,6 @@ def _run_scan(task_id: str):
 
     medias_to_add: list[Media] = list()
     for i, filepath in tqdm(enumerate(media_paths, 1)):
-
         if i % 100 == 0:
             with Session(engine) as sess:
                 task = sess.get(ProcessingTask, task_id)
@@ -868,14 +927,19 @@ def _run_scan(task_id: str):
         for broken_media in broken_files:
             sess.delete(broken_media)
         task.processed = len(medias_to_add)
-        task.status = "completed" if task.status != "cancelled" else "cancelled"
+        task.status = (
+            "completed" if task.status != "cancelled" else "cancelled"
+        )
         task.finished_at = datetime.now(timezone.utc)
         safe_commit(sess)
+
 
 def generate_hashes():
     """A task to find all media without a pHash and generate one."""
     with Session(engine) as session:
-        media_to_hash_stmt = select(Media).where(Media.phash.is_(None), Media.duration.is_(None))
+        media_to_hash_stmt = select(Media).where(
+            Media.phash.is_(None), Media.duration.is_(None)
+        )
         media_to_hash = session.exec(media_to_hash_stmt).all()
 
         for media in tqdm(media_to_hash):
@@ -889,6 +953,7 @@ def generate_hashes():
                 )
 
         session.commit()
+
 
 @router.post(
     "/clean_missing_files",

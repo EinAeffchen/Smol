@@ -12,7 +12,7 @@ from sqlmodel import select, text
 from tqdm import tqdm
 
 from app.api.media import delete_media_record
-from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, THUMB_DIR
+from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, ENABLE_PEOPLE, THUMB_DIR, FACE_PROCESSOR_ACTIVE
 from app.database import safe_commit
 from app.logger import logger
 from app.models import ExifData, Face, Media, Scene
@@ -22,6 +22,7 @@ from app.utils import get_thumb_folder
 
 class FaceProcessor(MediaProcessor):
     name = "faces"
+    order = 20
 
     def _crop_with_margin(
         self, img: np.ndarray, bbox: list[int], pad_pct: float = 0.2
@@ -96,10 +97,9 @@ class FaceProcessor(MediaProcessor):
             select(Media).where(
                 Media.id == media.id,
                 Media.faces_extracted.is_(True),
-                Media.embeddings_created.is_(True),
             )
         ).first():
-            return
+            return True
         for scene in tqdm(scenes):
             try:
                 if isinstance(scene, tuple):
@@ -135,12 +135,13 @@ class FaceProcessor(MediaProcessor):
                 )
                 session.exec(sql)
         media.faces_extracted = True
-        media.embeddings_created = True
         session.add(media)
         safe_commit(session)
         return True
 
     def load_model(self):
+        if ENABLE_PEOPLE and FACE_PROCESSOR_ACTIVE:
+            self.active = True
         self.model = FaceAnalysis(
             "buffalo_l",
             root=str(MODELS_DIR),

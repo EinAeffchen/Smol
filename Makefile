@@ -1,7 +1,7 @@
 # SHELL := /usr/bin/bash
 # .SHELLFLAGS := -ec
 
-ENV_FILE ?= local.env
+ENV_FILE ?= smol.env
 
 DOCKER_TARGETS := docker-start docker-down push
 

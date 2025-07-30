@@ -22,6 +22,20 @@ class DuplicateKeepRule(Enum):
     
     def __str__(self):
         return self.value
+    
+class DuplicateHandlingRule(Enum):
+    """Defines the set of valid rules for keeping a duplicate file."""
+    KEEP = "keep"
+    REMOVE = "remove"
+    BLACKLIST = "blacklist"
+    DELETE = "delete"
+
+    @classmethod
+    def get_default(cls):
+        return cls.KEEP
+    
+    def __str__(self):
+        return self.value
 
 class ClipModel(Enum):
     ROBERTA_LARGE_VIT_H_14 = (
@@ -188,6 +202,21 @@ FACE_RECOGNITION_MIN_FACE_PIXELS = int(
 PERSON_MIN_FACE_COUNT = int(os.environ.get("PERSON_MIN_FACE_COUNT", 2))
 
 # duplicate settings
-DUPLICATE_AUTO_REMOVE = parse_env_into_bool("DUPLICATE_AUTO_REMOVE", "false")
+DUPLICATE_AUTO_HANDLING = parse_env_into_enum("DUPLICATE_AUTO_HANDLING", DuplicateHandlingRule)
 
 DUPLICATE_AUTO_KEEP_RULE = parse_env_into_enum("DUPLICATE_AUTO_KEEP_RULE", DuplicateKeepRule)
+
+# Processors:
+
+## auto tagging
+AUTO_TAGGER_ACTIVE = parse_env_into_bool("AUTO_TAGGER", "true")
+USE_DEFAULT_TAGS = parse_env_into_bool("USE_DEFAULT_TAGS", "true")
+
+## exif processor
+EXIF_PROCESSOR_ACTIVE = parse_env_into_bool("EXIF_PROCESSOR_ACTIVE", "true")
+
+## face processor
+FACE_PROCESSOR_ACTIVE = parse_env_into_bool("FACE_PROCESSOR_ACTIVE", "true")
+
+## image embedding
+IMAGE_EMBEDDING_PROCESSOR_ACTIVE = parse_env_into_bool("IMAGE_EMBEDDING_PROCESSOR_ACTIVE", "true")

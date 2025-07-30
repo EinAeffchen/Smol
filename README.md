@@ -73,9 +73,9 @@ This application can be run directly on your machine or as a Docker container.
     Set the variables as described within the <> in your new .env file
 
 2.  **Create Environment File for smol:**
-    Copy the `template.env` and rename it `smol.env` file.
+    Copy the `smol.env.template` and rename it `smol.env` file.
     ```bash
-    cp template.env smol.env
+    cp smol.env.template smol.env
     ```
     Adjust the newly created template file to your liking. By default it is set to run in read/write mode with people tracking enabled, as well as regular auto scans on your mounted volume. 
 
