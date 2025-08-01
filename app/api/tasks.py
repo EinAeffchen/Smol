@@ -979,6 +979,8 @@ def generate_hashes(task_id: int | None = None):
                         return
                     task.processed += 10
                     sub_session.commit()
+            if i % 25 == 0:
+                session.commit()
         session.commit()
 
 
