@@ -92,7 +92,6 @@ class DuplicateProcessor:
                 logger.info(
                     f"Completed grouping {len(duplicate_hashes)} sets of identical images."
                 )
-                # You can update task progress here
                 self._update_task_progress_and_check_status(
                     session, 1, 2
                 ) 

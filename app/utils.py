@@ -10,15 +10,15 @@ import ffmpeg
 import numpy as np
 import piexif
 from PIL import Image, UnidentifiedImageError, ImageOps
-from PIL.Image import Image as ImageType
 from scenedetect import AdaptiveDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlmodel import Session, select
 from tqdm import tqdm
 from sqlalchemy import delete, text
 import json
+from typing import Literal
 import imagehash
-
+from videohash2 import VideoHash
 
 from app.config import (
     MAX_FRAMES_PER_VIDEO,
@@ -92,7 +92,9 @@ def process_file(filepath: Path) -> Media|None:
         phash=None
     )
     if media.duration is None:
-        media.phash = generate_perceptual_hash(media)
+        media.phash = generate_perceptual_hash(media, type="image")
+    else:    
+        media.phash = generate_perceptual_hash(media, type="video")
     return media
 
 
@@ -135,14 +137,16 @@ def fix_image_rotation(full_path: Path) -> None:
     transposed.save(full_path, format=img.format, exif=exif_bytes)
 
 
-def generate_perceptual_hash(media: Media) -> str:
+def generate_perceptual_hash(media: Media, type: Literal["image","video"]) -> str:
     full_path = MEDIA_DIR / media.path
     try:
-        img = Image.open(full_path)
+        if type=="image":
+            img = Image.open(full_path)
+            return str(imagehash.phash(img))
+        else:
+            return VideoHash(path=str(full_path)).hash
     except UnidentifiedImageError:
         logger.warning("Skipping %s, not an image!", media.path)
-    try:
-        return str(imagehash.phash(img))
     except OSError:
         logger.warning("Image %s is truncated and can't be processed:", media.path)
 

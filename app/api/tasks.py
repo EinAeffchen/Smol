@@ -78,11 +78,11 @@ def create_and_run_task(
             )
         ).first()
     except OperationalError:
-        logger.warning("Database currently busy, skipping auto scan.")
+        logger.warning(f"Database currently busy, skipping {task_type}.")
         return
 
     if existing_task:
-        logger.info(f"{task_type} is already running. Skipping new scan.")
+        logger.info(f"{task_type} is already running. Skipping new task.")
         # Return the existing task instead of creating a new one
         return existing_task
 
@@ -304,7 +304,7 @@ def _run_media_processing(task_id: str):
         if not task:
             logger.error("Task with id %s not found!", task_id)
             return
-        
+
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
         medias_to_process = _get_media_to_process(session)
@@ -329,22 +329,28 @@ def _run_media_processing(task_id: str):
                 safe_commit(session)
                 continue
 
-            all_processors_succeeded = _apply_processors(media, scenes, session)
+            all_processors_succeeded = _apply_processors(
+                media, scenes, session
+            )
 
             if all_processors_succeeded:
-                session.add(media) # Add the updated media object
+                session.add(media)  # Add the updated media object
 
             task.processed += 1
             session.add(task)
-            safe_commit(session) # Commit after each media item is fully processed
+            safe_commit(
+                session
+            )  # Commit after each media item is fully processed
 
         # 4. Unload Models
         for proc in processors:
             proc.unload()
 
         # 5. Finalize Task
-        session.refresh(task) # Get final status before updating
-        task.status = "completed" if task.status != "cancelled" else "cancelled"
+        session.refresh(task)  # Get final status before updating
+        task.status = (
+            "completed" if task.status != "cancelled" else "cancelled"
+        )
         task.finished_at = datetime.now(timezone.utc)
         session.add(task)
         safe_commit(session)
@@ -741,7 +747,12 @@ def start_duplicate_detection(
 
 
 def _run_duplicate_detection(task_id: str, threshold: int):
-    generate_hashes()
+    with Session(engine) as session:
+        task = session.get(ProcessingTask, task_id)
+        task.status = "running"
+        task.started_at = datetime.now(timezone.utc)
+        session.commit()
+    generate_hashes(task_id)
     processor = DuplicateProcessor(task_id, threshold)
     processor.process()
 
@@ -934,24 +945,40 @@ def _run_scan(task_id: str):
         safe_commit(sess)
 
 
-def generate_hashes():
+def generate_hashes(task_id: int | None = None):
     """A task to find all media without a pHash and generate one."""
     with Session(engine) as session:
-        media_to_hash_stmt = select(Media).where(
-            Media.phash.is_(None), Media.duration.is_(None)
-        )
+        if task_id:
+            media_to_hash_cnt = select(func.count(Media.id)).where(
+                Media.phash.is_(None)
+            )
+            count = session.exec(media_to_hash_cnt).first()
+            task = session.get(ProcessingTask, task_id)
+            task.total = count
+            session.commit()
+
+        media_to_hash_stmt = select(Media).where(Media.phash.is_(None))
         media_to_hash = session.exec(media_to_hash_stmt).all()
 
-        for media in tqdm(media_to_hash):
+        for i, media in tqdm(enumerate(media_to_hash)):
             try:
                 # Make sure you have the full path to the image file
-                media.phash = generate_perceptual_hash(media)
+                if media.duration is None:
+                    media.phash = generate_perceptual_hash(media, type="image")
+                else:
+                    media.phash = generate_perceptual_hash(media, type="video")
                 session.add(media)
             except Exception as e:
                 logger.error(
                     f"Could not generate hash for media {media.id}: {e}"
                 )
-
+            if task_id and i % 10 == 0:
+                with Session(engine) as sub_session:
+                    task = sub_session.get(ProcessingTask, task_id)
+                    if task and task.status == "cancelled":
+                        return
+                    task.processed += 10
+                    sub_session.commit()
         session.commit()
 
 
