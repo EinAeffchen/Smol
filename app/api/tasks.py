@@ -947,41 +947,68 @@ def _run_scan(task_id: str):
 
 def generate_hashes(task_id: int | None = None):
     """A task to find all media without a pHash and generate one."""
+    BATCH_SIZE = 10
     with Session(engine) as session:
-        if task_id:
-            media_to_hash_cnt = select(func.count(Media.id)).where(
+        task = session.get(ProcessingTask, task_id) if task_id else None
+        logger.info("Got task!")
+        # If there's a task, get the initial total count
+        if task:
+            count_stmt = select(func.count(Media.id)).where(
                 Media.phash.is_(None)
             )
-            count = session.exec(media_to_hash_cnt).first()
-            task = session.get(ProcessingTask, task_id)
-            task.total = count
-            session.commit()
+            total_count = session.exec(count_stmt).first()
+            logger.info("SET count to %s", total_count)
+            task.total = total_count
+            session.commit()  # Commit the initial total count
 
-        media_to_hash_stmt = select(Media).where(Media.phash.is_(None))
-        media_to_hash = session.exec(media_to_hash_stmt).all()
+        while True:
+            # Fetch a batch of media objects that need a hash
+            media_batch_stmt = (
+                select(Media).where(Media.phash.is_(None)).limit(BATCH_SIZE)
+            )
+            media_to_hash = session.exec(media_batch_stmt).all()
 
-        for i, media in tqdm(enumerate(media_to_hash)):
-            try:
-                # Make sure you have the full path to the image file
-                if media.duration is None:
-                    media.phash = generate_perceptual_hash(media, type="image")
-                else:
-                    media.phash = generate_perceptual_hash(media, type="video")
-                session.add(media)
-            except Exception as e:
-                logger.error(
-                    f"Could not generate hash for media {media.id}: {e}"
-                )
-            if task_id and i % 10 == 0:
-                with Session(engine) as sub_session:
-                    task = sub_session.get(ProcessingTask, task_id)
-                    if task and task.status == "cancelled":
+            # If no media is returned, we are done
+            if not media_to_hash:
+                logger.info("No more media to hash. Task complete.")
+                break
+
+            for media in tqdm(media_to_hash, desc="Generating Hashes"):
+                # If a task is running, check for cancellation periodically
+                if task:
+                    # Refresh the task object from the DB to get the latest status
+                    session.refresh(task, attribute_names=["status"])
+                    if task.status == "cancelled":
+                        logger.warning(
+                            f"Task {task_id} was cancelled. Aborting."
+                        )
+                        # Rollback any changes in the current uncommitted batch
+                        session.rollback()
                         return
-                    task.processed += 10
-                    sub_session.commit()
-            if i % 25 == 0:
-                session.commit()
-        session.commit()
+
+                try:
+                    # Generate the appropriate hash based on media type
+                    if media.duration is None:
+                        media.phash = generate_perceptual_hash(
+                            media, type="image"
+                        )
+                    else:
+                        media.phash = generate_perceptual_hash(
+                            media, type="video"
+                        )
+                    session.add(media)
+                except Exception as e:
+                    logger.error(
+                        f"Could not generate hash for media {media.id}: {e}"
+                    )
+
+            # Update the task progress after processing each batch
+            if task:
+                task.processed += len(media_to_hash)
+
+            # Commit the changes for the current batch (media phashes and task progress)
+            session.commit()
+            logger.info(f"Committed batch of {len(media_to_hash)} hashes.")
 
 
 @router.post(
