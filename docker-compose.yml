@@ -11,6 +11,7 @@ services:
     # /local/photo/folder:/app/media/photos
     volumes:
       - ${HOST_MEDIA_DIR}:/app/media
+      # - /mnt/d/GooglePhotos:/app/media/Google #/mnt/d/GooglePhotos
       - ${HOST_DATA_DIR}:/app/data
     env_file: ${ENV_FILE}
     restart: unless-stopped

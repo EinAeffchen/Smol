@@ -24,10 +24,9 @@ from app.config import (
     MAX_FRAMES_PER_VIDEO,
     MEDIA_DIR,
     THUMB_DIR,
-    THUMB_DIR_FOLDER_SIZE,
-    VIDEO_SUFFIXES,
     AUTO_ROTATE,
 )
+from app.config import settings
 from app.database import engine, safe_commit
 from app.logger import logger
 from app.models import (
@@ -42,7 +41,8 @@ from app.models import (
     ProcessingTask,
 )
 
-def get_image_taken_date(img_path: Path|None=None) -> datetime:
+
+def get_image_taken_date(img_path: Path | None = None) -> datetime:
     # fallback use creation time
     alt_time = datetime.fromtimestamp(img_path.stat().st_ctime)
 
@@ -50,20 +50,23 @@ def get_image_taken_date(img_path: Path|None=None) -> datetime:
         img = Image.open(img_path)
     except UnidentifiedImageError:
         return alt_time
-    
-    format_code = '%Y:%m:%d %H:%M:%S'
+
+    format_code = "%Y:%m:%d %H:%M:%S"
     try:
         exif = img._getexif()
     except AttributeError:
         exif = None
-    if exif and (creation_date:=exif.get(36867)):
+    if exif and (creation_date := exif.get(36867)):
         try:
             return datetime.strptime(creation_date, format_code)
         except ValueError:
-            logger.debug("Received invalid time for %s: %s", img_path, creation_date)
-    return alt_time 
+            logger.debug(
+                "Received invalid time for %s: %s", img_path, creation_date
+            )
+    return alt_time
 
-def process_file(filepath: Path) -> Media|None:
+
+def process_file(filepath: Path) -> Media | None:
     """Reads metadata from the file and generates a thumbnail"""
     try:
         probe = ffmpeg.probe(filepath)
@@ -71,7 +74,7 @@ def process_file(filepath: Path) -> Media|None:
         logger.error("Can't process %s", filepath)
         return
     size = os.path.getsize(filepath)
-    if filepath.suffix.lower() in VIDEO_SUFFIXES:
+    if filepath.suffix.lower() in settings.scan.VIDEO_SUFFIXES:
         duration = float(probe["format"].get("duration", 0))
     else:
         duration = None
@@ -89,11 +92,11 @@ def process_file(filepath: Path) -> Media|None:
         embeddings_created=False,
         created_at=get_image_taken_date(img_path=filepath),
         embedding=None,
-        phash=None
+        phash=None,
     )
     if media.duration is None:
         media.phash = generate_perceptual_hash(media, type="image")
-    else:    
+    else:
         media.phash = generate_perceptual_hash(media, type="video")
     return media
 
@@ -109,7 +112,7 @@ def get_thumb_folder(path: Path) -> Path:
         folders.sort(key=lambda p: int(p.name))
         latest = folders[-1]
         file_count = sum(1 for file in latest.iterdir() if file.is_file())
-        if file_count >= THUMB_DIR_FOLDER_SIZE:
+        if file_count >= settings.general.thumb_dir_folder_size:
             new_folder = path / str(int(latest.name) + 1)
             new_folder.mkdir(exist_ok=True)
             return new_folder
@@ -117,7 +120,7 @@ def get_thumb_folder(path: Path) -> Path:
 
 
 def fix_image_rotation(full_path: Path) -> None:
-    if not AUTO_ROTATE:
+    if not settings.scan.auto_rotate:
         return
 
     img = Image.open(full_path)
@@ -137,10 +140,12 @@ def fix_image_rotation(full_path: Path) -> None:
     transposed.save(full_path, format=img.format, exif=exif_bytes)
 
 
-def generate_perceptual_hash(media: Media, type: Literal["image","video"]) -> str:
+def generate_perceptual_hash(
+    media: Media, type: Literal["image", "video"]
+) -> str | None:
     full_path = MEDIA_DIR / media.path
     try:
-        if type=="image":
+        if type == "image":
             img = Image.open(full_path)
             return str(imagehash.phash(img))
         else:
@@ -148,7 +153,9 @@ def generate_perceptual_hash(media: Media, type: Literal["image","video"]) -> st
     except UnidentifiedImageError:
         logger.warning("Skipping %s, not an image!", media.path)
     except OSError:
-        logger.warning("Image %s is truncated and can't be processed:", media.path)
+        logger.warning(
+            "Image %s is truncated and can't be processed:", media.path
+        )
 
 
 def generate_thumbnail(media: Media) -> str | None:
@@ -156,7 +163,7 @@ def generate_thumbnail(media: Media) -> str | None:
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
     full_path = MEDIA_DIR / filepath
-    if filepath.suffix.lower() in VIDEO_SUFFIXES:
+    if filepath.suffix.lower() in settings.scan.VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)
             .filter("scale", 360, -1)
@@ -214,9 +221,9 @@ def get_person_embedding(
         logger.warning(f"No embeddings found for person {person_id}")
         return
 
-    embeddings_array = np.stack(
-        [np.array(e, dtype=np.float32) for e in face_embeddings]
-    )
+    embeddings_array = np.stack([
+        np.array(e, dtype=np.float32) for e in face_embeddings
+    ])
     centroid = embeddings_array.mean(axis=0)
     centroid /= np.linalg.norm(centroid)
     return json.dumps(centroid.tolist())

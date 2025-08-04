@@ -1,14 +1,49 @@
 import os
-from pathlib import Path
-import open_clip
-from app.logger import logger
 from enum import Enum
+from pathlib import Path
 from typing import TypeVar
 
+import open_clip
+from pydantic import BaseModel, Field
+import sys
+from app.logger import logger
+import yaml
+
 E = TypeVar("E", bound=Enum)
+IS_DOCKER = os.getenv("IS_DOCKER", False)
+logger.info("Running docker: %s", IS_DOCKER)
+
+
+def get_user_data_path() -> Path:
+    """Gets the path to the config file in the user's app data directory."""
+    if IS_DOCKER:
+        return Path("/app/data")
+    app_data_dir = Path(
+        os.getenv("APPDATA")
+        or os.getenv("XDG_CONFIG_HOME")
+        or Path.home() / ".config"
+    )
+    app_config_dir = app_data_dir / "Smol"  # Use your actual app name
+    app_config_dir.mkdir(parents=True, exist_ok=True)
+    return app_config_dir
+
+
+def get_static_dir() -> Path:
+    """
+    Gets the correct path to the static assets folder for both
+    development and a packaged PyInstaller binary.
+    """
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        # Running as a bundled executable (PyInstaller)
+        # The 'static' folder name must match the one in the --add-data flag
+        return Path(sys._MEIPASS) / "static"
+    else:
+        return Path("/app/static")
+
 
 class DuplicateKeepRule(Enum):
     """Defines the set of valid rules for keeping a duplicate file."""
+
     BIGGEST = "biggest"
     SMALLEST = "smallest"
     HIGHEST_RES = "highest_res"
@@ -19,12 +54,14 @@ class DuplicateKeepRule(Enum):
     @classmethod
     def get_default(cls):
         return cls.OLDEST
-    
+
     def __str__(self):
         return self.value
-    
+
+
 class DuplicateHandlingRule(Enum):
     """Defines the set of valid rules for keeping a duplicate file."""
+
     KEEP = "keep"
     REMOVE = "remove"
     BLACKLIST = "blacklist"
@@ -33,27 +70,26 @@ class DuplicateHandlingRule(Enum):
     @classmethod
     def get_default(cls):
         return cls.KEEP
-    
+
     def __str__(self):
         return self.value
 
+
 class ClipModel(Enum):
     ROBERTA_LARGE_VIT_H_14 = (
-        "xlm-roberta-large-ViT-H-14", 1024, "frozen_laion5b_s13b_b90k"
+        "xlm-roberta-large-ViT-H-14",
+        1024,
+        "frozen_laion5b_s13b_b90k",
     )
     ROBERTA_BASE_VIT_B_32 = (
-        "xlm-roberta-base-ViT-B-32", 512, "laion5b_s13b_b90k"
+        "xlm-roberta-base-ViT-B-32",
+        512,
+        "laion5b_s13b_b90k",
     )
-    VIT_L_14 = (
-        "ViT-L-14", 768, "laion2b_s32b_b82k"
-    )
-    VIT_B_32 = (
-        "ViT-B-32", 512, "laion2b_s34b_b79k" 
-    )
-    CONVNEXT_BASE_W = (
-        "convnext_base_w", 640, "laion2b_s13b_b82k_augreg"
-    )
-    
+    VIT_L_14 = ("ViT-L-14", 768, "laion2b_s32b_b82k")
+    VIT_B_32 = ("ViT-B-32", 512, "laion2b_s34b_b79k")
+    CONVNEXT_BASE_W = ("convnext_base_w", 640, "laion2b_s13b_b82k_augreg")
+
     def __init__(self, model_name: str, embedding_size: int, pretrained: str):
         """
         This initializer is called for each member, assigning the tuple
@@ -70,153 +106,231 @@ class ClipModel(Enum):
         """
         if not isinstance(value, str):
             return None
-        
+
         for member in cls:
             if member.model_name.lower() == value.lower():
                 return member
         return None
-    
+
     @classmethod
     def get_default(cls):
         # Define the default model
         return cls.ROBERTA_LARGE_VIT_H_14
-    
+
     def __str__(self):
         return self.model_name
 
-def parse_env_into_enum(env_name: str, enum_class: type[E]) -> E:
-    default_value_str = enum_class.get_default().value
-    value_str = os.environ.get(env_name, default_value_str)
 
-    try:
-        enum_member = enum_class(value_str.lower())
-        if enum_member is None:
-            # This handles the case where _missing_ returns None
-            raise ValueError(f"No matching enum member found for '{value_str}'")
-        return enum_member
-    except ValueError:
-        valid_options = ", ".join([member.value for member in enum_class])
-        raise ValueError(
-            f"Invalid value for {env_name}: '{value_str}'. "
-            f"Must be one of: {valid_options}"
+# TODO ensure read_only and read/write settings diff
+# TODO ensure future changes in settings are written into already known file
+class GeneralSettings(BaseModel):
+    port: int = 8000
+    # Run system in read_only mode or not
+    read_only: bool = False
+    # Enable face recognition and other person related features
+    enable_people: bool = True
+    # Which host the system runs on. Mostly only relevant if hosted online.
+    domain: str = f"http://localhost:{port}"
+    # maximum number of thumbnails per folder, adjust according to your systems inodes
+    thumb_dir_folder_size: int = 1000
+
+    data_dir: Path = get_user_data_path()
+    database_dir: Path = data_dir / "database"
+    smol_dir: Path = data_dir / ".smol"
+    thumb_dir = smol_dir / "thumbnails"
+    # only relevant when run as binary
+    media_dirs: list[Path] = []
+    static_dir: Path = get_static_dir()
+    models_dir: Path = smol_dir / "models"
+    database_url = f"sqlite:///{database_dir}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
+
+    def model_post_init(self, context: os.Any) -> None:
+        self.database_dir.mkdir(parents=False, exist_ok=True)
+        self.smol_dir.mkdir(parents=False, exist_ok=True)
+        self.thumb_dir.mkdir(exist_ok=True)
+        self.models_dir.mkdir(exist_ok=True)
+        if IS_DOCKER:
+            self.media_dirs = [Path("/app/media")]
+
+
+class TaggingSettings(BaseModel):
+    auto_tagging: bool = True
+    # whether to use the default system defined tags.
+    use_default_tags: bool = True
+    # add any tags in any language supported by the chosen clip model
+    custom_tags: list[str] = []
+
+
+class ScanSettings(BaseModel):
+    # enables automatic background scans for new files
+    auto_scan: bool = False
+    # How often to scan for files in minutes
+    scan_interval_minutes: int = 15
+    # If autoscan should also automatically clean the database from missing files
+    auto_clean_on_scan: bool = False
+    # If autoscan should also automatically cluster all faces.
+    # Not recommended if you manually adjusted people
+    auto_cluster_on_scan: bool = False
+    # sometimes images are rotated based on their exif data
+    # this is automatically caught by most apps and the user doesn't notice
+    # this option automatically rotates them to the correct direction and removes
+    # the exif rotation information
+    auto_rotate: bool = True
+    VIDEO_SUFFIXES: list[str] = [
+        ".mp4",
+        ".mov",
+        ".wmv",
+        ".avi",
+        ".flv",
+        ".mkv",
+        ".webm",
+        ".gp3",
+        ".ts",
+        ".mpeg",
+    ]
+    IMAGE_SUFFIXES: list[str] = [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".tiff",
+        ".gif",
+        ".bmp",
+    ]
+
+
+class AISettings(BaseModel):
+    # which model to use for image processing. Options:
+    # 1. xlm-roberta-large-ViT-H-14 -> Cross language large model
+    # 2. xlm-roberta-base-ViT-B-32 -> Cross language small model
+    # Below models are not tested yet and might need adjustments on the database
+    # vector sizes
+    # 3. ViT-L-14 -> english only large model
+    # 4. laion2b_s32b_b82k -> english only large model
+    # 5. ViT-B-32 -> english only base model
+    # 6. convnext_base_w -> english only convolution base model
+    clip_model_enum: ClipModel = ClipModel.ROBERTA_BASE_VIT_B_32
+    clip_model = clip_model_enum.model_name
+    clip_model_embedding_size = clip_model_enum.embedding_size
+    clip_model_pretrained = clip_model_enum.pretrained
+    # Strictness of the search results. Higher -> more accurate but less hits
+    min_search_dist: float = 0.68
+    # Defines the maximum distance for similarity between two images.
+    # Used to reduce/increase number of similar images. Higher -> stronger similarity
+    min_similarity_dist: float = 1.2
+    # reduce if ram is an issue, the higher the more accurate the clustering.
+    cluster_batch_size = 10000
+
+
+class FaceRecognitionSettings(BaseModel):
+    # minimum confidence needed to extract a face
+    face_recognition_min_confidence: float = 0.78
+    # minimum threshold for a face needed to be matched to a person
+    face_match_cosine_threshold: float = 0.55
+    # minimum size of a face in pixels to be detected. Base size for detection
+    # is the original image, not a thumbnail!
+    face_recognition_min_face_pixels: int = 3600
+    # number of faces needed to automatically create a person
+    person_min_face_count: int = 2
+
+
+class DuplicateSettings(BaseModel):
+    """Defines how to handle detected duplicate files"""
+
+    # what to do with duplicates. Default = Keep = do nothing automatically
+    duplicate_auto_handling: DuplicateHandlingRule = DuplicateHandlingRule.KEEP
+    # Which image/video to keep in case auto_handling != keep
+    duplicate_auto_keep_rule: DuplicateKeepRule = DuplicateKeepRule.HIGHEST_RES
+
+
+class VideoSettings(BaseModel):
+    """These settings control the video processing. By default we automatically
+    detect scenes in a video and retrieve thumbnails for the scene overlay
+    and the content searchability. If scene detection fails we split videos every
+    n seconds into a maximum of :max_frames_per_video scenes."""
+
+    # automatically detect scenes to split video into images
+    auto_scene_detection: bool = True
+    # Max number of frames detected per video if automatic scene detection fails
+    max_frames_per_video: int = 30
+
+
+class ContentProcessorSettings(BaseModel):
+    # extract exif data from images/videos
+    exif_processor_active: bool = True
+    # extract faces from content. Only active when enable_people=true.
+    face_processor_active: bool = True
+    # image embedding creator active. Needed for all AI related features
+    # if you want to deactivate all smart features, set this to False
+    image_embedding_processor_active: bool = True
+
+
+class AppSettings(BaseModel):
+    general: GeneralSettings = Field(default_factory=GeneralSettings)
+    scan: ScanSettings = Field(default_factory=ScanSettings)
+    ai: AISettings = Field(default_factory=AISettings)
+    tagging: TaggingSettings = Field(default_factory=TaggingSettings)
+    face_recognition: FaceRecognitionSettings = Field(
+        default_factory=FaceRecognitionSettings
+    )
+    duplicates: DuplicateSettings = Field(default_factory=DuplicateSettings)
+    video: VideoSettings = Field(default_factory=VideoSettings)
+    processors: ContentProcessorSettings = Field(
+        default_factory=ContentProcessorSettings
+    )
+
+
+def load_config_from_file() -> dict:
+    """Loads settings from the user's YAML file."""
+    config_path = get_user_data_path() / "config.yaml"
+    if not config_path.exists():
+        save_settings(AppSettings())
+    with open(config_path, "r") as f:
+        return yaml.safe_load(f) or {}
+
+
+def load_settings() -> AppSettings:
+    """
+    Loads settings with a clear priority:
+    1. Environment variables (for Docker)
+    2. User's config.yaml file (for desktop app)
+    3. Pydantic model defaults (hardcoded fallback)
+    """
+    # Start with an empty dict
+    config_data = {}
+
+    # 1. Load from user's config.yaml file
+    file_config = load_config_from_file()
+    if file_config:
+        config_data.update(file_config)
+
+    # 3. Load into Pydantic model. This applies defaults for any missing values.
+    return AppSettings.model_validate(config_data)
+
+
+def save_settings(settings_model: AppSettings):
+    """Saves the provided settings model to the config.yaml file."""
+    config_file = get_user_data_path() / "config.yaml"
+    with open(config_file, "w") as f:
+        # `sort_keys=False` helps maintain the order from your Pydantic model
+        yaml.dump(
+            settings_model.model_dump(mode="json"),
+            f,
+            sort_keys=False,
+            indent=2,
         )
 
-def parse_env_into_bool(env_name: str, default: str) -> bool:
-    bool_env = os.environ.get(env_name, default)
-    if bool_env.lower() == "true":
-        bool_env = True
-    else:
-        bool_env = False
-    return bool_env
 
-MEDIA_DIR = Path(os.getenv("MEDIA_DIR", "/app/media"))
-DATA_DIR = Path(os.getenv("DATA_DIR", "/app/data"))
+def get_model(settings: AppSettings):
+    model, preprocess, _ = open_clip.create_model_and_transforms(
+        settings.ai.clip_model,
+        pretrained=settings.ai.clip_model_pretrained,
+        device="cpu",
+    )
 
-DATABASE_DIR = DATA_DIR / "database"
-if not MEDIA_DIR.is_dir():
-    raise Exception("MEDIA_DIR: %s is not a directory!", MEDIA_DIR)
-
-DATABASE_DIR.mkdir(parents=False, exist_ok=True)
-
-# Internal storage
-SMOL_DIR = DATA_DIR / ".smol"
-SMOL_DIR.mkdir(parents=True, exist_ok=True)
-
-DATABASE_URL = f"sqlite:///{DATABASE_DIR}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
-
-THUMB_DIR = SMOL_DIR / "thumbnails"
-THUMB_DIR.mkdir(exist_ok=True)
-THUMB_DIR_FOLDER_SIZE = (
-    1000  # defines max number of thumbnails in single folder
-)
-
-STATIC_DIR: Path = Path(os.environ.get("STATIC_ASSETS_PATH", "/app/static"))
-STATIC_DIR.mkdir(exist_ok=True, parents=True)
-# Where thumbnails are written
-MODELS_DIR = SMOL_DIR / "models"
-MODELS_DIR.mkdir(exist_ok=True, parents=True)
-
-PORT = os.environ.get("PORT", 8000)
-
-VIDEO_SUFFIXES = [
-    ".mp4",
-    ".mov",
-    ".wmv",
-    ".avi",
-    ".flv",
-    ".mkv",
-    ".webm",
-    ".gp3",
-    ".ts",
-    ".mpeg",
-]
-IMAGE_SUFFIXES = [
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".tiff",
-    ".gif",
-    ".bmp",
-]
-READ_ONLY = parse_env_into_bool("READ_ONLY", "false")
-AUTO_SCAN = parse_env_into_bool("AUTO_SCAN", "false")
-
-AUTO_SCAN_TIMEFRAME = int(os.environ.get("AUTO_SCAN_TIMEFRAME", 15))
-
-# ------- AI Settings -------------
-# Image embedding and text search model
-MIN_CLIP_SEARCH_SIMILARITY = float(os.environ.get("MIN_SEARCH_DIST", 0.1))
-MIN_CLIP_SIMILARITY = float(os.environ.get("MIN_SIMILARITY_DIST", 0.1))
-
-ENABLE_PEOPLE = parse_env_into_bool("ENABLE_PEOPLE", "false")
-AUTO_ROTATE = parse_env_into_bool("AUTO_ROTATE", "false")
-
-AUTO_CLUSTER = parse_env_into_bool("AUTO_CLUSTER", "false")
-AUTO_CLEAN = parse_env_into_bool("AUTO_CLEAN", "false")
-
-CLUSTER_BATCH_SIZE = int(os.environ.get("CLUSTER_BATCH_SIZE", 10000))
+    tokenizer = open_clip.get_tokenizer(settings.ai.clip_model)
+    return model, preprocess, tokenizer
 
 
-SELECTED_MODEL: ClipModel = parse_env_into_enum("CLIP_MODEL", ClipModel)
-CLIP_MODEL = SELECTED_MODEL.model_name
-SCENE_EMBEDDING_SIZE = SELECTED_MODEL.embedding_size
-PRETRAINED = SELECTED_MODEL.pretrained
-model, preprocess, _ = open_clip.create_model_and_transforms(
-    CLIP_MODEL,
-    pretrained=PRETRAINED,
-    device="cpu",
-)
+settings = load_settings()
 
-tokenizer = open_clip.get_tokenizer(CLIP_MODEL)
-# face recognition settings
-MAX_FRAMES_PER_VIDEO = int(os.environ.get("MAX_FRAMES_PER_VIDEO", 30))
-FACE_RECOGNITION_MIN_CONFIDENCE = float(
-    os.environ.get("FACE_RECOGNITION_MIN_CONFIDENCE", 0.75)
-)
-FACE_MATCH_COSINE_THRESHOLD = float(
-    os.environ.get("FACE_MATCH_COSINE_THRESHOLD", 0.95)
-)
-FACE_RECOGNITION_MIN_FACE_PIXELS = int(
-    os.environ.get("FACE_RECOGNITION_MIN_FACE_PIXELS", 80 * 80)
-)
-PERSON_MIN_FACE_COUNT = int(os.environ.get("PERSON_MIN_FACE_COUNT", 2))
-
-# duplicate settings
-DUPLICATE_AUTO_HANDLING = parse_env_into_enum("DUPLICATE_AUTO_HANDLING", DuplicateHandlingRule)
-
-DUPLICATE_AUTO_KEEP_RULE = parse_env_into_enum("DUPLICATE_AUTO_KEEP_RULE", DuplicateKeepRule)
-
-# Processors:
-
-## auto tagging
-AUTO_TAGGER_ACTIVE = parse_env_into_bool("AUTO_TAGGER", "true")
-USE_DEFAULT_TAGS = parse_env_into_bool("USE_DEFAULT_TAGS", "true")
-
-## exif processor
-EXIF_PROCESSOR_ACTIVE = parse_env_into_bool("EXIF_PROCESSOR_ACTIVE", "true")
-
-## face processor
-FACE_PROCESSOR_ACTIVE = parse_env_into_bool("FACE_PROCESSOR_ACTIVE", "true")
-
-## image embedding
-IMAGE_EMBEDDING_PROCESSOR_ACTIVE = parse_env_into_bool("IMAGE_EMBEDDING_PROCESSOR_ACTIVE", "true")
+logger.info("DATA_DIR: %s", settings.general.data_dir)

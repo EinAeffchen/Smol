@@ -4,7 +4,7 @@ from PIL import ExifTags, ImageFile
 from sqlmodel import select
 from app.processors.base import MediaProcessor
 from app.models import Media, ExifData, Scene
-from app.config import VIDEO_SUFFIXES, MEDIA_DIR, EXIF_PROCESSOR_ACTIVE
+from app.config import settings, MEDIA_DIR, EXIF_PROCESSOR_ACTIVE
 from cv2.typing import MatLike
 from PIL.MpoImagePlugin import MpoImageFile
 from app.database import safe_commit
@@ -152,7 +152,7 @@ class ExifProcessor(MediaProcessor):
         suffix = fn.suffix.lower()
         if suffix in (".jpg", ".jpeg", ".tiff"):
             self._process_image(scenes[0], session, media)
-        elif suffix in VIDEO_SUFFIXES:
+        elif suffix in settings.scan.VIDEO_SUFFIXES:
             self._process_video(media, session)
         return True
 

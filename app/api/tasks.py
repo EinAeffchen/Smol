@@ -27,8 +27,8 @@ from app.config import (
     MEDIA_DIR,
     PERSON_MIN_FACE_COUNT,
     READ_ONLY,
-    VIDEO_SUFFIXES,
 )
+from app.config import settings
 from app.database import engine, get_session, safe_commit
 from app.logger import logger
 from app.models import Face, Media, Person, PersonSimilarity, ProcessingTask
@@ -889,7 +889,11 @@ def _run_scan(task_id: str):
             suffix = Path(fname).suffix.lower()
             full = Path(root) / fname
             rel = str(full.relative_to(MEDIA_DIR))
-            if suffix not in VIDEO_SUFFIXES + IMAGE_SUFFIXES:
+            if (
+                suffix
+                not in settings.scan.VIDEO_SUFFIXES
+                + settings.scan.IMAGE_SUFFIXES
+            ):
                 continue
             if rel not in known_files:
                 media_paths.append(rel)

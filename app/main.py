@@ -16,23 +16,15 @@ import json
 from app.api import face, media, person, search, tags, tasks, duplicates
 from app.api.processors import router as proc_router
 from app.config import (
-    DATABASE_URL,
-    MEDIA_DIR,
-    READ_ONLY,
-    AUTO_SCAN,
-    AUTO_CLUSTER,
-    AUTO_CLEAN,
-    STATIC_DIR,
-    THUMB_DIR,
-    AUTO_SCAN_TIMEFRAME,
+    settings,
 )
-from app.database import init_db, init_vec_index
 from app.logger import logger
 from app.processor_registry import load_processors
 from app.api.tasks import _run_cleanup_and_chain
 from sqlalchemy import select, or_, and_
 from app.models import ProcessingTask
 from app.database import engine
+
 logging.basicConfig(
     level=logging.DEBUG,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
@@ -54,9 +46,10 @@ def scheduled_scan_job():
                         ProcessingTask.status == "running",
                         ProcessingTask.status == "pending",
                     ),
-                    ProcessingTask.created_at > datetime.now()-timedelta(hours=6)
+                    ProcessingTask.created_at
+                    > datetime.now() - timedelta(hours=6),
                 )
-            )       
+            )
         ).first()
         if running_task:
             logger.info(
@@ -65,7 +58,9 @@ def scheduled_scan_job():
             return
 
         # Create the first task in the chain
-        task = ProcessingTask(task_type="clean_missing_files", total=0, processed=0)
+        task = ProcessingTask(
+            task_type="clean_missing_files", total=0, processed=0
+        )
         session.add(task)
         session.commit()
         session.refresh(task)
@@ -78,32 +73,22 @@ def scheduled_scan_job():
 async def lifespan(app: FastAPI):
     # Load the ML model
     load_processors()
-    if not READ_ONLY:
-        init_db()
-        init_vec_index()
-    if AUTO_SCAN:
+    if settings.scan.auto_scan:
         scheduler.add_job(
             scheduled_scan_job,
             "interval",
-            minutes=AUTO_SCAN_TIMEFRAME,
+            minutes=settings.scan.scan_interval_minutes,
             id="scan_job",
             misfire_grace_time=60,
         )
         scheduler.start()
         logger.info(
-            f"Scheduler started. Scan job scheduled every {AUTO_SCAN_TIMEFRAME} minutes."
+            f"Scheduler started. Scan job scheduled every {settings.scan.scan_interval_minutes} minutes."
         )
     yield
 
 
-logger.debug("MEDIA_DIR: %s", MEDIA_DIR)
-logger.debug("DATABASE DIR: %s", DATABASE_URL)
-logger.debug("Running in READ_ONLY mode: %s", READ_ONLY)
-
-logger.debug("--- AUTO SCAN STATUS ---")
-logger.debug("Automatic scanning: %s", AUTO_SCAN)
-logger.debug("Automatic cleaning: %s", AUTO_CLEAN)
-logger.debug("Automatic clustering: %s", AUTO_CLUSTER)
+logger.debug(settings)
 
 app = FastAPI(lifespan=lifespan, redoc_url=None)
 origins = [os.environ.get("DOMAIN", ""), "http://localhost:5173"]
@@ -141,18 +126,21 @@ app.include_router(duplicates, prefix="/api/duplicates", tags=["duplicates"])
 
 app.mount(
     "/thumbnails",
-    StaticFiles(directory=str(THUMB_DIR), html=True),
+    StaticFiles(directory=str(settings.general.thumb_dir), html=True),
     name="thumbnails",
 )
 
 
 @app.get("/originals/{file_path:path}", include_in_schema=False)
 async def serve_original_media(file_path: str):
-    full_path = MEDIA_DIR.joinpath(file_path)
+    for media_dir in settings.general.media_dirs:
+        full_path = media_dir.joinpath(file_path)
+        if full_path.is_file():
+            break
 
-    # Security check to prevent accessing files outside the MEDIA_DIR
+    # Security check to prevent accessing files outside the settings.general.media_dirs
     if not full_path.is_file() or not str(full_path).startswith(
-        str(MEDIA_DIR)
+        str(settings.general.media_dirs)
     ):
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -173,15 +161,17 @@ async def serve_original_media(file_path: str):
 
 app.mount(
     "/static",
-    StaticFiles(directory=str(STATIC_DIR), html=True),
+    StaticFiles(directory=str(settings.general.static_dir), html=True),
     name="static",
 )
-app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+app.mount(
+    "/media", StaticFiles(directory=settings.general.media_dirs), name="media"
+)
 
 
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa_catch_all(full_path: str):
-    index_html_path = STATIC_DIR / "index.html"
+    index_html_path = settings.general.static_dir / "index.html"
 
     try:
         # 1. Read the static index.html file content
@@ -193,9 +183,12 @@ async def spa_catch_all(full_path: str):
         "VITE_API_READ_ONLY": os.environ.get("READ_ONLY", "false"),
         "VITE_API_ENABLE_PEOPLE": os.environ.get("ENABLE_PEOPLE", "true"),
     }
-    config_script = f'<script>window.runtimeConfig = {json.dumps(config)};</script>'
-    modified_html = html_content.replace("</head>", f"{config_script}</head>", 1)
-
+    config_script = (
+        f"<script>window.runtimeConfig = {json.dumps(config)};</script>"
+    )
+    modified_html = html_content.replace(
+        "</head>", f"{config_script}</head>", 1
+    )
 
     return HTMLResponse(
         content=modified_html,

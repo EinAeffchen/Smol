@@ -1,21 +1,19 @@
 import os
-import sqlite3
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, event, pool
 
 from alembic import context
 from app.models import SQLModel
+from app.config import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
 config = context.config
 
-data_path = os.environ.get("DATA_DIR", "/app/data")
-
 config.set_main_option(
     "sqlalchemy.url",
-    f"sqlite:///{data_path}/database/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL",
+    f"sqlite:///{settings.general.data_dir}/database/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL",
 )
 
 # Interpret the config file for Python logging.

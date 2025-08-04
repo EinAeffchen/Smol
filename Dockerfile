@@ -77,7 +77,7 @@ COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist ${STATI
 
 # 6. Create mount points for volumes and set permissions. This is a small final layer.
 RUN mkdir -p ${DATA_DIR} ${MEDIA_DIR}
-
+ENV IS_DOCKER=true
 # 7. Switch to the non-root user
 # USER appuser
 
