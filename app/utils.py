@@ -20,12 +20,6 @@ from typing import Literal
 import imagehash
 from videohash2 import VideoHash
 
-from app.config import (
-    MAX_FRAMES_PER_VIDEO,
-    MEDIA_DIR,
-    THUMB_DIR,
-    AUTO_ROTATE,
-)
 from app.config import settings
 from app.database import engine, safe_commit
 from app.logger import logger
@@ -82,7 +76,7 @@ def process_file(filepath: Path) -> Media | None:
     width = int(vs[0]["width"]) if vs else None
     height = int(vs[0]["height"]) if vs else None
     media = Media(
-        path=str(filepath.relative_to(MEDIA_DIR)),
+        path=str(filepath.relative_to(settings.general.media_dirs)),
         filename=filepath.name,
         size=size,
         duration=duration,
@@ -143,7 +137,7 @@ def fix_image_rotation(full_path: Path) -> None:
 def generate_perceptual_hash(
     media: Media, type: Literal["image", "video"]
 ) -> str | None:
-    full_path = MEDIA_DIR / media.path
+    full_path = settings.general.media_dirs / media.path
     try:
         if type == "image":
             img = Image.open(full_path)
@@ -159,10 +153,10 @@ def generate_perceptual_hash(
 
 
 def generate_thumbnail(media: Media) -> str | None:
-    thumb_folder = get_thumb_folder(THUMB_DIR / "media")
+    thumb_folder = get_thumb_folder(settings.general.thumb_dir / "media")
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
-    full_path = MEDIA_DIR / filepath
+    full_path = settings.general.media_dirs / filepath
     if filepath.suffix.lower() in settings.scan.VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)
@@ -191,7 +185,7 @@ def generate_thumbnail(media: Media) -> str | None:
             img.save(thumb_path, format="JPEG")
 
         assert thumb_path.is_file()
-    return str(thumb_path.relative_to(THUMB_DIR))
+    return str(thumb_path.relative_to(settings.general.thumb_dir))
 
 
 def get_person_embedding(
@@ -262,16 +256,16 @@ def _split_by_scenes(
     for i, (start_time, end_time) in tqdm(
         enumerate(scenes), total=len(scenes)
     ):
-        thumb_dir = get_thumb_folder(THUMB_DIR / "scenes")
+        thumb_dir = get_thumb_folder(settings.general.thumb_dir / "scenes")
         thumbnail_path = thumb_dir / f"{i}_{Path(media.path).stem}.jpg"
         ffmpeg.input(
-            str(MEDIA_DIR / media.path), ss=start_time.get_seconds()
+            str(settings.general.media_dirs / media.path), ss=start_time.get_seconds()
         ).filter("scale", 480, -1).output(str(thumbnail_path), vframes=1).run(
             quiet=True, overwrite_output=True
         )
         out, _ = (
             ffmpeg.input(
-                str(MEDIA_DIR / media.path), ss=start_time.get_seconds()
+                str(settings.general.media_dirs / media.path), ss=start_time.get_seconds()
             )
             .output(
                 "pipe:",  # send to stdout
@@ -296,7 +290,7 @@ def _split_by_scenes(
 
 def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
-    video_path = MEDIA_DIR / media.path
+    video_path = settings.general.media_dirs / media.path
     cap = cv2.VideoCapture(str(video_path))
 
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
@@ -304,7 +298,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     duration = total / fps
     min_frame_step = int(fps * 10)  # Max one screenshot every 20 seconds
 
-    step = max(total // (MAX_FRAMES_PER_VIDEO), min_frame_step)
+    step = max(total // (settings.video.max_frames_per_video), min_frame_step)
     frame_indices = list(range(0, total, step))
 
     for i, idx in enumerate(frame_indices):
@@ -322,7 +316,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
 
         # 2) save a thumbnail
         thumb_name = f"{media.id}_frame_{i}.jpg"
-        thumb_dir = get_thumb_folder(THUMB_DIR / "scenes")
+        thumb_dir = get_thumb_folder(settings.general.thumb_dir / "scenes")
         thumb_file = thumb_dir / thumb_name
         (
             ffmpeg.input(str(video_path), ss=start_sec)
@@ -335,7 +329,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
             media_id=media.id,
             start_time=start_sec,
             end_time=end_sec,
-            thumbnail_path=str(thumb_file.relative_to(THUMB_DIR)),
+            thumbnail_path=str(thumb_file.relative_to(settings.general.thumb_dir)),
         )
         scene_objs.append((scene, frame_rgb))
     cap.release()
@@ -355,7 +349,7 @@ def _decimal_to_dms(value: float):
 
 
 def update_exif_gps(path: str, lon: float, lat: float):
-    image_path = MEDIA_DIR / path
+    image_path = settings.general.media_dirs / path
     try:
         exif_dict: dict = piexif.load(image_path)
     except Exception:
@@ -449,7 +443,7 @@ def delete_record(media_id, session):
     thumbnail = media.thumbnail_path
     if not thumbnail:
         thumbnail = str(media.id)
-    thumb = Path(THUMB_DIR / thumbnail)
+    thumb = Path(settings.general.thumb_dir / thumbnail)
     if thumb.is_file():
         thumb.unlink()
     faces = session.exec(select(Face).where(Face.media_id == media.id)).all()
@@ -461,7 +455,7 @@ def delete_record(media_id, session):
             """
         ).bindparams(f_id=face.id)
         session.exec(sql)
-        thumb = Path(THUMB_DIR / face.thumbnail_path)
+        thumb = Path(settings.general.thumb_dir / face.thumbnail_path)
         if thumb.is_file():
             thumb.unlink()
 
@@ -493,14 +487,14 @@ def delete_file(session: Session, media_id: int):
     delete_record(media_id, session)
 
     # delete original file
-    orig = MEDIA_DIR / media.path
+    orig = settings.general.media_dirs / media.path
     if orig.exists():
         orig.unlink()
 
     # delete thumbnail
     if not media.thumbnail_path:
-        thumb = THUMB_DIR / f"{media.id}.jpg"
+        thumb = settings.general.thumb_dir / f"{media.id}.jpg"
     else:
-        thumb = THUMB_DIR / media.thumbnail_path
+        thumb = settings.general.thumb_dir / media.thumbnail_path
     if thumb.exists():
         thumb.unlink()
