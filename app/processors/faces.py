@@ -5,14 +5,13 @@ from pathlib import Path
 import numpy as np
 from cv2.typing import MatLike
 from insightface.app import FaceAnalysis
-from app.config import MODELS_DIR
+from app.config import settings
 from PIL import Image, ImageOps
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text
 from tqdm import tqdm
 
 from app.api.media import delete_media_record
-from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, ENABLE_PEOPLE, THUMB_DIR, FACE_PROCESSOR_ACTIVE
 from app.database import safe_commit
 from app.logger import logger
 from app.models import ExifData, Face, Media, Scene
@@ -57,12 +56,15 @@ class FaceProcessor(MediaProcessor):
                 scene, [x1, y1, x2 - x1, y2 - y1], pad_pct=0.2
             )
             h, w = crop.shape[:2]
-            if h * w < FACE_RECOGNITION_MIN_FACE_PIXELS:
+            if (
+                h * w
+                < settings.face_recognition.face_recognition_min_face_pixels
+            ):
                 continue
 
             ts = int(time.time() * 1000)
             name = f"{Path(media.path).stem}_ins_{i}_{ts}.jpg"
-            thumb_dir = get_thumb_folder(THUMB_DIR / "faces")
+            thumb_dir = get_thumb_folder(settings.general.thumb_dir / "faces")
             thumb_file = thumb_dir / name
             pil_img = Image.fromarray(crop)
             pil_img.thumbnail((320, -1), Image.LANCZOS)
@@ -79,7 +81,9 @@ class FaceProcessor(MediaProcessor):
                 vec /= norm
             face = Face(
                 media=media,
-                thumbnail_path=str(thumb_file.relative_to(THUMB_DIR)),
+                thumbnail_path=str(
+                    thumb_file.relative_to(settings.general.thumb_dir)
+                ),
                 bbox=[x1, y1, x2 - x1, y2 - y1],
                 embedding=vec.tolist(),
             )
@@ -105,7 +109,9 @@ class FaceProcessor(MediaProcessor):
                 if isinstance(scene, tuple):
                     scene = scene[1]
                 elif isinstance(scene, Scene):
-                    scene = Image.open(THUMB_DIR / scene.thumbnail_path)
+                    scene = Image.open(
+                        settings.general.thumb_dir / scene.thumbnail_path
+                    )
                     scene = ImageOps.exif_transpose(scene)
                     scene = np.array(scene.convert("RGB"))
                 else:
@@ -140,11 +146,14 @@ class FaceProcessor(MediaProcessor):
         return True
 
     def load_model(self):
-        if ENABLE_PEOPLE and FACE_PROCESSOR_ACTIVE:
+        if (
+            settings.general.enable_people
+            and settings.processors.face_processor_active
+        ):
             self.active = True
         self.model = FaceAnalysis(
             "buffalo_l",
-            root=str(MODELS_DIR),
+            root=str(settings.general.models_dir),
             providers=["CPUExecutionProvider"],
         )
         self.model.prepare(ctx_id=0)  # ctx_id=0 for GPU, -1 for CPU

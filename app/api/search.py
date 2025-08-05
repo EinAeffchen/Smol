@@ -7,7 +7,7 @@ from sqlalchemy import desc, func, text, tuple_
 from sqlmodel import Session, select
 import io
 from PIL import Image
-from app.config import MIN_CLIP_SEARCH_SIMILARITY, model, tokenizer, preprocess
+from app.config import settings, model, tokenizer, preprocess
 from app.database import get_session
 from app.logger import logger
 
@@ -66,7 +66,7 @@ def search_by_image(
 
     query_vector = encode_uploaded_image(image_bytes)
 
-    max_dist = 2.0 - MIN_CLIP_SEARCH_SIMILARITY
+    max_dist = 2.0 - settings.ai.min_similarity_dist
     sql = text(
         """
         SELECT media_id, distance

@@ -76,7 +76,7 @@ def process_file(filepath: Path) -> Media | None:
     width = int(vs[0]["width"]) if vs else None
     height = int(vs[0]["height"]) if vs else None
     media = Media(
-        path=str(filepath.relative_to(settings.general.media_dirs)),
+        path=str(filepath.relative_to(settings.general.media_dirs[0])),
         filename=filepath.name,
         size=size,
         duration=duration,
@@ -137,7 +137,7 @@ def fix_image_rotation(full_path: Path) -> None:
 def generate_perceptual_hash(
     media: Media, type: Literal["image", "video"]
 ) -> str | None:
-    full_path = settings.general.media_dirs / media.path
+    full_path = settings.general.media_dirs[0] / media.path
     try:
         if type == "image":
             img = Image.open(full_path)
@@ -156,7 +156,7 @@ def generate_thumbnail(media: Media) -> str | None:
     thumb_folder = get_thumb_folder(settings.general.thumb_dir / "media")
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
-    full_path = settings.general.media_dirs / filepath
+    full_path = settings.general.media_dirs[0] / filepath
     if filepath.suffix.lower() in settings.scan.VIDEO_SUFFIXES:
         (
             ffmpeg.input(str(full_path), ss=1)
@@ -259,13 +259,13 @@ def _split_by_scenes(
         thumb_dir = get_thumb_folder(settings.general.thumb_dir / "scenes")
         thumbnail_path = thumb_dir / f"{i}_{Path(media.path).stem}.jpg"
         ffmpeg.input(
-            str(settings.general.media_dirs / media.path), ss=start_time.get_seconds()
+            str(settings.general.media_dirs[0] / media.path), ss=start_time.get_seconds()
         ).filter("scale", 480, -1).output(str(thumbnail_path), vframes=1).run(
             quiet=True, overwrite_output=True
         )
         out, _ = (
             ffmpeg.input(
-                str(settings.general.media_dirs / media.path), ss=start_time.get_seconds()
+                str(settings.general.media_dirs[0] / media.path), ss=start_time.get_seconds()
             )
             .output(
                 "pipe:",  # send to stdout
@@ -290,7 +290,7 @@ def _split_by_scenes(
 
 def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
-    video_path = settings.general.media_dirs / media.path
+    video_path = settings.general.media_dirs[0] / media.path
     cap = cv2.VideoCapture(str(video_path))
 
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
@@ -349,7 +349,7 @@ def _decimal_to_dms(value: float):
 
 
 def update_exif_gps(path: str, lon: float, lat: float):
-    image_path = settings.general.media_dirs / path
+    image_path = settings.general.media_dirs[0] / path
     try:
         exif_dict: dict = piexif.load(image_path)
     except Exception:
@@ -487,7 +487,7 @@ def delete_file(session: Session, media_id: int):
     delete_record(media_id, session)
 
     # delete original file
-    orig = settings.general.media_dirs / media.path
+    orig = settings.general.media_dirs[0] / media.path
     if orig.exists():
         orig.unlink()
 

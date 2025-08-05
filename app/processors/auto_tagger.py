@@ -4,7 +4,7 @@ from cv2.typing import MatLike
 from PIL.ImageFile import ImageFile
 from app.processors.base import MediaProcessor
 from sqlmodel import select, text, or_
-from app.config import settings, get_model
+from app.config import settings, model, tokenizer
 from app.api.tags import get_or_create_tag, attach_tag_to_media
 from app.database import safe_commit
 from app.logger import logger
@@ -102,7 +102,6 @@ class AutoTagger(MediaProcessor):
     tag_map: dict[str, np.ndarray] = dict()
 
     def load_model(self):
-        self.model, self.preprocessor, self.tokenizer = get_model(settings)
         if settings.tagging.auto_tagging:
             self.active = True
 
@@ -117,10 +116,10 @@ class AutoTagger(MediaProcessor):
         self.tags = []
 
     def _tag_to_vector(self, tag) -> np.ndarray:
-        tokenized_text = self.tokenizer([tag])
+        tokenized_text = tokenizer([tag])
         with torch.no_grad():
             # Encode the tokenized text
-            text_embedding = self.model.encode_text(tokenized_text)
+            text_embedding = model.encode_text(tokenized_text)
             # Normalize the embedding to a unit vector
             text_embedding /= text_embedding.norm(dim=-1, keepdim=True)
         # Return as a NumPy array

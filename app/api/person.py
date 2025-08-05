@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import defer
 from sqlmodel import Session, delete, distinct, select, text, update
 
-from app.config import READ_ONLY
+from app.config import settings
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
 from app.models import Face, Media, Person, PersonTagLink, TimelineEvent
@@ -492,9 +492,9 @@ def update_person(
     data: PersonUpdate,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     person = session.get(Person, person_id)
     if not person:
@@ -514,9 +514,9 @@ def set_profile_face(
     face_id: int | None,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     person = session.get(Person, person_id)
     if not person:
@@ -537,9 +537,9 @@ def merge_persons(
     body: MergePersonsRequest,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     sid, tid = body.source_id, body.target_id
     if sid == tid:
@@ -582,9 +582,9 @@ def merge_persons(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_person(person_id: int, session: Session = Depends(get_session)):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     person = session.get(Person, person_id)
     if not person:
@@ -695,9 +695,9 @@ def refresh_similarities(
     person_id: int,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     if not session.get(Person, person_id):
         raise HTTPException(404, "Person not found")

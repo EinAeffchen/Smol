@@ -10,7 +10,7 @@ from app.models import Media, Scene, Tag
 from app.processors.base import MediaProcessor
 from app.logger import logger
 import numpy as np
-from app.config import preprocess, model, IMAGE_EMBEDDING_PROCESSOR_ACTIVE
+from app.config import preprocess, model, settings
 from sqlalchemy import text
 import json
 from tqdm import tqdm
@@ -23,7 +23,7 @@ class EmbeddingExtractor(MediaProcessor):
     order = 10
 
     def load_model(self):
-        if IMAGE_EMBEDDING_PROCESSOR_ACTIVE:
+        if settings.processors.image_embedding_processor_active:
             self.active = True
 
     def unload(self):

@@ -4,7 +4,7 @@ from PIL import ExifTags, ImageFile
 from sqlmodel import select
 from app.processors.base import MediaProcessor
 from app.models import Media, ExifData, Scene
-from app.config import settings, MEDIA_DIR, EXIF_PROCESSOR_ACTIVE
+from app.config import settings
 from cv2.typing import MatLike
 from PIL.MpoImagePlugin import MpoImageFile
 from app.database import safe_commit
@@ -100,7 +100,7 @@ class ExifProcessor(MediaProcessor):
 
     def _process_video(self, media: Media, session: Session):
         try:
-            video_meta = ffmpeg.probe(str(MEDIA_DIR / media.path))
+            video_meta = ffmpeg.probe(str(settings.general.media_dirs[0] / media.path))
             tags = video_meta.get("format", {}).get("tags", {})
             if not tags:
                 return
@@ -158,7 +158,7 @@ class ExifProcessor(MediaProcessor):
 
     def load_model(self):
         """Doesn't need a model"""
-        if EXIF_PROCESSOR_ACTIVE:
+        if settings.processors.exif_processor_active:
             self.active = True
 
     def unload(self):

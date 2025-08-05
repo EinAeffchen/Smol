@@ -15,9 +15,7 @@ from fastapi import Response
 import json
 from app.api import face, media, person, search, tags, tasks, duplicates
 from app.api.processors import router as proc_router
-from app.config import (
-    settings,
-)
+from app.config import settings
 from app.logger import logger
 from app.processor_registry import load_processors
 from app.api.tasks import _run_cleanup_and_chain
@@ -140,7 +138,7 @@ async def serve_original_media(file_path: str):
 
     # Security check to prevent accessing files outside the settings.general.media_dirs
     if not full_path.is_file() or not str(full_path).startswith(
-        str(settings.general.media_dirs)
+        str(settings.general.media_dirs[0])
     ):
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -165,7 +163,7 @@ app.mount(
     name="static",
 )
 app.mount(
-    "/media", StaticFiles(directory=settings.general.media_dirs), name="media"
+    "/media", StaticFiles(directory=settings.general.media_dirs[0]), name="media"
 )
 
 

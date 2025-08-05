@@ -137,14 +137,14 @@ class GeneralSettings(BaseModel):
     data_dir: Path = get_user_data_path()
     database_dir: Path = data_dir / "database"
     smol_dir: Path = data_dir / ".smol"
-    thumb_dir = smol_dir / "thumbnails"
+    thumb_dir: Path = smol_dir / "thumbnails"
     # only relevant when run as binary
     media_dirs: list[Path] = []
     static_dir: Path = get_static_dir()
     models_dir: Path = smol_dir / "models"
-    database_url = f"sqlite:///{database_dir}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
+    database_url: str = f"sqlite:///{database_dir}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
 
-    def model_post_init(self, context: os.Any) -> None:
+    def model_post_init(self, context) -> None:
         self.database_dir.mkdir(parents=False, exist_ok=True)
         self.smol_dir.mkdir(parents=False, exist_ok=True)
         self.thumb_dir.mkdir(exist_ok=True)
@@ -209,16 +209,16 @@ class AISettings(BaseModel):
     # 5. ViT-B-32 -> english only base model
     # 6. convnext_base_w -> english only convolution base model
     clip_model_enum: ClipModel = ClipModel.ROBERTA_BASE_VIT_B_32
-    clip_model = clip_model_enum.model_name
-    clip_model_embedding_size = clip_model_enum.embedding_size
-    clip_model_pretrained = clip_model_enum.pretrained
+    clip_model: str = clip_model_enum.model_name
+    clip_model_embedding_size: int = clip_model_enum.embedding_size
+    clip_model_pretrained: str = clip_model_enum.pretrained
     # Strictness of the search results. Higher -> more accurate but less hits
     min_search_dist: float = 0.68
     # Defines the maximum distance for similarity between two images.
     # Used to reduce/increase number of similar images. Higher -> stronger similarity
     min_similarity_dist: float = 1.2
     # reduce if ram is an issue, the higher the more accurate the clustering.
-    cluster_batch_size = 10000
+    cluster_batch_size:int = 10000
 
 
 class FaceRecognitionSettings(BaseModel):
@@ -332,5 +332,5 @@ def get_model(settings: AppSettings):
 
 
 settings = load_settings()
-
+model, preprocess, tokenizer = get_model(settings)
 logger.info("DATA_DIR: %s", settings.general.data_dir)

@@ -9,8 +9,7 @@ from sqlalchemy import and_, or_, text, func, tuple_
 from sqlalchemy.orm import selectinload, aliased
 from sqlmodel import Session, select
 from app.config import (
-    READ_ONLY,
-    MIN_CLIP_SIMILARITY,
+    settings,
 )
 from app.database import get_session
 from app.logger import logger
@@ -416,9 +415,10 @@ def scenes_vtt(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_media_file(media_id: int, session: Session = Depends(get_session)):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     delete_file(session, media_id)
 
@@ -432,11 +432,13 @@ def delete_media_record(
     media_id: int,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     delete_record(media_id, session)
+
 
 @router.get("/exif/{media_id}", response_model=ExifData)
 def read_exif(media_id: int, session=Depends(get_session)):
@@ -453,7 +455,7 @@ def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
     media = session.get(Media, media_id)
     if not media or not media.embedding:
         raise HTTPException(404, "Media not found")
-    max_dist = 2 - MIN_CLIP_SIMILARITY
+    max_dist = 2 - settings.ai.min_similarity_dist
     sql = text(
         """
       SELECT media_id, distance
@@ -492,9 +494,10 @@ def update_geolocation(
     data: GeoUpdate,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     media = session.exec(
         select(Media)

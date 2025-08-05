@@ -17,17 +17,6 @@ from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
 import time
 from app.api.media import delete_record
-from app.config import (
-    AUTO_CLUSTER,
-    AUTO_CLEAN,
-    CLUSTER_BATCH_SIZE,
-    ENABLE_PEOPLE,
-    FACE_MATCH_COSINE_THRESHOLD,
-    IMAGE_SUFFIXES,
-    MEDIA_DIR,
-    PERSON_MIN_FACE_COUNT,
-    READ_ONLY,
-)
 from app.config import settings
 from app.database import engine, get_session, safe_commit
 from app.logger import logger
@@ -64,9 +53,9 @@ def create_and_run_task(
     Creates a scan task in the database and adds the actual scan
     to the background tasks queue.
     """
-    if READ_ONLY:
+    if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in read_only mode."
         )
 
     # Check if a scan is already running to prevent overlap
@@ -135,7 +124,7 @@ async def start_creation_refresh(
             break
 
         for media in media_batch:
-            full_path = MEDIA_DIR / media.path
+            full_path = settings.general.media_dirs[0] / media.path
             if media.duration is not None:
                 continue
 
@@ -151,7 +140,7 @@ async def start_creation_refresh(
 
 
 def _run_cleanup_and_chain(task_id: str):
-    if AUTO_CLEAN:
+    if settings.scan.auto_clean_on_scan:
         _clean_missing_files(task_id)
 
     logger.info("Cleanup task finished, starting scan task.")
@@ -185,7 +174,7 @@ def _run_media_processing_and_chain(task_id: str):
     _run_media_processing(task_id)
 
     logger.info("Media processing finished.")
-    if ENABLE_PEOPLE and AUTO_CLUSTER:
+    if settings.general.enable_people and settings.scan.auto_cluster_on_scan:
         logger.info("Starting Person Clustering...")
         with Session(engine) as new_session:
             next_task = ProcessingTask(
@@ -223,16 +212,16 @@ def _get_or_extract_scenes(
     Handles file errors by logging or deleting the record.
     Returns an empty list if processing cannot continue.
     """
-    full_path = MEDIA_DIR / media.path
+    full_path = settings.general.media_dirs[0] / media.path
     suffix = full_path.suffix.lower()
 
     # If scenes are already extracted, return them.
     # For images, we always re-open, so we don't check media.scenes.
-    if media.extracted_scenes and suffix not in IMAGE_SUFFIXES:
+    if media.extracted_scenes and suffix not in settings.scan.IMAGE_SUFFIXES:
         return media.scenes
 
     try:
-        if suffix in IMAGE_SUFFIXES:
+        if suffix in settings.scan.IMAGE_SUFFIXES:
             scenes = [Image.open(full_path)]
         else:
             scenes = split_video(media, full_path)
@@ -324,7 +313,7 @@ def _run_media_processing(task_id: str):
             logger.info("Processing: %s", media.filename)
 
             scenes = _get_or_extract_scenes(media, session)
-            if not scenes and not Path(MEDIA_DIR / media.path).exists():
+            if not scenes and not Path(settings.general.media_dirs[0] / media.path).exists():
                 # If scenes are empty because the file was deleted, commit and continue
                 safe_commit(session)
                 continue
@@ -442,7 +431,7 @@ def _assign_faces_to_clusters(
     clusters: dict[int, tuple[list[int], list[np.ndarray]]], task_id: str
 ):
     for face_ids, embeddings in tqdm(clusters.values()):
-        if len(face_ids) < PERSON_MIN_FACE_COUNT:
+        if len(face_ids) < settings.face_recognition.person_min_face_count:
             continue
 
         embeddings_arr = np.array(embeddings)
@@ -594,7 +583,7 @@ def run_person_clustering(task_id: str):
         with Session(engine) as session:
             logger.debug("Continuing from id: %s", last_id)
             batch_face_ids, batch_embeddings = _fetch_faces_and_embeddings(
-                session, last_id=last_id, limit=CLUSTER_BATCH_SIZE
+                session, last_id=last_id, limit=settings.ai.cluster_batch_size
             )
             last_id = batch_face_ids[-1]
 
@@ -617,7 +606,7 @@ def run_person_clustering(task_id: str):
                 batch_face_ids,
                 batch_embeddings,
                 task_id,
-                threshold=FACE_MATCH_COSINE_THRESHOLD,
+                threshold=settings.face_recognition.face_match_cosine_threshold
             )
             if not unassigned_face_ids:
                 logger.info(
@@ -636,7 +625,7 @@ def run_person_clustering(task_id: str):
             clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
             logger.debug("Created %s Persons!", len(clusters))
             _assign_faces_to_clusters(clusters, task_id)
-        if len(batch_face_ids) < CLUSTER_BATCH_SIZE:
+        if len(batch_face_ids) < settings.ai.cluster_batch_size:
             break
 
     with Session(engine) as session:
@@ -653,9 +642,9 @@ def cancel_task(
     task_id: str,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     task = session.get(ProcessingTask, task_id)
     if not task:
@@ -783,9 +772,9 @@ def _run_duplicate_detection(task_id: str, threshold: int):
 
 @router.post("/reset/processing", summary="Resets media processing status")
 def reset_processing(session: Session = Depends(get_session)):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     session.exec(update(Media).values(faces_extracted=False))
     session.exec(update(Media).values(embeddings_created=False))
@@ -801,9 +790,9 @@ def reset_processing(session: Session = Depends(get_session)):
 
 @router.post("/reset/clustering", summary="Resets person clustering")
 def reset_clustering(session: Session = Depends(get_session)):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     session.exec(delete(PersonSimilarity))
     session.exec(
@@ -844,7 +833,7 @@ def _clean_missing_files(task_id: str):
                 break
 
             for media in media_batch:
-                full_path = MEDIA_DIR / media.path
+                full_path = settings.general.media_dirs[0] / media.path
                 if not full_path.exists():
                     delete_record(media.id, session)
                     deleted_count += 1
@@ -878,7 +867,7 @@ def _run_scan(task_id: str):
 
     media_paths = []
     for root, dirs, files in tqdm(
-        os.walk(MEDIA_DIR, topdown=True, followlinks=True)
+        os.walk(settings.general.media_dirs[0], topdown=True, followlinks=True)
     ):
         if ".smol" in dirs:
             dirs.remove(".smol")
@@ -888,7 +877,7 @@ def _run_scan(task_id: str):
         for fname in files:
             suffix = Path(fname).suffix.lower()
             full = Path(root) / fname
-            rel = str(full.relative_to(MEDIA_DIR))
+            rel = str(full.relative_to(settings.general.media_dirs[0]))
             if (
                 suffix
                 not in settings.scan.VIDEO_SUFFIXES
@@ -924,7 +913,7 @@ def _run_scan(task_id: str):
                     break
                 safe_commit(sess)
 
-        media_obj = process_file(MEDIA_DIR / filepath)
+        media_obj = process_file(settings.general.media_dirs[0] / filepath)
         if media_obj:
             medias_to_add.append(media_obj)
 

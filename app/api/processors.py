@@ -4,7 +4,7 @@ from app.models import Media, ProcessingTask
 from app.database import engine, get_session
 from app.processor_registry import load_processors
 from datetime import datetime, timezone
-from app.config import MEDIA_DIR, READ_ONLY
+from app.config import settings
 from app.logger import logger
 import subprocess
 import ffmpeg
@@ -41,9 +41,9 @@ def start_conversion(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     media = session.get(Media, media_id)
     if not media:
@@ -76,7 +76,7 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
         session.add(task)
         session.commit()
 
-        full_path = MEDIA_DIR / media_path
+        full_path = settings.general.media_dirs[0] / media_path
         temp_output_path = full_path.with_name(full_path.stem + "_temp.mp4")
 
         try:
@@ -137,7 +137,7 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
             if media and temp_output_path.exists():
                 full_path.unlink()
                 new_file = temp_output_path.rename(full_path)
-                media.path = str(new_file.relative_to(MEDIA_DIR))
+                media.path = str(new_file.relative_to(settings.general.media_dirs[0]))
                 media.filename = new_file.name
                 session.add(media)
             session.add(task)
