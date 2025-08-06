@@ -4,7 +4,8 @@ from pathlib import Path
 from typing import TypeVar
 
 import open_clip
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, PlainSerializer
+from typing_extensions import Annotated
 import sys
 from app.logger import logger
 import yaml
@@ -99,19 +100,16 @@ class ClipModel(Enum):
         self.embedding_size = embedding_size
         self.pretrained = pretrained
 
+
     @classmethod
     def _missing_(cls, value: object):
-        """
-        Custom hook for looking up a member by its model_name string.
-        """
-        if not isinstance(value, str):
-            return None
-
-        for member in cls:
-            if member.model_name.lower() == value.lower():
-                return member
+        """This custom hook correctly finds an enum member from a string."""
+        if isinstance(value, str):
+            for member in cls:
+                if member.model_name.lower() == value.lower():
+                    return member
         return None
-
+    
     @classmethod
     def get_default(cls):
         # Define the default model
@@ -145,7 +143,7 @@ class GeneralSettings(BaseModel):
     database_url: str = f"sqlite:///{database_dir}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
 
     def model_post_init(self, context) -> None:
-        self.database_dir.mkdir(parents=False, exist_ok=True)
+        self.database_dir.mkdir(parents=True, exist_ok=True)
         self.smol_dir.mkdir(parents=False, exist_ok=True)
         self.thumb_dir.mkdir(exist_ok=True)
         self.models_dir.mkdir(exist_ok=True)
@@ -208,10 +206,20 @@ class AISettings(BaseModel):
     # 4. laion2b_s32b_b82k -> english only large model
     # 5. ViT-B-32 -> english only base model
     # 6. convnext_base_w -> english only convolution base model
-    clip_model_enum: ClipModel = ClipModel.ROBERTA_BASE_VIT_B_32
-    clip_model: str = clip_model_enum.model_name
-    clip_model_embedding_size: int = clip_model_enum.embedding_size
-    clip_model_pretrained: str = clip_model_enum.pretrained
+    # clip_model_enum: ClipModel = ClipModel.ROBERTA_BASE_VIT_B_32
+    clip_model: Annotated[
+        ClipModel,
+        PlainSerializer(lambda x: x.model_name, return_type=str),
+    ] = ClipModel.ROBERTA_BASE_VIT_B_32
+    @computed_field
+    @property
+    def clip_model_embedding_size(self) -> int:
+        return self.clip_model.embedding_size
+    
+    @computed_field
+    @property
+    def clip_model_pretrained(self) -> str:
+        return self.clip_model.pretrained
     # Strictness of the search results. Higher -> more accurate but less hits
     min_search_dist: float = 0.68
     # Defines the maximum distance for similarity between two images.
@@ -322,12 +330,12 @@ def save_settings(settings_model: AppSettings):
 
 def get_model(settings: AppSettings):
     model, preprocess, _ = open_clip.create_model_and_transforms(
-        settings.ai.clip_model,
+        settings.ai.clip_model.model_name,
         pretrained=settings.ai.clip_model_pretrained,
         device="cpu",
     )
 
-    tokenizer = open_clip.get_tokenizer(settings.ai.clip_model)
+    tokenizer = open_clip.get_tokenizer(settings.ai.clip_model.model_name)
     return model, preprocess, tokenizer
 
 

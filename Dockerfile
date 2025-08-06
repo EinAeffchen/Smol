@@ -78,8 +78,10 @@ COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist ${STATI
 # 6. Create mount points for volumes and set permissions. This is a small final layer.
 RUN mkdir -p ${DATA_DIR} ${MEDIA_DIR}
 ENV IS_DOCKER=true
-# 7. Switch to the non-root user
-# USER appuser
 
-EXPOSE $PORT
-ENTRYPOINT ["/entrypoint.sh"]
+RUN chown appuser:appgroup /entrypoint.sh
+
+# 7. Switch to the non-root user
+USER appuser
+EXPOSE 8000
+CMD ["/bin/bash", "-c", "alembic upgrade head; uvicorn app.main:app --host 0.0.0.0 --port 8000"]
