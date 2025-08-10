@@ -54,7 +54,7 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
   const mediaPreviews = tag.media.slice(0, 4).map((m) => ({
     type: "media",
     id: m.id,
-    url: `${API}/thumbnails/${m.id}.jpg`,
+    url: `${API}/thumbnails/${m.thumbnail_path}`,
   }));
 
   const personPreviews = tag.persons

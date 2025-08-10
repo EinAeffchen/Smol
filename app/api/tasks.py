@@ -5,7 +5,6 @@ from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
-from datetime import date
 import hdbscan
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
@@ -124,13 +123,13 @@ async def start_creation_refresh(
             break
 
         for media in media_batch:
-            full_path = settings.general.media_dirs[0] / media.path
+            media_path_obj = Path(media.path)
             if media.duration is not None:
                 continue
 
-            if not full_path.exists():
+            if not media_path_obj.exists():
                 continue
-            media.created_at = get_image_taken_date(full_path)
+            media.created_at = get_image_taken_date(media_path_obj)
 
         offset += batch_size
         session.commit()
@@ -212,8 +211,8 @@ def _get_or_extract_scenes(
     Handles file errors by logging or deleting the record.
     Returns an empty list if processing cannot continue.
     """
-    full_path = settings.general.media_dirs[0] / media.path
-    suffix = full_path.suffix.lower()
+    media_path_obj = Path(media.path)
+    suffix = media_path_obj.suffix.lower()
 
     # If scenes are already extracted, return them.
     # For images, we always re-open, so we don't check media.scenes.
@@ -222,15 +221,15 @@ def _get_or_extract_scenes(
 
     try:
         if suffix in settings.scan.IMAGE_SUFFIXES:
-            scenes = [Image.open(full_path)]
+            scenes = [Image.open(media_path_obj)]
         else:
-            scenes = split_video(media, full_path)
+            scenes = split_video(media, media_path_obj)
     except FileNotFoundError:
         logger.warning("File not found: %s. Deleting record.", media.path)
         delete_record(media.id, session)
         return []  # Return empty list to skip further processing
     except UnidentifiedImageError:
-        logger.warning("Skipping broken image file: %s.", full_path)
+        logger.warning("Skipping broken image file: %s.", media_path_obj)
         # Mark as processed to avoid re-trying a broken file
         media.extracted_scenes = True
         session.add(media)
@@ -313,7 +312,7 @@ def _run_media_processing(task_id: str):
             logger.info("Processing: %s", media.filename)
 
             scenes = _get_or_extract_scenes(media, session)
-            if not scenes and not Path(settings.general.media_dirs[0] / media.path).exists():
+            if not scenes and not Path(media.path).exists():
                 # If scenes are empty because the file was deleted, commit and continue
                 safe_commit(session)
                 continue
@@ -459,7 +458,10 @@ def _assign_faces_to_clusters(
             session.flush()  # Get new_person.id
 
             for face_id in face_ids:
-                session.merge(Face(id=face_id, person_id=new_person.id))
+                face = session.get(Face, face_id)
+                if face:
+                    face.person_id = new_person.id
+                    session.add(face)
                 # logger.info("Added face %s to person: %s", face_id, new_person.id)
 
             for face_id in face_ids:
@@ -606,7 +608,7 @@ def run_person_clustering(task_id: str):
                 batch_face_ids,
                 batch_embeddings,
                 task_id,
-                threshold=settings.face_recognition.face_match_cosine_threshold
+                threshold=settings.face_recognition.face_match_cosine_threshold,
             )
             if not unassigned_face_ids:
                 logger.info(
@@ -644,7 +646,8 @@ def cancel_task(
 ):
     if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in settings.general.read_only mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     task = session.get(ProcessingTask, task_id)
     if not task:
@@ -774,14 +777,18 @@ def _run_duplicate_detection(task_id: str, threshold: int):
 def reset_processing(session: Session = Depends(get_session)):
     if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in settings.general.read_only mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     session.exec(update(Media).values(faces_extracted=False))
     session.exec(update(Media).values(embeddings_created=False))
     session.exec(text("DELETE FROM face_embeddings"))
+    session.exec(text("DELETE FROM media_embeddings"))
     for face in tqdm(session.exec(select(Face)).all()):
-        path = Path(face.thumbnail_path)
-        if path.exists():
+        path = face.thumbnail_path
+        if path:
+            path = Path(path)
+        if path and  path.exists():
             path.unlink()
         session.exec(delete(Face).where(Face.id == face.id))
     safe_commit(session)
@@ -792,7 +799,8 @@ def reset_processing(session: Session = Depends(get_session)):
 def reset_clustering(session: Session = Depends(get_session)):
     if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in settings.general.read_only mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     session.exec(delete(PersonSimilarity))
     session.exec(
@@ -833,8 +841,7 @@ def _clean_missing_files(task_id: str):
                 break
 
             for media in media_batch:
-                full_path = settings.general.media_dirs[0] / media.path
-                if not full_path.exists():
+                if not Path(media.path).exists():
                     delete_record(media.id, session)
                     deleted_count += 1
                     logger.info(
@@ -866,26 +873,24 @@ def _run_scan(task_id: str):
         known_files = set([row for row in sess.exec(select(Media.path)).all()])
 
     media_paths = []
-    for root, dirs, files in tqdm(
-        os.walk(settings.general.media_dirs[0], topdown=True, followlinks=True)
-    ):
-        if ".smol" in dirs:
-            dirs.remove(".smol")
-        if ".DAV" in dirs:
-            dirs.remove(".DAV")
+    for media_dir in settings.general.media_dirs:
+        for root, dirs, files in tqdm(
+            os.walk(media_dir, topdown=True, followlinks=True)
+        ):
+            if ".smol" in dirs:
+                dirs.remove(".smol")
 
-        for fname in files:
-            suffix = Path(fname).suffix.lower()
-            full = Path(root) / fname
-            rel = str(full.relative_to(settings.general.media_dirs[0]))
-            if (
-                suffix
-                not in settings.scan.VIDEO_SUFFIXES
-                + settings.scan.IMAGE_SUFFIXES
-            ):
-                continue
-            if rel not in known_files:
-                media_paths.append(rel)
+            for fname in files:
+                suffix = Path(fname).suffix.lower()
+                full = Path(root) / fname
+                if (
+                    suffix
+                    not in settings.scan.VIDEO_SUFFIXES
+                    + settings.scan.IMAGE_SUFFIXES
+                ):
+                    continue
+                if full not in known_files:
+                    media_paths.append(full)
 
     logger.info("Found %s new files", len(media_paths))
 
@@ -913,7 +918,7 @@ def _run_scan(task_id: str):
                     break
                 safe_commit(sess)
 
-        media_obj = process_file(settings.general.media_dirs[0] / filepath)
+        media_obj = process_file(filepath)
         if media_obj:
             medias_to_add.append(media_obj)
 

@@ -72,6 +72,8 @@ class EmbeddingExtractor(MediaProcessor):
                 embeddings.append(embedding)
                 scene[0].embedding = embedding
                 session.add(scene[0])
+            elif isinstance(scene, Scene):
+                embeddings.append(scene.embedding)
             else:
                 logger.warning("Got instance: %s", type(scene))
 

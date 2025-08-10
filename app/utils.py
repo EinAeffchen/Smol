@@ -76,7 +76,7 @@ def process_file(filepath: Path) -> Media | None:
     width = int(vs[0]["width"]) if vs else None
     height = int(vs[0]["height"]) if vs else None
     media = Media(
-        path=str(filepath.relative_to(settings.general.media_dirs[0])),
+        path=str(filepath),
         filename=filepath.name,
         size=size,
         duration=duration,
@@ -137,13 +137,12 @@ def fix_image_rotation(full_path: Path) -> None:
 def generate_perceptual_hash(
     media: Media, type: Literal["image", "video"]
 ) -> str | None:
-    full_path = settings.general.media_dirs[0] / media.path
     try:
         if type == "image":
-            img = Image.open(full_path)
+            img = Image.open(media.path)
             return str(imagehash.phash(img))
         else:
-            return VideoHash(path=str(full_path)).hash
+            return VideoHash(path=str(media.path)).hash
     except UnidentifiedImageError:
         logger.warning("Skipping %s, not an image!", media.path)
     except OSError:
@@ -156,18 +155,17 @@ def generate_thumbnail(media: Media) -> str | None:
     thumb_folder = get_thumb_folder(settings.general.thumb_dir / "media")
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
-    full_path = settings.general.media_dirs[0] / filepath
     if filepath.suffix.lower() in settings.scan.VIDEO_SUFFIXES:
         (
-            ffmpeg.input(str(full_path), ss=1)
+            ffmpeg.input(str(filepath), ss=1)
             .filter("scale", 360, -1)
             .output(str(thumb_path), vframes=1)
             .run(quiet=True, overwrite_output=True)
         )
     else:
         try:
-            fix_image_rotation(full_path)
-            img = Image.open(full_path)
+            fix_image_rotation(filepath)
+            img = Image.open(filepath)
             img = ImageOps.exif_transpose(img)
         except UnidentifiedImageError:
             logger.warning("Couldn't open %s", filepath)
@@ -258,15 +256,13 @@ def _split_by_scenes(
     ):
         thumb_dir = get_thumb_folder(settings.general.thumb_dir / "scenes")
         thumbnail_path = thumb_dir / f"{i}_{Path(media.path).stem}.jpg"
-        ffmpeg.input(
-            str(settings.general.media_dirs[0] / media.path), ss=start_time.get_seconds()
-        ).filter("scale", 480, -1).output(str(thumbnail_path), vframes=1).run(
+        ffmpeg.input(media.path, ss=start_time.get_seconds()).filter(
+            "scale", 480, -1
+        ).output(str(thumbnail_path), vframes=1).run(
             quiet=True, overwrite_output=True
         )
         out, _ = (
-            ffmpeg.input(
-                str(settings.general.media_dirs[0] / media.path), ss=start_time.get_seconds()
-            )
+            ffmpeg.input(media.path, ss=start_time.get_seconds())
             .output(
                 "pipe:",  # send to stdout
                 vframes=1,  # just one frame
@@ -282,7 +278,9 @@ def _split_by_scenes(
             media_id=media.id,
             start_time=start_time,
             end_time=end_time,
-            thumbnail_path=str(thumbnail_path.relative_to(thumb_dir)),
+            thumbnail_path=str(
+                thumbnail_path.relative_to(settings.general.thumb_dir)
+            ),
         )
         scene_objs.append((scene, frame_rgb))
     return scene_objs
@@ -290,7 +288,7 @@ def _split_by_scenes(
 
 def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
-    video_path = settings.general.media_dirs[0] / media.path
+    video_path = media.path
     cap = cv2.VideoCapture(str(video_path))
 
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
@@ -329,7 +327,9 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
             media_id=media.id,
             start_time=start_sec,
             end_time=end_sec,
-            thumbnail_path=str(thumb_file.relative_to(settings.general.thumb_dir)),
+            thumbnail_path=str(
+                thumb_file.relative_to(settings.general.thumb_dir)
+            ),
         )
         scene_objs.append((scene, frame_rgb))
     cap.release()
@@ -349,9 +349,8 @@ def _decimal_to_dms(value: float):
 
 
 def update_exif_gps(path: str, lon: float, lat: float):
-    image_path = settings.general.media_dirs[0] / path
     try:
-        exif_dict: dict = piexif.load(image_path)
+        exif_dict: dict = piexif.load(path)
     except Exception:
         exif_dict: dict = {
             "0th": {},
@@ -487,7 +486,7 @@ def delete_file(session: Session, media_id: int):
     delete_record(media_id, session)
 
     # delete original file
-    orig = settings.general.media_dirs[0] / media.path
+    orig = Path(media.path)
     if orig.exists():
         orig.unlink()
 

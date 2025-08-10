@@ -8,6 +8,7 @@ from app.config import settings
 from app.logger import logger
 import subprocess
 import ffmpeg
+from pathlib import Path
 
 router = APIRouter()
 
@@ -76,11 +77,11 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
         session.add(task)
         session.commit()
 
-        full_path = settings.general.media_dirs[0] / media_path
-        temp_output_path = full_path.with_name(full_path.stem + "_temp.mp4")
+        media_path_obj = Path(media_path)
+        temp_output_path = media_path_obj.with_name(media_path_obj.stem + "_temp.mp4")
 
         try:
-            info = ffmpeg.probe(str(full_path))
+            info = ffmpeg.probe(str(media_path_obj))
             dur_s = float(info["format"]["duration"])
             dur_us = dur_s * 1000000
             # run ffmpeg with stderr piped so we can parse “progress=…”
@@ -88,7 +89,7 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
             cmd = [
                 "ffmpeg",
                 "-i",
-                str(full_path),
+                str(media_path_obj),
                 "-c:v",
                 "libx264",
                 "-filter:v",
@@ -135,9 +136,9 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
 
             media = session.get(Media, media_id)
             if media and temp_output_path.exists():
-                full_path.unlink()
-                new_file = temp_output_path.rename(full_path)
-                media.path = str(new_file.relative_to(settings.general.media_dirs[0]))
+                media_path_obj.unlink()
+                new_file = temp_output_path.rename(media_path_obj)
+                media.path = str(new_file)
                 media.filename = new_file.name
                 session.add(media)
             session.add(task)

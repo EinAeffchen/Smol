@@ -36,7 +36,7 @@ export default function TagAdder({
 
   useEffect(() => {
     setLoading(true);
-    getTags(1) // Assuming getTags can fetch all tags or takes a page parameter
+    getTags(null) // Assuming getTags can fetch all tags or takes a page parameter
       .then((data) => setAllTags(data.items || []))
       .catch((error) => console.error("Failed to load all tags:", error))
       .finally(() => setLoading(false));

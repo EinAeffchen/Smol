@@ -129,6 +129,7 @@ export function Header() {
     ["Map", "/map"],
     ["Geotagger", "/maptagger"],
     ["Duplicates", "/duplicates"],
+    ["Configuration", "/configuration"],
   ];
 
   const pathsToExcludeInReadOnly: string[] = [

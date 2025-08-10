@@ -249,6 +249,16 @@ export default function DetectedFaces({
                 Delete
               </Button>
             )}
+            {onSetProfile && (
+              <Button
+                variant="contained"
+                size="small"
+                disabled={isProcessing || selectedFaceIds.length !== 1}
+                onClick={() => onSetProfile(selectedFaceIds[0])}
+              >
+                Set as Profile
+              </Button>
+            )}
             {isProcessing && <CircularProgress size={20} />}
           </Stack>
         )}

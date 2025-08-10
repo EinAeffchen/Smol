@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, Request, HTTPException
+from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -13,7 +14,16 @@ from datetime import datetime, timedelta
 import mimetypes
 from fastapi import Response
 import json
-from app.api import face, media, person, search, tags, tasks, duplicates
+from app.api import (
+    face,
+    media,
+    person,
+    search,
+    tags,
+    tasks,
+    duplicates,
+    config,
+)
 from app.api.processors import router as proc_router
 from app.config import settings
 from app.logger import logger
@@ -100,17 +110,17 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def add_accept_ranges_header(request: Request, call_next):
-    # First, get the response from the actual endpoint (e.g., StaticFiles)
-    response = await call_next(request)
+# @app.middleware("http")
+# async def add_accept_ranges_header(request: Request, call_next):
+#     # First, get the response from the actual endpoint (e.g., StaticFiles)
+#     response = await call_next(request)
 
-    # Check if the request path was for the /originals mount point
-    if request.url.path.startswith("/originals"):
-        # If so, add the header to the response
-        response.headers["Accept-Ranges"] = "bytes"
+#     # Check if the request path was for the /originals mount point
+#     if request.url.path.startswith("/originals"):
+#         # If so, add the header to the response
+#         response.headers["Accept-Ranges"] = "bytes"
 
-    return response
+#     return response
 
 
 app.include_router(proc_router, prefix="/api", tags=["processors"])
@@ -121,6 +131,7 @@ app.include_router(face, prefix="/api/faces", tags=["faces"])
 app.include_router(tags, prefix="/api/tags", tags=["tags"])
 app.include_router(search, prefix="/api/search", tags=["search"])
 app.include_router(duplicates, prefix="/api/duplicates", tags=["duplicates"])
+app.include_router(config, prefix="/api", tags=["config"])
 
 app.mount(
     "/thumbnails",
@@ -131,25 +142,23 @@ app.mount(
 
 @app.get("/originals/{file_path:path}", include_in_schema=False)
 async def serve_original_media(file_path: str):
-    for media_dir in settings.general.media_dirs:
-        full_path = media_dir.joinpath(file_path)
-        if full_path.is_file():
-            break
+    file_path_obj = Path(file_path)
 
     # Security check to prevent accessing files outside the settings.general.media_dirs
-    if not full_path.is_file() or not str(full_path).startswith(
-        str(settings.general.media_dirs[0])
+    if not file_path_obj.is_file() or not any(
+        str(file_path_obj).startswith(str(media_dir))
+        for media_dir in settings.general.media_dirs
     ):
         raise HTTPException(status_code=404, detail="File not found")
 
     # Guess the MIME type from the file extension
-    mime_type, _ = mimetypes.guess_type(full_path)
+    mime_type, _ = mimetypes.guess_type(file_path_obj)
     if mime_type is None:
         # Fallback if MIME type can't be guessed
         mime_type = "application/octet-stream"
 
     # Create a FileResponse, which handles byte-range requests correctly
-    response = FileResponse(full_path, media_type=mime_type)
+    response = FileResponse(file_path_obj, media_type=mime_type)
 
     # Manually add the header that Firefox requires
     response.headers["Accept-Ranges"] = "bytes"
@@ -162,9 +171,11 @@ app.mount(
     StaticFiles(directory=str(settings.general.static_dir), html=True),
     name="static",
 )
-app.mount(
-    "/media", StaticFiles(directory=settings.general.media_dirs[0]), name="media"
-)
+# app.mount(
+#     "/media",
+#     StaticFiles(directory=settings.general.media_dirs),
+#     name="media",
+# )
 
 
 @app.get("/{full_path:path}", include_in_schema=False)

@@ -200,3 +200,63 @@ export interface EventDisplayItem {
 
 export type TimelineItem = TimelineMediaItem | TimelineEventItem;
 export type TimelineDisplayItem = MediaItemGroup | EventDisplayItem;
+
+export interface AppConfig {
+  general: {
+    port: number;
+    read_only: boolean;
+    enable_people: boolean;
+    domain: string;
+    thumb_dir_folder_size: number;
+    data_dir: string;
+    database_dir: string;
+    smol_dir: string;
+    thumb_dir: string;
+    media_dirs: string[];
+    static_dir: string;
+    models_dir: string;
+    database_url: string;
+  };
+  scan: {
+    auto_scan: boolean;
+    scan_interval_minutes: number;
+    auto_clean_on_scan: boolean;
+    auto_cluster_on_scan: boolean;
+    auto_rotate: boolean;
+    VIDEO_SUFFIXES: string[];
+    IMAGE_SUFFIXES: string[];
+  };
+  ai: {
+    clip_model_enum: (string | number)[];
+    clip_model: string;
+    clip_model_embedding_size: number;
+    clip_model_pretrained: string;
+    min_search_dist: number;
+    min_similarity_dist: number;
+    cluster_batch_size: number;
+  };
+  tagging: {
+    auto_tagging: boolean;
+    use_default_tags: boolean;
+    custom_tags: string[];
+  };
+  face_recognition: {
+    face_recognition_min_confidence: number;
+    face_match_cosine_threshold: number;
+    face_recognition_min_face_pixels: number;
+    person_min_face_count: number;
+  };
+  duplicates: {
+    duplicate_auto_handling: string;
+    duplicate_auto_keep_rule: string;
+  };
+  video: {
+    auto_scene_detection: boolean;
+    max_frames_per_video: number;
+  };
+  processors: {
+    exif_processor_active: boolean;
+    face_processor_active: boolean;
+    image_embedding_processor_active: boolean;
+  };
+}

@@ -100,7 +100,7 @@ class ExifProcessor(MediaProcessor):
 
     def _process_video(self, media: Media, session: Session):
         try:
-            video_meta = ffmpeg.probe(str(settings.general.media_dirs[0] / media.path))
+            video_meta = ffmpeg.probe(media.path)
             tags = video_meta.get("format", {}).get("tags", {})
             if not tags:
                 return

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import TypeVar
 
 import open_clip
-from pydantic import BaseModel, Field, computed_field, PlainSerializer
+from pydantic import BaseModel, Field, computed_field, PlainSerializer, field_validator
 from typing_extensions import Annotated
 import sys
 from app.logger import logger
@@ -206,17 +206,17 @@ class AISettings(BaseModel):
     # 4. laion2b_s32b_b82k -> english only large model
     # 5. ViT-B-32 -> english only base model
     # 6. convnext_base_w -> english only convolution base model
-    # clip_model_enum: ClipModel = ClipModel.ROBERTA_BASE_VIT_B_32
     clip_model: Annotated[
         ClipModel,
         PlainSerializer(lambda x: x.model_name, return_type=str),
     ] = ClipModel.ROBERTA_BASE_VIT_B_32
-    @computed_field
+
+    # @computed_field
     @property
     def clip_model_embedding_size(self) -> int:
         return self.clip_model.embedding_size
     
-    @computed_field
+    # @computed_field
     @property
     def clip_model_pretrained(self) -> str:
         return self.clip_model.pretrained

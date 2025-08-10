@@ -68,9 +68,6 @@ RUN uv pip install \
 COPY --chown=appuser:appgroup ./app ./app
 COPY --chown=appuser:appgroup alembic /app/alembic
 COPY --chown=appuser:appgroup alembic.ini /app/alembic.ini
-COPY --chown=appuser:appgroup entrypoint.sh /entrypoint.sh
-# RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 # 5. Copy frontend assets from the build stage.
 COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist ${STATIC_ASSETS_PATH}
@@ -78,8 +75,6 @@ COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist ${STATI
 # 6. Create mount points for volumes and set permissions. This is a small final layer.
 RUN mkdir -p ${DATA_DIR} ${MEDIA_DIR}
 ENV IS_DOCKER=true
-
-RUN chown appuser:appgroup /entrypoint.sh
 
 # 7. Switch to the non-root user
 USER appuser
