@@ -339,6 +339,25 @@ def get_model(settings: AppSettings):
     return model, preprocess, tokenizer
 
 
+def reload_settings():
+    """Reloads the settings and the model."""
+    global settings, model, preprocess, tokenizer
+    logger.info("Reloading settings...")
+    new_settings = load_settings()
+    # Update the existing settings object in place
+    for section_name, section_settings in new_settings.model_dump().items():
+        if hasattr(settings, section_name):
+            section = getattr(settings, section_name)
+            for key, value in section_settings.items():
+                if section_name == "ai" and key == "clip_model":
+                    setattr(section, key, ClipModel(value))
+                else:
+                    setattr(section, key, value)
+
+    model, preprocess, tokenizer = get_model(settings)
+    logger.info("Settings reloaded successfully.")
+
+
 settings = load_settings()
 model, preprocess, tokenizer = get_model(settings)
 logger.info("DATA_DIR: %s", settings.general.data_dir)

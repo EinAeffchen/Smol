@@ -603,7 +603,10 @@ def run_person_clustering(task_id: str):
             )
 
         if person_exists:
-            logger.debug("Trying to assign faces to known persons")
+            logger.debug(
+                "Trying to assign faces to known persons: thresh: %s",
+                settings.face_recognition.face_match_cosine_threshold,
+            )
             unassigned_face_ids = assign_to_existing_persons(
                 batch_face_ids,
                 batch_embeddings,
@@ -788,7 +791,7 @@ def reset_processing(session: Session = Depends(get_session)):
         path = face.thumbnail_path
         if path:
             path = Path(path)
-        if path and  path.exists():
+        if path and path.exists():
             path.unlink()
         session.exec(delete(Face).where(Face.id == face.id))
     safe_commit(session)

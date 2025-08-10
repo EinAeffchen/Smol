@@ -1,15 +1,25 @@
-from fastapi import APIRouter, Depends
-from app.config import settings, AppSettings, save_settings
+from fastapi import APIRouter
+from app.config import settings, AppSettings, save_settings, reload_settings
 
 router = APIRouter()
 
+@router.post("/reload", status_code=204)
+async def reload_settings_endpoint():
+    """Reloads the settings from the config.yaml file."""
+    reload_settings()
 
-@router.get("/config", response_model=AppSettings)
-def get_config():
+@router.get("/", response_model=AppSettings)
+async def get_settings():
+    """Returns the current settings model."""
     return settings
 
 
-@router.post("/config", response_model=AppSettings)
-def update_config(config: AppSettings):
-    save_settings(config)
-    return config
+@router.post("/", response_model=AppSettings)
+async def save_settings_endpoint(
+    settings_model: AppSettings,
+):
+    """Saves the settings model to the config.yaml file."""
+    save_settings(settings_model)
+    return settings_model
+
+

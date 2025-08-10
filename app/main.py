@@ -131,7 +131,7 @@ app.include_router(face, prefix="/api/faces", tags=["faces"])
 app.include_router(tags, prefix="/api/tags", tags=["tags"])
 app.include_router(search, prefix="/api/search", tags=["search"])
 app.include_router(duplicates, prefix="/api/duplicates", tags=["duplicates"])
-app.include_router(config, prefix="/api", tags=["config"])
+app.include_router(config, prefix="/api/config", tags=["config"])
 
 app.mount(
     "/thumbnails",
