@@ -53,7 +53,8 @@ export default function MediaDetailPage() {
     hasMore,
     isLoading: isListLoading,
   } = listFromStore || (mediaListKey ? defaultListState : defaultListState);
-  const { loadMore } = useListStore();
+
+  const { loadMore, removeItem } = useListStore();
 
   // B. Local state for this specific modal's content
   const preloadedMedia = location.state?.media as Media | null;
@@ -287,6 +288,7 @@ export default function MediaDetailPage() {
   const confirmDeleteRecord = async () => {
     if (!detail || !detail.media) return;
     try {
+      removeItem(mediaListKey, detail.media.id)
       await deleteMediaRecord(detail.media.id);
       setSnackbar({
         open: true,

@@ -108,7 +108,7 @@ def search_media(
     if not query:
         return CursorPage(items=[], next_cursor=None)
 
-    max_dist = 2.0 - MIN_CLIP_SEARCH_SIMILARITY
+    max_dist = 2.0 - settings.ai.min_search_dist
     max_pages = 3
     vec = encode_text_query(query)
     min_dist = 0

@@ -523,6 +523,11 @@ def assign_to_existing_persons(
             if row and row[1] <= threshold:
                 # nearest person is good enough
                 person_id = row[0]
+                if not person:
+                     sql = text("""DELETE FROM person_embeddings
+                                WHERE person_id=:p_id""").bindparams(p_id=person_id)
+                     session.exec(sql)
+                     return
                 face.person_id = person_id
                 session.add(face)
 
@@ -873,8 +878,9 @@ def _run_scan(task_id: str):
         task.started_at = datetime.now()
         safe_commit(sess)
 
-        known_files = set([row for row in sess.exec(select(Media.path)).all()])
-
+        known_files = set(sess.exec(select(Media.path)).all())
+    logger.info(list(known_files)[:10])
+    logger.info(type(list(known_files)[0]))
     media_paths = []
     for media_dir in settings.general.media_dirs:
         for root, dirs, files in tqdm(
@@ -885,15 +891,16 @@ def _run_scan(task_id: str):
 
             for fname in files:
                 suffix = Path(fname).suffix.lower()
-                full = Path(root) / fname
+                full = (Path(root) / fname).resolve()
                 if (
                     suffix
                     not in settings.scan.VIDEO_SUFFIXES
                     + settings.scan.IMAGE_SUFFIXES
                 ):
                     continue
-                if full not in known_files:
+                if str(full) not in known_files:
                     media_paths.append(full)
+                    known_files.add(str(full))
 
     logger.info("Found %s new files", len(media_paths))
 
