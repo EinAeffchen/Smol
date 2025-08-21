@@ -523,7 +523,7 @@ def assign_to_existing_persons(
             if row and row[1] <= threshold:
                 # nearest person is good enough
                 person_id = row[0]
-                if not person:
+                if not person_id:
                      sql = text("""DELETE FROM person_embeddings
                                 WHERE person_id=:p_id""").bindparams(p_id=person_id)
                      session.exec(sql)
