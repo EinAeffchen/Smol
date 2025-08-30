@@ -53,8 +53,6 @@ ENV HF_HOME=${DATA_DIR}/.smol/models \
 
 # --- OPTIMIZED LAYER ORDER ---
 
-# 2. Copy only the requirements file and install dependencies.
-# This layer is now cached and will only be rebuilt if requirements.txt changes.
 COPY pyproject.toml uv.lock* ./
 RUN uv sync --frozen --no-dev --no-cache
 RUN apt-get remove -y build-essential || true

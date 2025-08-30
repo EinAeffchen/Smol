@@ -3,6 +3,8 @@ import logging
 import mimetypes
 import os
 import sys
+import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -183,6 +185,18 @@ app.mount(
 # )
 
 
+def resolve_path(path):
+    """Get absolute path to resource, works for dev and for PyInstaller"""
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        # Running in a PyInstaller bundle
+        base_path = Path(sys._MEIPASS)
+    else:
+        # Running in a normal Python environment
+        base_path = Path(".")
+
+    return base_path / path
+
+
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa_catch_all(full_path: str):
     index_html_path = settings.general.static_dir / "index.html"
@@ -210,6 +224,23 @@ async def spa_catch_all(full_path: str):
     )
 
 
+def run_server():
+    """Runs the Uvicorn server."""
+    global server
+    config = uvicorn.Config(app, host="127.0.0.1", port=8000)
+    server = uvicorn.Server(config)
+    server.run()
+
+
+def shutdown():
+    """Signals the Uvicorn server to shut down."""
+    if server:
+        print("Shutting down Uvicorn server...")
+        server.should_exit = True
+        # Give the server a moment to close its connections
+        time.sleep(1)
+
+
 def run_migrations():
     """Runs Alembic migrations programmatically."""
     print("Running database migrations...")
@@ -228,7 +259,7 @@ def start_server():
 
 if __name__ == "__main__":
     # 1. Run database migrations before starting the app
-    vec_path = os.path.join(sys._MEIPASS, "vec0.so")
+    vec_path = os.path.join(sys._MEIPASS, "vec0.dll")
     os.environ["SQLITE_VEC_PATH"] = vec_path
     run_migrations()
     # 2. Start the Uvicorn server in a separate thread
@@ -240,5 +271,23 @@ if __name__ == "__main__":
 
     # 3. Create and start the pywebview window
     # This is a blocking call and will run until the window is closed
-    webview.create_window("SMOL", app, width=1280, height=720)
-    webview.start(debug=True, gui="qt")  # Set debug=True for development
+    server_thread = threading.Thread(target=run_server)
+    server_thread.start()
+
+    # Create the pywebview window
+    window = webview.create_window(
+        "Smol",
+        "http://127.0.0.1:8000",  # Point to the URL
+        width=1280,
+        height=720,
+    )
+
+    # Register the shutdown function to be called when the window is closed
+    window.events.closed += shutdown
+
+    webview.start(debug=True, gui="qt")
+
+    # Wait for the server thread to finish before exiting the script
+    print("Waiting for server thread to close...")
+    server_thread.join()
+    print("Application shut down cleanly.")

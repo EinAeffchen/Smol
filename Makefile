@@ -24,7 +24,6 @@ UVICORN		:= $(VENV)/bin/uvicorn
 install:
 	@python3 -m venv "$(VENV)"
 	@$(PIP) install --upgrade pip
-	@$(PIP) install -r requirements.txt
 
 up: 
 	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port $(PORT)
