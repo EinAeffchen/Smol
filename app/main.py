@@ -1,37 +1,42 @@
-import logging
-import os
-from contextlib import asynccontextmanager
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from fastapi import FastAPI, Request, HTTPException
-from pathlib import Path
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from sqlmodel import Session
-from fastapi.responses import HTMLResponse
-from datetime import datetime, timedelta
-import mimetypes
-from fastapi import Response
 import json
+import logging
+import mimetypes
+import os
+import sys
+from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+from pathlib import Path
+
+os.environ["QT_API"] = "pyside6"
+import uvicorn
+import webview
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from fastapi import FastAPI, HTTPException, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import and_, or_, select
+from sqlmodel import Session
+
+from alembic import command
+from alembic.config import Config
 from app.api import (
+    config,
+    duplicates,
     face,
     media,
     person,
     search,
     tags,
     tasks,
-    duplicates,
-    config,
 )
 from app.api.processors import router as proc_router
-from app.config import settings
-from app.logger import logger
-from app.processor_registry import load_processors
 from app.api.tasks import _run_cleanup_and_chain
-from sqlalchemy import select, or_, and_
-from app.models import ProcessingTask
+from app.config import settings
 from app.database import engine
+from app.logger import logger
+from app.models import ProcessingTask
+from app.processor_registry import load_processors
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -203,3 +208,37 @@ async def spa_catch_all(full_path: str):
         content=modified_html,
         headers={"Cache-Control": "no-cache, max-age=0, must-revalidate"},
     )
+
+
+def run_migrations():
+    """Runs Alembic migrations programmatically."""
+    print("Running database migrations...")
+    try:
+        alembic_cfg = Config("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+        print("Migrations applied successfully.")
+    except Exception as e:
+        print(f"Error applying migrations: {e}")
+
+
+def start_server():
+    """Starts the Uvicorn server in a daemon thread."""
+    uvicorn.run(app, host="127.0.0.1", port=8000)
+
+
+if __name__ == "__main__":
+    # 1. Run database migrations before starting the app
+    vec_path = os.path.join(sys._MEIPASS, "vec0.so")
+    os.environ["SQLITE_VEC_PATH"] = vec_path
+    run_migrations()
+    # 2. Start the Uvicorn server in a separate thread
+    # server_thread = threading.Thread(target=start_server)
+    # server_thread.daemon = (
+    #    True  # This allows the main thread to exit and kill the server
+    # )
+    # server_thread.start()
+
+    # 3. Create and start the pywebview window
+    # This is a blocking call and will run until the window is closed
+    webview.create_window("SMOL", app, width=1280, height=720)
+    webview.start(debug=True, gui="qt")  # Set debug=True for development

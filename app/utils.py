@@ -1,38 +1,36 @@
+import json
 import os
 from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 
 import cv2
-
-from fastapi import HTTPException
 import ffmpeg
+import imagehash
 import numpy as np
 import piexif
-from PIL import Image, UnidentifiedImageError, ImageOps
+from fastapi import HTTPException
+from PIL import Image, ImageOps, UnidentifiedImageError
 from scenedetect import AdaptiveDetector, detect
 from scenedetect.video_splitter import TimecodePair
+from sqlalchemy import delete, text
 from sqlmodel import Session, select
 from tqdm import tqdm
-from sqlalchemy import delete, text
-import json
-from typing import Literal
-import imagehash
-from videohash2 import VideoHash
 
 from app.config import settings
 from app.database import engine, safe_commit
 from app.logger import logger
 from app.models import (
+    DuplicateMedia,
     ExifData,
     Face,
     Media,
     MediaTagLink,
     Person,
     PersonSimilarity,
-    Scene,
-    DuplicateMedia,
     ProcessingTask,
+    Scene,
 )
 
 
@@ -64,7 +62,7 @@ def process_file(filepath: Path) -> Media | None:
     """Reads metadata from the file and generates a thumbnail"""
     try:
         probe = ffmpeg.probe(filepath)
-    except Exception as e:
+    except Exception:
         logger.error("Can't process %s", filepath)
         return
     size = os.path.getsize(filepath)
@@ -141,8 +139,6 @@ def generate_perceptual_hash(
         if type == "image":
             img = Image.open(media.path)
             return str(imagehash.phash(img))
-        else:
-            return VideoHash(path=str(media.path)).hash
     except UnidentifiedImageError:
         logger.warning("Skipping %s, not an image!", media.path)
     except OSError:

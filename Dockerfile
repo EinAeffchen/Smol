@@ -17,7 +17,9 @@ RUN npm run build
 
 # ---- Stage 2: Optimized Final Python Application ----
 FROM python:3.12-slim
-
+ENV UV_PYTHON_DOWNLOADS=never \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/usr/local 
 # Create a non-root user and group first
 RUN groupadd --gid 1000 appgroup && \
     useradd --uid 1000 --gid appgroup -s /bin/sh -m appuser
@@ -51,18 +53,11 @@ ENV HF_HOME=${DATA_DIR}/.smol/models \
 
 # --- OPTIMIZED LAYER ORDER ---
 
-RUN python3 -m venv $VENV_PATH
-
 # 2. Copy only the requirements file and install dependencies.
 # This layer is now cached and will only be rebuilt if requirements.txt changes.
-COPY requirements.txt .
-RUN uv pip install \
-        --no-cache \
-        --no-compile \
-        -r requirements.txt \
-        torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu \
-    && apt-get remove -y build-essential
-
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-dev --no-cache
+RUN apt-get remove -y build-essential || true
 # 4. Copy application source code, setting ownership directly.
 # This is now separate from the dependency layers.
 COPY --chown=appuser:appgroup ./app ./app

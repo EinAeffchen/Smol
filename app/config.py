@@ -1,14 +1,15 @@
 import os
+import sys
 from enum import Enum
 from pathlib import Path
 from typing import TypeVar
 
 import open_clip
-from pydantic import BaseModel, Field, computed_field, PlainSerializer, field_validator
-from typing_extensions import Annotated
-import sys
-from app.logger import logger
 import yaml
+from pydantic import BaseModel, Field, PlainSerializer
+from typing_extensions import Annotated
+
+from app.logger import logger
 
 E = TypeVar("E", bound=Enum)
 IS_DOCKER = os.getenv("IS_DOCKER", False)
@@ -29,17 +30,28 @@ def get_user_data_path() -> Path:
     return app_config_dir
 
 
-def get_static_dir() -> Path:
+def get_static_assets_dir() -> Path:
     """
-    Gets the correct path to the static assets folder for both
-    development and a packaged PyInstaller binary.
+    Gets the correct path to the static assets folder for PyInstaller,
+    Docker, and local development environments.
     """
+    # 1. Check if running as a bundled executable (PyInstaller)
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-        # Running as a bundled executable (PyInstaller)
-        # The 'static' folder name must match the one in the --add-data flag
-        return Path(sys._MEIPASS) / "static"
+        # The path is absolute, inside the temporary _MEIPASS directory
+        # This must match the DESTINATION part of your --add-data flag
+        # e.g., --add-data "frontend/dist:dist"
+        base_path = Path(sys._MEIPASS)
+        return base_path / "dist" / "assets"
+
+    # 2. Check if running inside our Docker container via an env var
+    elif os.environ.get("IS_DOCKER"):
+        # The path is absolute within the container
+        return Path("/app/dist/assets")
+
+    # 3. Fallback to local development path
     else:
-        return Path("/app/static")
+        # The path is relative to the project root
+        return Path("frontend/dist/assets")
 
 
 class DuplicateKeepRule(Enum):
@@ -100,7 +112,6 @@ class ClipModel(Enum):
         self.embedding_size = embedding_size
         self.pretrained = pretrained
 
-
     @classmethod
     def _missing_(cls, value: object):
         """This custom hook correctly finds an enum member from a string."""
@@ -109,7 +120,7 @@ class ClipModel(Enum):
                 if member.model_name.lower() == value.lower():
                     return member
         return None
-    
+
     @classmethod
     def get_default(cls):
         # Define the default model
@@ -138,7 +149,7 @@ class GeneralSettings(BaseModel):
     thumb_dir: Path = smol_dir / "thumbnails"
     # only relevant when run as binary
     media_dirs: list[Path] = []
-    static_dir: Path = get_static_dir()
+    static_dir: Path = get_static_assets_dir()
     models_dir: Path = smol_dir / "models"
     database_url: str = f"sqlite:///{database_dir}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
 
@@ -215,18 +226,19 @@ class AISettings(BaseModel):
     @property
     def clip_model_embedding_size(self) -> int:
         return self.clip_model.embedding_size
-    
+
     # @computed_field
     @property
     def clip_model_pretrained(self) -> str:
         return self.clip_model.pretrained
+
     # Strictness of the search results. Higher -> more accurate but less hits
     min_search_dist: float = 0.68
     # Defines the maximum distance for similarity between two images.
     # Used to reduce/increase number of similar images. Higher -> stronger similarity
     min_similarity_dist: float = 1.2
     # reduce if ram is an issue, the higher the more accurate the clustering.
-    cluster_batch_size:int = 10000
+    cluster_batch_size: int = 10000
 
 
 class FaceRecognitionSettings(BaseModel):
