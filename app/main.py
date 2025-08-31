@@ -49,6 +49,9 @@ logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 scheduler = AsyncIOScheduler()
 
+print(settings.general.static_dir)
+print([d for d in settings.general.static_dir.iterdir()])
+
 
 def scheduled_scan_job():
     logger.info("Running scheduled cleanup and process chain...")
@@ -201,6 +204,9 @@ def resolve_path(path):
 async def spa_catch_all(full_path: str):
     index_html_path = settings.general.static_dir / "index.html"
 
+    logger.debug(
+        "FRONT: %s", [c for c in settings.general.static_dir.iterdir()]
+    )
     try:
         # 1. Read the static index.html file content
         with open(index_html_path, "r") as f:
@@ -268,7 +274,8 @@ if __name__ == "__main__":
     #    True  # This allows the main thread to exit and kill the server
     # )
     # server_thread.start()
-
+    base_path = sys._MEIPASS
+    print(f"Base path (_MEIPASS): {base_path}")
     # 3. Create and start the pywebview window
     # This is a blocking call and will run until the window is closed
     server_thread = threading.Thread(target=run_server)

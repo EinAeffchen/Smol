@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { getConfig, saveConfig, reloadConfig } from "../services/config";
 import { AppConfig } from "../types";
+import { IconButton } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
+
 import {
   Button,
   Container,
@@ -107,7 +111,21 @@ export default function ConfigurationPage() {
     if (!config) return;
     setIsSaving(true);
     try {
-      await saveConfig(config);
+      const sanitized = {
+        ...config,
+        general: {
+          ...config.general,
+          media_dirs: Array.from(
+            new Set(
+              (config.general.media_dirs ?? [])
+                .map((s) => s.trim())
+                .filter(Boolean)
+            )
+          ),
+        },
+      };
+
+      await saveConfig(sanitized);
       await reloadConfig();
       setSnackbar({
         open: true,
@@ -124,6 +142,27 @@ export default function ConfigurationPage() {
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const addMediaDir = () => {
+    if (!config) return;
+    handleValueChange("general", "media_dirs", [
+      ...config.general.media_dirs,
+      "",
+    ] as any);
+  };
+
+  const updateMediaDir = (index: number, value: string) => {
+    if (!config) return;
+    const next = [...config.general.media_dirs];
+    next[index] = value;
+    handleValueChange("general", "media_dirs", next as any);
+  };
+
+  const removeMediaDir = (index: number) => {
+    if (!config) return;
+    const next = config.general.media_dirs.filter((_, i) => i !== index);
+    handleValueChange("general", "media_dirs", next as any);
   };
 
   const handleValueChange = <
@@ -185,6 +224,7 @@ export default function ConfigurationPage() {
       label: "General",
       content: (
         <Grid container spacing={2}>
+          {config.general.is_docker} (
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               label="Port"
@@ -197,6 +237,7 @@ export default function ConfigurationPage() {
               type="number"
             />
           </Grid>
+          )
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
               label="Domain"
@@ -207,6 +248,43 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
             />
+          </Grid>
+          <Grid size={{ xs: 12 }}>
+            <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+              Media Directories
+            </Typography>
+
+            {(config.general.media_dirs ?? []).map((dir, idx) => (
+              <Box
+                key={idx}
+                sx={{ display: "flex", alignItems: "center", gap: 1 }}
+              >
+                <TextField
+                  fullWidth
+                  margin="normal"
+                  label={`Media directory #${idx + 1}`}
+                  value={dir}
+                  onChange={(e) => updateMediaDir(idx, e.target.value)}
+                  helperText="Absolute path. In Docker, this is the container path."
+                />
+                <IconButton
+                  aria-label="remove media directory"
+                  onClick={() => removeMediaDir(idx)}
+                  size="large"
+                >
+                  <DeleteIcon />
+                </IconButton>
+              </Box>
+            ))}
+
+            <Button
+              startIcon={<AddIcon />}
+              variant="outlined"
+              onClick={addMediaDir}
+              sx={{ mt: 1 }}
+            >
+              Add directory
+            </Button>
           </Grid>
           <Grid size={{ xs: 12 }}>
             <FormGroup>

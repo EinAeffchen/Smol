@@ -1,34 +1,42 @@
 import json
 import os
+import time
 from collections import defaultdict
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
+
 import hdbscan
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import func, or_
-from app.models import DuplicateMedia
 from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
-import time
+
 from app.api.media import delete_record
 from app.config import settings
 from app.database import engine, get_session, safe_commit
 from app.logger import logger
-from app.models import Face, Media, Person, PersonSimilarity, ProcessingTask
+from app.models import (
+    DuplicateMedia,
+    Face,
+    Media,
+    Person,
+    PersonSimilarity,
+    ProcessingTask,
+)
 from app.processor_registry import processors
 from app.processors.duplicates import DuplicateProcessor
 from app.utils import (
     complete_task,
     generate_perceptual_hash,
-    process_file,
-    split_video,
     generate_thumbnail,
     get_image_taken_date,
+    process_file,
+    split_video,
 )
 
 router = APIRouter()
@@ -524,10 +532,12 @@ def assign_to_existing_persons(
                 # nearest person is good enough
                 person_id = row[0]
                 if not person_id:
-                     sql = text("""DELETE FROM person_embeddings
-                                WHERE person_id=:p_id""").bindparams(p_id=person_id)
-                     session.exec(sql)
-                     return
+                    sql = text("""DELETE FROM person_embeddings
+                                WHERE person_id=:p_id""").bindparams(
+                        p_id=person_id
+                    )
+                    session.exec(sql)
+                    return
                 face.person_id = person_id
                 session.add(face)
 
@@ -879,8 +889,6 @@ def _run_scan(task_id: str):
         safe_commit(sess)
 
         known_files = set(sess.exec(select(Media.path)).all())
-    logger.info(list(known_files)[:10])
-    logger.info(type(list(known_files)[0]))
     media_paths = []
     for media_dir in settings.general.media_dirs:
         for root, dirs, files in tqdm(

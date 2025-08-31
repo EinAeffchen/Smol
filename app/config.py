@@ -13,7 +13,6 @@ from app.logger import logger
 
 E = TypeVar("E", bound=Enum)
 IS_DOCKER = os.getenv("IS_DOCKER", False)
-logger.info("Running docker: %s", IS_DOCKER)
 
 
 def get_user_data_path() -> Path:
@@ -41,7 +40,7 @@ def get_static_assets_dir() -> Path:
         # This must match the DESTINATION part of your --add-data flag
         # e.g., --add-data "frontend/dist:dist"
         base_path = Path(sys._MEIPASS)
-        return base_path / "dist" / "assets"
+        return base_path / "dist"
 
     # 2. Check if running inside our Docker container via an env var
     elif os.environ.get("IS_DOCKER"):
@@ -51,7 +50,7 @@ def get_static_assets_dir() -> Path:
     # 3. Fallback to local development path
     else:
         # The path is relative to the project root
-        return Path("frontend/dist/assets")
+        return Path("dist/assets")
 
 
 class DuplicateKeepRule(Enum):
@@ -138,6 +137,7 @@ class GeneralSettings(BaseModel):
     read_only: bool = False
     # Enable face recognition and other person related features
     enable_people: bool = True
+    is_docker: bool = os.environ.get("IS_DOCKER", False)
     # Which host the system runs on. Mostly only relevant if hosted online.
     domain: str = f"http://localhost:{port}"
     # maximum number of thumbnails per folder, adjust according to your systems inodes
