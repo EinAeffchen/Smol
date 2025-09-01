@@ -49,7 +49,6 @@ ENV PATH="$VENV_PATH/bin:$PATH"
 ENV SQLITE_VEC_PATH=${VENV_PATH}/lib/python3.12/site-packages/sqlite_vec/vec0
 ENV HF_HOME=${DATA_DIR}/.smol/models \
     TORCH_HOME=${DATA_DIR}/.smol/models \
-    INSIGHTFACE_HOME=${DATA_DIR}/.smol/models
 
 # --- OPTIMIZED LAYER ORDER ---
 

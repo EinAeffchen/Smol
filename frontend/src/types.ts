@@ -207,6 +207,7 @@ export interface AppConfig {
     read_only: boolean;
     enable_people: boolean;
     is_docker: boolean;
+    is_binary: boolean;
     domain: string;
     thumb_dir_folder_size: number;
     data_dir: string;

@@ -35,7 +35,7 @@ from app.api import (
 from app.api.processors import router as proc_router
 from app.api.tasks import _run_cleanup_and_chain
 from app.config import settings
-from app.database import engine
+from app.database import engine, ensure_vec_tables
 from app.logger import logger
 from app.models import ProcessingTask
 from app.processor_registry import load_processors
@@ -48,9 +48,6 @@ logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 scheduler = AsyncIOScheduler()
-
-print(settings.general.static_dir)
-print([d for d in settings.general.static_dir.iterdir()])
 
 
 def scheduled_scan_job():
@@ -91,6 +88,11 @@ def scheduled_scan_job():
 async def lifespan(app: FastAPI):
     # Load the ML model
     load_processors()
+    # Ensure vec0 tables exist even if Alembic couldn't create them (binary mode).
+    try:
+        ensure_vec_tables()
+    except Exception as e:
+        logger.warning("Could not ensure vec0 tables: %s", e)
     if settings.scan.auto_scan:
         scheduler.add_job(
             scheduled_scan_job,
@@ -204,9 +206,6 @@ def resolve_path(path):
 async def spa_catch_all(full_path: str):
     index_html_path = settings.general.static_dir / "index.html"
 
-    logger.debug(
-        "FRONT: %s", [c for c in settings.general.static_dir.iterdir()]
-    )
     try:
         # 1. Read the static index.html file content
         with open(index_html_path, "r") as f:
@@ -256,6 +255,7 @@ def run_migrations():
         print("Migrations applied successfully.")
     except Exception as e:
         print(f"Error applying migrations: {e}")
+        raise
 
 
 def start_server():
@@ -265,8 +265,20 @@ def start_server():
 
 if __name__ == "__main__":
     # 1. Run database migrations before starting the app
-    vec_path = os.path.join(sys._MEIPASS, "vec0.dll")
-    os.environ["SQLITE_VEC_PATH"] = vec_path
+    # Ensure SQLITE_VEC_PATH is set to the correct bundled library name
+    try:
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            if sys.platform in ("win32", "cygwin"):
+                vec_name = "vec0.dll"
+            elif sys.platform == "darwin":
+                vec_name = "vec0.dylib"
+            else:
+                vec_name = "vec0.so"
+            vec_path = os.path.join(sys._MEIPASS, vec_name)
+            os.environ["SQLITE_VEC_PATH"] = vec_path
+    except Exception:
+        # Non-fatal: alembic/env.py and database hooks will also attempt to set this
+        pass
     run_migrations()
     # 2. Start the Uvicorn server in a separate thread
     # server_thread = threading.Thread(target=start_server)

@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { getConfig, saveConfig, reloadConfig } from "../services/config";
+import { getConfig, saveConfig, reloadConfig, pickDirectory } from "../services/config";
 import { AppConfig } from "../types";
 import { IconButton } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
+import FolderOpenIcon from "@mui/icons-material/FolderOpen";
 
 import {
   Button,
@@ -144,12 +145,15 @@ export default function ConfigurationPage() {
     }
   };
 
-  const addMediaDir = () => {
+  const addMediaDir = async () => {
     if (!config) return;
-    handleValueChange("general", "media_dirs", [
-      ...config.general.media_dirs,
-      "",
-    ] as any);
+    const chosen = await pickDirectory();
+    const value = chosen || "";
+    handleValueChange(
+      "general",
+      "media_dirs",
+      [...config.general.media_dirs, value] as any
+    );
   };
 
   const updateMediaDir = (index: number, value: string) => {
@@ -163,6 +167,13 @@ export default function ConfigurationPage() {
     if (!config) return;
     const next = config.general.media_dirs.filter((_, i) => i !== index);
     handleValueChange("general", "media_dirs", next as any);
+  };
+
+  const browseMediaDir = async (index: number) => {
+    const path = await pickDirectory();
+    if (path && config) {
+      updateMediaDir(index, path);
+    }
   };
 
   const handleValueChange = <
@@ -219,73 +230,89 @@ export default function ConfigurationPage() {
     return <Typography>No configuration loaded.</Typography>;
   }
 
+  const isBinary = !!config.general.is_binary;
   const sections: { label: string; content: React.ReactNode }[] = [
     {
       label: "General",
       content: (
         <Grid container spacing={2}>
-          {config.general.is_docker} (
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Port"
-              value={config.general.port}
-              onChange={(e) =>
-                handleValueChange("general", "port", parseInt(e.target.value))
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-            />
-          </Grid>
-          )
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Domain"
-              value={config.general.domain}
-              onChange={(e) =>
-                handleValueChange("general", "domain", e.target.value)
-              }
-              fullWidth
-              margin="normal"
-            />
-          </Grid>
-          <Grid size={{ xs: 12 }}>
-            <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
-              Media Directories
-            </Typography>
-
-            {(config.general.media_dirs ?? []).map((dir, idx) => (
-              <Box
-                key={idx}
-                sx={{ display: "flex", alignItems: "center", gap: 1 }}
-              >
+          {!isBinary && (
+            <>
+              <Grid size={{ xs: 12, sm: 6 }}>
                 <TextField
+                  label="Port"
+                  value={config.general.port}
+                  onChange={(e) =>
+                    handleValueChange(
+                      "general",
+                      "port",
+                      parseInt(e.target.value)
+                    )
+                  }
                   fullWidth
                   margin="normal"
-                  label={`Media directory #${idx + 1}`}
-                  value={dir}
-                  onChange={(e) => updateMediaDir(idx, e.target.value)}
-                  helperText="Absolute path. In Docker, this is the container path."
+                  type="number"
                 />
-                <IconButton
-                  aria-label="remove media directory"
-                  onClick={() => removeMediaDir(idx)}
-                  size="large"
-                >
-                  <DeleteIcon />
-                </IconButton>
-              </Box>
-            ))}
+              </Grid>
+              <Grid size={{ xs: 12, sm: 6 }}>
+                <TextField
+                  label="Domain"
+                  value={config.general.domain}
+                  onChange={(e) =>
+                    handleValueChange("general", "domain", e.target.value)
+                  }
+                  fullWidth
+                  margin="normal"
+                />
+              </Grid>
+            </>
+          )}
+          {isBinary && (
+            <Grid size={{ xs: 12 }}>
+              <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+                Media Directories
+              </Typography>
 
-            <Button
-              startIcon={<AddIcon />}
-              variant="outlined"
-              onClick={addMediaDir}
-              sx={{ mt: 1 }}
-            >
-              Add directory
-            </Button>
-          </Grid>
+              {(config.general.media_dirs ?? []).map((dir, idx) => (
+                <Box
+                  key={idx}
+                  sx={{ display: "flex", alignItems: "center", gap: 1 }}
+                >
+                  <TextField
+                    fullWidth
+                    margin="normal"
+                    label={`Media directory #${idx + 1}`}
+                    value={dir}
+                    onChange={(e) => updateMediaDir(idx, e.target.value)}
+                    helperText="Absolute path. In Docker, this is the container path."
+                  />
+                  <IconButton
+                    aria-label="browse for media directory"
+                    onClick={() => browseMediaDir(idx)}
+                    size="large"
+                  >
+                    <FolderOpenIcon />
+                  </IconButton>
+                  <IconButton
+                    aria-label="remove media directory"
+                    onClick={() => removeMediaDir(idx)}
+                    size="large"
+                  >
+                    <DeleteIcon />
+                  </IconButton>
+                </Box>
+              ))}
+
+              <Button
+                startIcon={<AddIcon />}
+                variant="outlined"
+                onClick={addMediaDir}
+                sx={{ mt: 1 }}
+              >
+                Add directory
+              </Button>
+            </Grid>
+          )}
           <Grid size={{ xs: 12 }}>
             <FormGroup>
               <FormControlLabel

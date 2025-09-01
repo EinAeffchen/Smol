@@ -35,22 +35,29 @@ def get_static_assets_dir() -> Path:
     Docker, and local development environments.
     """
     # 1. Check if running as a bundled executable (PyInstaller)
+    static_dir = Path("dist/assets")
+    logger.info(
+        "STATE: %s - %s",
+        getattr(sys, "frozen", False),
+        hasattr(sys, "_MEIPASS"),
+    )
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # The path is absolute, inside the temporary _MEIPASS directory
         # This must match the DESTINATION part of your --add-data flag
         # e.g., --add-data "frontend/dist:dist"
         base_path = Path(sys._MEIPASS)
-        return base_path / "dist"
+        logger.info("Base path: %s", base_path)
+        static_dir = base_path / "dist"
 
     # 2. Check if running inside our Docker container via an env var
     elif os.environ.get("IS_DOCKER"):
         # The path is absolute within the container
-        return Path("/app/dist/assets")
+        static_dir = Path("/app/dist/assets")
 
     # 3. Fallback to local development path
-    else:
-        # The path is relative to the project root
-        return Path("dist/assets")
+    static_dir.mkdir(exist_ok=True, parents=True)
+    logger.debug("StATIC DIR: %s", static_dir)
+    return static_dir
 
 
 class DuplicateKeepRule(Enum):
@@ -138,6 +145,8 @@ class GeneralSettings(BaseModel):
     # Enable face recognition and other person related features
     enable_people: bool = True
     is_docker: bool = os.environ.get("IS_DOCKER", False)
+    # Whether the app is running as a packaged/binary executable (e.g., PyInstaller)
+    is_binary: bool = bool(getattr(sys, "frozen", False))
     # Which host the system runs on. Mostly only relevant if hosted online.
     domain: str = f"http://localhost:{port}"
     # maximum number of thumbnails per folder, adjust according to your systems inodes
@@ -243,12 +252,12 @@ class AISettings(BaseModel):
 
 class FaceRecognitionSettings(BaseModel):
     # minimum confidence needed to extract a face
-    face_recognition_min_confidence: float = 0.78
+    face_recognition_min_confidence: float = 0.5
     # minimum threshold for a face needed to be matched to a person
-    face_match_cosine_threshold: float = 0.55
+    face_match_cosine_threshold: float = 0.40
     # minimum size of a face in pixels to be detected. Base size for detection
     # is the original image, not a thumbnail!
-    face_recognition_min_face_pixels: int = 3600
+    face_recognition_min_face_pixels: int = 1600
     # number of faces needed to automatically create a person
     person_min_face_count: int = 2
 

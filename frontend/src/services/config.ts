@@ -32,3 +32,13 @@ export const reloadConfig = async (): Promise<void> => {
     throw new Error("Failed to reload config");
   }
 };
+
+export const pickDirectory = async (): Promise<string | null> => {
+  const response = await fetch(`${API}/api/config/pick-directory`);
+  if (!response.ok) {
+    // Return null so the caller can fall back to manual entry
+    return null;
+  }
+  const data = await response.json();
+  return (data?.path as string) || null;
+};

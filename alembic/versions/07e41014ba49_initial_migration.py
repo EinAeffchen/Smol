@@ -8,9 +8,10 @@ Create Date: 2025-08-03 16:56:03.799865
 
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
 import sqlmodel
+
+from alembic import op
 from app.config import settings
 
 # revision identifiers, used by Alembic.
@@ -147,14 +148,14 @@ def upgrade() -> None:
         USING vec0(
             face_id     integer primary key,
             person_id   integer,
-            embedding   float[512]
+            embedding   float[128]
         );
     """)
     op.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS person_embeddings
         USING vec0(
             person_id   integer,
-            embedding   float[512]
+            embedding   float[128]
         );
     """)
     op.create_index(

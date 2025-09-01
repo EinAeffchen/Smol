@@ -28,7 +28,7 @@ from app.models import (
     PersonSimilarity,
     ProcessingTask,
 )
-from app.processor_registry import processors
+from app.processor_registry import load_processors, processors
 from app.processors.duplicates import DuplicateProcessor
 from app.utils import (
     complete_task,
@@ -308,6 +308,11 @@ def _run_media_processing(task_id: str):
         session.add(task)
         safe_commit(session)
 
+        # Ensure processors are loaded (in case lifespan didn't run yet)
+        if not processors:
+            logger.debug("Processor registry empty; loading processors now.")
+            load_processors()
+
         for proc in processors:
             proc.load_model()
 
@@ -320,6 +325,11 @@ def _run_media_processing(task_id: str):
             logger.info("Processing: %s", media.filename)
 
             scenes = _get_or_extract_scenes(media, session)
+            logger.debug(
+                "Scenes for %s: %s",
+                media.filename,
+                len(scenes) if scenes is not None else 0,
+            )
             if not scenes and not Path(media.path).exists():
                 # If scenes are empty because the file was deleted, commit and continue
                 safe_commit(session)
@@ -520,10 +530,10 @@ def assign_to_existing_persons(
             sql = text(
                 """
                     SELECT person_id, distance
-                    FROM person_embeddings
-                    WHERE embedding MATCH :vec
-                    and K = 1
-                    ORDER BY distance
+                      FROM person_embeddings
+                     WHERE embedding MATCH :vec
+                     ORDER BY distance
+                     LIMIT 1
                 """
             ).bindparams(vec=vec_param)
             row = session.exec(sql).first()
