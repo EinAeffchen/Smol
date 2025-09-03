@@ -16,7 +16,7 @@ from app.database import safe_commit
 from app.logger import logger
 from app.models import ExifData, Face, Media, Scene
 from app.processors.base import MediaProcessor
-from app.utils import get_thumb_folder
+from app.utils import get_thumb_folder, to_posix_str
 
 
 class FaceProcessor(MediaProcessor):
@@ -81,7 +81,7 @@ class FaceProcessor(MediaProcessor):
                 vec /= norm
             face = Face(
                 media=media,
-                thumbnail_path=str(
+                thumbnail_path=to_posix_str(
                     thumb_file.relative_to(settings.general.thumb_dir)
                 ),
                 bbox=[x1, y1, x2 - x1, y2 - y1],

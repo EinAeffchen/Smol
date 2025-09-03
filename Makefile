@@ -19,10 +19,9 @@ endif
 VENV		?= $(shell pwd)/venv
 PIP			:= $(VENV)/bin/pip
 PYTHON		:= $(VENV)/bin/python
-UVICORN		:= $(VENV)/bin/uvicorn
 
 up: 
-	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port $(PORT)
+	uvicorn app.main:app --reload --log-level debug --host 0.0.0.0 --port 8000 
 
 build: 
 	cd frontend && npm install && npm run build

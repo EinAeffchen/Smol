@@ -2,7 +2,7 @@ import json
 import os
 from collections.abc import Iterable
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal
 
 import cv2
@@ -93,6 +93,15 @@ def process_file(filepath: Path) -> Media | None:
     return media
 
 
+def to_posix_str(s: Path) -> str:
+    """
+    Get a POSIX-style string (forward slashes) regardless of input style.
+    """
+    if "\\" in str(s) and "/" not in str(s):
+        return PureWindowsPath(s).as_posix()
+    return PurePosixPath(s).as_posix()
+
+
 def get_thumb_folder(path: Path) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     folders = [folder for folder in path.iterdir() if folder.is_dir()]
@@ -179,7 +188,7 @@ def generate_thumbnail(media: Media) -> str | None:
             img.save(thumb_path, format="JPEG")
 
         assert thumb_path.is_file()
-    return str(thumb_path.relative_to(settings.general.thumb_dir))
+    return to_posix_str(thumb_path.relative_to(settings.general.thumb_dir))
 
 
 def get_person_embedding(
@@ -274,7 +283,7 @@ def _split_by_scenes(
             media_id=media.id,
             start_time=start_time,
             end_time=end_time,
-            thumbnail_path=str(
+            thumbnail_path=to_posix_str(
                 thumbnail_path.relative_to(settings.general.thumb_dir)
             ),
         )
@@ -286,7 +295,11 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
     video_path = media.path
     # Prefer native Windows backend to avoid needing FFmpeg plugin in headless builds.
-    cap = cv2.VideoCapture(str(video_path), cv2.CAP_MSMF) if os.name == 'nt' else cv2.VideoCapture(str(video_path))
+    cap = (
+        cv2.VideoCapture(str(video_path), cv2.CAP_MSMF)
+        if os.name == "nt"
+        else cv2.VideoCapture(str(video_path))
+    )
     if not cap.isOpened():
         # Fallback to default backend selection.
         cap = cv2.VideoCapture(str(video_path))
@@ -330,7 +343,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
             media_id=media.id,
             start_time=start_sec,
             end_time=end_sec,
-            thumbnail_path=str(
+            thumbnail_path=to_posix_str(
                 thumb_file.relative_to(settings.general.thumb_dir)
             ),
         )
@@ -375,9 +388,9 @@ def update_exif_gps(path: str, lon: float, lat: float):
     }
     exif_dict["GPS"].update(gps_ifd)
     exif_bytes = piexif.dump(exif_dict)
-    img = Image.open(str(image_path))
+    img = Image.open(str(path))
     img = ImageOps.exif_transpose(img)
-    img.save(str(image_path), exif=exif_bytes)
+    img.save(str(path), exif=exif_bytes)
 
 
 def complete_task(session: Session, task: ProcessingTask):

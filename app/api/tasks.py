@@ -351,7 +351,7 @@ def _run_media_processing(task_id: str):
         # 4. Unload Models
         for proc in processors:
             proc.unload()
-
+        # TODO batch processing and allow cancellation
         # 5. Finalize Task
         session.refresh(task)  # Get final status before updating
         task.status = (
@@ -957,7 +957,7 @@ def _run_scan(task_id: str):
         media_obj = process_file(filepath)
         if media_obj:
             medias_to_add.append(media_obj)
-
+    # TODO add option to move file directory from APPCONFIG to anywhere
     with Session(engine) as sess:
         task = sess.merge(task)
         sess.add_all(medias_to_add)
