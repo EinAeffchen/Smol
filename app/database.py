@@ -34,7 +34,9 @@ def _load_sqlite_extensions(dbapi_conn, connection_record):
 
         # If running as a bundled app, provide a sensible default path
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-            os.environ.setdefault("SQLITE_VEC_PATH", str(Path(sys._MEIPASS) / vec_name))
+            os.environ.setdefault(
+                "SQLITE_VEC_PATH", str(Path(sys._MEIPASS) / vec_name)
+            )
 
         vec_path = os.environ.get("SQLITE_VEC_PATH")
         if vec_path and Path(vec_path).exists():
@@ -83,7 +85,7 @@ def ensure_vec_tables():
             USING vec0(
                 face_id   integer primary key,
                 person_id integer,
-                embedding float[128]
+                embedding float[512]
             );
             """
         )
@@ -92,8 +94,8 @@ def ensure_vec_tables():
             CREATE VIRTUAL TABLE IF NOT EXISTS person_embeddings
             USING vec0(
                 person_id integer,
-                embedding float[128]
-            );
+                embedding float[512]
+               );
             """
         )
 

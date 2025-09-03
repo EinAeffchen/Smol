@@ -284,7 +284,7 @@ export default function ConfigurationPage() {
                     label={`Media directory #${idx + 1}`}
                     value={dir}
                     onChange={(e) => updateMediaDir(idx, e.target.value)}
-                    helperText="Absolute path. In Docker, this is the container path."
+                    helperText="Absolute path."
                   />
                   <IconButton
                     aria-label="browse for media directory"

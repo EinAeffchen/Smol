@@ -285,7 +285,14 @@ def _split_by_scenes(
 def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
     video_path = media.path
-    cap = cv2.VideoCapture(str(video_path))
+    # Prefer native Windows backend to avoid needing FFmpeg plugin in headless builds.
+    cap = cv2.VideoCapture(str(video_path), cv2.CAP_MSMF) if os.name == 'nt' else cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        # Fallback to default backend selection.
+        cap = cv2.VideoCapture(str(video_path))
+    if not cap.isOpened():
+        logger.error("Failed to open video with OpenCV: %s", video_path)
+        return []
 
     total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
@@ -384,6 +391,7 @@ def split_video(
     media: Media, path: Path
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
     """Returns select frames from a video and a list of scenes"""
+
     scenes = detect(
         str(path),
         AdaptiveDetector(

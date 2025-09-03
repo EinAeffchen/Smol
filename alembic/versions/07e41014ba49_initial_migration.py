@@ -148,14 +148,14 @@ def upgrade() -> None:
         USING vec0(
             face_id     integer primary key,
             person_id   integer,
-            embedding   float[128]
+            embedding   float[512]
         );
     """)
     op.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS person_embeddings
         USING vec0(
             person_id   integer,
-            embedding   float[128]
+            embedding   float[512]
         );
     """)
     op.create_index(

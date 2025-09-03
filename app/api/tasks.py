@@ -512,10 +512,16 @@ def assign_to_existing_persons(
 ) -> list[int]:
     """
     For each face, do a vec0 nearest‐neighbor lookup in person_embeddings.
-    If sim >= threshold, assign face.person_id and update face_embeddings.
-    Otherwise keep it in 'unassigned' for later clustering.
+    'threshold' is interpreted as cosine similarity in [0,1]. We convert it
+    to an equivalent L2 threshold for the sqlite-vec distance: L2 = sqrt(2*(1-cos)).
+    If L2 <= mapped_threshold, assign face.person_id; else keep for clustering.
     """
     unassigned: list[int] = []
+    try:
+        cos_thr = float(threshold)
+        l2_thr = float(np.sqrt(max(0.0, 2.0 * (1.0 - cos_thr))))
+    except Exception:
+        l2_thr = 0.8  # safe-ish fallback for normalized vectors (cos~0.68)
 
     with Session(engine) as session:
         for face_id, emb in tqdm(zip(face_ids, embs), total=len(face_ids)):
@@ -538,7 +544,7 @@ def assign_to_existing_persons(
             ).bindparams(vec=vec_param)
             row = session.exec(sql).first()
 
-            if row and row[1] <= threshold:
+            if row and row[1] <= l2_thr:
                 # nearest person is good enough
                 person_id = row[0]
                 if not person_id:
@@ -650,7 +656,9 @@ def run_person_clustering(task_id: str):
         else:
             new_faces_ids, new_embs = batch_face_ids, batch_embeddings
 
-        if len(new_embs) > 6:
+        if len(new_embs) >= max(
+            2, int(settings.face_recognition.person_min_face_count)
+        ):
             labels = _cluster_embeddings(new_embs)
             clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
             logger.debug("Created %s Persons!", len(clusters))
