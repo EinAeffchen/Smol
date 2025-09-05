@@ -1,7 +1,9 @@
 general:
   port: 8000
-  read_only: false
+  read_only: true
   enable_people: true
+  is_docker: true
+  is_binary: false
   domain: http://localhost:8000
   thumb_dir_folder_size: 1000
   data_dir: /app/data
@@ -42,8 +44,6 @@ ai:
   min_search_dist: 0.68
   min_similarity_dist: 1.2
   cluster_batch_size: 10000
-  clip_model_embedding_size: 512
-  clip_model_pretrained: laion5b_s13b_b90k
 tagging:
   auto_tagging: true
   use_default_tags: true

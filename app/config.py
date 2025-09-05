@@ -52,7 +52,7 @@ def get_static_assets_dir() -> Path:
     # 2. Check if running inside our Docker container via an env var
     elif os.environ.get("IS_DOCKER"):
         # The path is absolute within the container
-        static_dir = Path("/app/dist/assets")
+        static_dir = Path("/app/static/assets")
 
     # 3. Fallback to local development path
     static_dir.mkdir(exist_ok=True, parents=True)

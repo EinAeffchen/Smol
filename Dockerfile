@@ -38,17 +38,14 @@ COPY --from=uv-installer /opt/uv/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/u
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    VENV_PATH=/app/venv \
     PORT=8000 \
     MEDIA_DIR=/app/media \
-    DATA_DIR=/app/data \
-    STATIC_ASSETS_PATH=/app/static
+    DATA_DIR=/app/data
 
-ENV PATH="$VENV_PATH/bin:$PATH"
 # Further ENV VARS for application
-ENV SQLITE_VEC_PATH=${VENV_PATH}/lib/python3.12/site-packages/sqlite_vec/vec0
+ENV SQLITE_VEC_PATH=/usr/local/lib/python3.12/site-packages/sqlite_vec/vec0.so
 ENV HF_HOME=${DATA_DIR}/.smol/models \
-    TORCH_HOME=${DATA_DIR}/.smol/models \
+    TORCH_HOME=${DATA_DIR}/.smol/models 
 
 # --- OPTIMIZED LAYER ORDER ---
 
@@ -62,7 +59,7 @@ COPY --chown=appuser:appgroup alembic /app/alembic
 COPY --chown=appuser:appgroup alembic.ini /app/alembic.ini
 
 # 5. Copy frontend assets from the build stage.
-COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist ${STATIC_ASSETS_PATH}
+COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist /app/static
 
 # 6. Create mount points for volumes and set permissions. This is a small final layer.
 RUN mkdir -p ${DATA_DIR} ${MEDIA_DIR}

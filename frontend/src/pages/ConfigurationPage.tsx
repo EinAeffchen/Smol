@@ -127,7 +127,10 @@ export default function ConfigurationPage() {
       };
 
       await saveConfig(sanitized);
-      await reloadConfig();
+      // Reload backend config and sync frontend runtime flags; also
+      // update local state with the authoritative server config.
+      const latest = await reloadConfig();
+      setConfig(latest);
       setSnackbar({
         open: true,
         message: "Configuration saved and reloaded successfully!",

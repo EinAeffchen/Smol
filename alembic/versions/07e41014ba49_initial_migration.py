@@ -1,6 +1,6 @@
 """Initial migration
 
-Revision ID: 07e41014ba49
+Revision ID: 92f7ecebc445
 Revises:
 Create Date: 2025-08-03 16:56:03.799865
 
@@ -15,7 +15,7 @@ from alembic import op
 from app.config import settings
 
 # revision identifiers, used by Alembic.
-revision: str = "07e41014ba49"
+revision: str = "92f7ecebc445"
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

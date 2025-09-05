@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { NavLink as RouterNavLink, useNavigate, Link } from "react-router-dom";
 import {
   AppBar,
@@ -117,8 +117,20 @@ export function Header() {
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<"media" | "person" | "tag">("media");
+  // Force a re-render when runtime config updates (e.g., read-only flag changes)
+  const [configTick, setConfigTick] = useState(0);
   const navigate = useNavigate();
   const fileInputRef = React.useRef<HTMLInputElement>(null); // Ref for the hidden file input
+
+  useEffect(() => {
+    const handler = () => setConfigTick((v) => v + 1);
+    window.addEventListener("runtime-config-updated", handler as EventListener);
+    return () =>
+      window.removeEventListener(
+        "runtime-config-updated",
+        handler as EventListener
+      );
+  }, []);
 
   const allNavItems: [string, string][] = [
     ["Images", "/images"],
