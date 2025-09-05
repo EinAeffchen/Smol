@@ -152,6 +152,12 @@ export default function DetectedFaces({
     onClearSelection();
     await onAssign(faceIds, assignedToPersonId);
   };
+  const handleDetach = async (
+    faceIds: number[],
+  ) => {
+    onClearSelection();
+    await onDetach(faceIds);
+  };
   // --- NEW: Handlers for the assign dialog ---
   const handleCloseAssignDialog = () => {
     setIsAssignDialogOpen(false);
@@ -233,7 +239,7 @@ export default function DetectedFaces({
                 color="secondary"
                 size="small"
                 disabled={isProcessing}
-                onClick={() => onDetach(selectedFaceIds)}
+                onClick={handleDetach}
               >
                 Detach
               </Button>
