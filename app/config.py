@@ -136,8 +136,6 @@ class ClipModel(Enum):
         return self.model_name
 
 
-# TODO ensure read_only and read/write settings diff
-# TODO ensure future changes in settings are written into already known file
 class GeneralSettings(BaseModel):
     port: int = 8000
     # Run system in read_only mode or not

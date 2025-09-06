@@ -54,6 +54,22 @@ def _load_sqlite_extensions(dbapi_conn, connection_record):
         dbapi_conn.enable_load_extension(False)
 
 
+@event.listens_for(engine, "connect")
+def _set_sqlite_pragmas(dbapi_conn, connection_record):
+    """Ensure useful SQLite pragmas are set on each connection."""
+    try:
+        cur = dbapi_conn.cursor()
+        # WAL allows readers during writes; NORMAL reduces fsync overhead.
+        cur.execute("PRAGMA journal_mode=WAL;")
+        cur.execute("PRAGMA synchronous=NORMAL;")
+        cur.execute("PRAGMA foreign_keys=ON;")
+        # Make write waits explicit at the driver level if needed (dup to timeout arg)
+        # cur.execute("PRAGMA busy_timeout=30000;")
+        cur.close()
+    except Exception as e:
+        logger.warning("Failed to set SQLite pragmas: %s", e)
+
+
 def ensure_vec_tables():
     """Ensure vec0 virtual tables exist (idempotent)."""
     # Try best to ensure the sqlite-vec extension can be located in binary mode

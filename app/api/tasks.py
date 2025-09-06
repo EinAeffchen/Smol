@@ -19,6 +19,7 @@ from tqdm import tqdm
 from app.api.media import delete_record
 from app.config import settings
 from app.database import engine, get_session, safe_commit
+from app.concurrency import heavy_writer
 from app.logger import logger
 from app.models import (
     DuplicateMedia,
@@ -196,7 +197,12 @@ def _run_media_processing_and_chain(task_id: str):
 
 
 def _get_media_to_process(session: Session) -> list[Media]:
-    """Fetches all media records that require processing."""
+    """
+    Fetches all media records that require processing.
+
+    Deprecated for large runs: prefer batched helpers below to
+    avoid loading all rows at once.
+    """
     return session.exec(
         select(Media)
         .where(
@@ -208,6 +214,42 @@ def _get_media_to_process(session: Session) -> list[Media]:
             )
         )
         .order_by(Media.duration.asc())
+    ).all()
+
+
+def _count_media_to_process(session: Session) -> int:
+    """Returns a count of media rows that still need processing."""
+    return session.exec(
+        select(func.count(Media.id)).where(
+            or_(
+                Media.faces_extracted.is_(False),
+                Media.ran_auto_tagging.is_(False),
+                Media.embeddings_created.is_(False),
+                Media.extracted_scenes.is_(False),
+            )
+        )
+    ).first() or 0
+
+
+def _fetch_media_batch_to_process(session: Session, limit: int) -> list[Media]:
+    """
+    Fetch a single batch of media rows that need processing.
+
+    Uses LIMIT without OFFSET so subsequent calls naturally move
+    through the remaining set as flags are updated.
+    """
+    return session.exec(
+        select(Media)
+        .where(
+            or_(
+                Media.faces_extracted.is_(False),
+                Media.ran_auto_tagging.is_(False),
+                Media.embeddings_created.is_(False),
+                Media.extracted_scenes.is_(False),
+            )
+        )
+        .order_by(Media.duration.asc())
+        .limit(limit)
     ).all()
 
 
@@ -295,71 +337,110 @@ def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
 
 
 def _run_media_processing(task_id: str):
+    BATCH_SIZE = 100
     with Session(engine) as session:
         task = session.get(ProcessingTask, task_id)
         if not task:
             logger.error("Task with id %s not found!", task_id)
             return
 
+        # Initialize task metadata
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
-        medias_to_process = _get_media_to_process(session)
-        task.total = len(medias_to_process)
+        task.total = _count_media_to_process(session)
         session.add(task)
         safe_commit(session)
+
+        def is_cancelled() -> bool:
+            try:
+                session.refresh(task, attribute_names=["status"])  # cheap
+                return task.status == "cancelled"
+            except Exception:
+                return False
 
         # Ensure processors are loaded (in case lifespan didn't run yet)
         if not processors:
             logger.debug("Processor registry empty; loading processors now.")
             load_processors()
 
-        for proc in processors:
-            proc.load_model()
-
-        for media in medias_to_process:
-            session.refresh(task)  # Check for cancellation
-            if task.status == "cancelled":
-                logger.info("Task cancelled. Stopping processing.")
-                break
-
-            logger.info("Processing: %s", media.filename)
-
-            scenes = _get_or_extract_scenes(media, session)
-            logger.debug(
-                "Scenes for %s: %s",
-                media.filename,
-                len(scenes) if scenes is not None else 0,
-            )
-            if not scenes and not Path(media.path).exists():
-                # If scenes are empty because the file was deleted, commit and continue
+        # Acquire a process-local heavy write slot to reduce lock thrashing
+        with heavy_writer(name="process_media", cancelled=is_cancelled) as acquired:
+            if not acquired:
+                # Cancelled while waiting for lock
+                session.refresh(task)
+                task.status = "cancelled"
+                task.finished_at = datetime.now(timezone.utc)
+                session.add(task)
                 safe_commit(session)
-                continue
+                return
 
-            all_processors_succeeded = _apply_processors(
-                media, scenes, session
+            for proc in processors:
+                proc.load_model()
+
+            # Process in batches to avoid loading everything at once
+            while True:
+                # Re-check cancellation between batches
+                session.refresh(task, attribute_names=["status"])  # lightweight refresh
+                if task.status == "cancelled":
+                    logger.info("Task cancelled. Stopping before next batch.")
+                    break
+
+                medias_batch = _fetch_media_batch_to_process(session, BATCH_SIZE)
+                if not medias_batch:
+                    logger.info("No more media to process. Finishing.")
+                    break
+
+                logger.info(
+                    "Processing batch of %d media items...",
+                    len(medias_batch),
+                )
+
+                for media in medias_batch:
+                    # Check for cancellation before starting potentially heavy work
+                    session.refresh(task, attribute_names=["status"])  # check cancel
+                    if task.status == "cancelled":
+                        logger.info("Task cancelled mid-batch. Stopping.")
+                        break
+
+                    logger.info("Processing: %s", media.filename)
+
+                    scenes = _get_or_extract_scenes(media, session)
+                    logger.debug(
+                        "Scenes for %s: %s",
+                        media.filename,
+                        len(scenes) if scenes is not None else 0,
+                    )
+                    if not scenes and not Path(media.path).exists():
+                        # If scenes are empty because the file was deleted, commit and continue
+                        safe_commit(session)
+                        continue
+
+                    all_processors_succeeded = _apply_processors(
+                        media, scenes, session
+                    )
+
+                    if all_processors_succeeded:
+                        session.add(media)  # Add the updated media object
+
+                    task.processed += 1
+                    session.add(task)
+                    # Commit after each media item is fully processed
+                    safe_commit(session)
+
+                # end for media in batch
+
+            # Unload Models
+            for proc in processors:
+                proc.unload()
+
+            # Finalize Task
+            session.refresh(task)  # Get final status before updating
+            task.status = (
+                "completed" if task.status != "cancelled" else "cancelled"
             )
-
-            if all_processors_succeeded:
-                session.add(media)  # Add the updated media object
-
-            task.processed += 1
+            task.finished_at = datetime.now(timezone.utc)
             session.add(task)
-            safe_commit(
-                session
-            )  # Commit after each media item is fully processed
-
-        # 4. Unload Models
-        for proc in processors:
-            proc.unload()
-        # TODO batch processing and allow cancellation
-        # 5. Finalize Task
-        session.refresh(task)  # Get final status before updating
-        task.status = (
-            "completed" if task.status != "cancelled" else "cancelled"
-        )
-        task.finished_at = datetime.now(timezone.utc)
-        session.add(task)
-        safe_commit(session)
+            safe_commit(session)
 
 
 # ─── 2) CLUSTER PERSONS ────────────────────────────────────────────────────────
@@ -610,66 +691,73 @@ def run_person_clustering(task_id: str):
         task.total = _get_face_total(session)
         logger.info("Got %s faces to cluster!", task.total)
         safe_commit(session)
-    last_id = 0
-    while True:
-        logger.info("--- Starting new Clustering Batch ---")
-        with Session(engine) as session:
-            logger.debug("Continuing from id: %s", last_id)
-            batch_face_ids, batch_embeddings = _fetch_faces_and_embeddings(
-                session, last_id=last_id, limit=settings.ai.cluster_batch_size
-            )
-            last_id = batch_face_ids[-1]
+    def is_cancelled() -> bool:
+        with Session(engine) as s:
+            t = s.get(ProcessingTask, task_id)
+            return bool(t and t.status == "cancelled")
 
-        if len(batch_face_ids) == 0:
-            logger.info("No more unassigned faces found. Finishing process.")
-            break  # Exit the while loop
-
-        logger.info("Processing batch of %d faces...", len(batch_face_ids))
-
-        # Fetch embeddings once
-        person_exists = False
-        with Session(engine) as session:  # Quick, read-only check
-            person_exists = (
-                session.exec(select(Person).limit(1)).first() is not None
-            )
-
-        if person_exists:
-            logger.debug(
-                "Trying to assign faces to known persons: thresh: %s",
-                settings.face_recognition.face_match_cosine_threshold,
-            )
-            unassigned_face_ids = assign_to_existing_persons(
-                batch_face_ids,
-                batch_embeddings,
-                task_id,
-                threshold=settings.face_recognition.face_match_cosine_threshold,
-            )
-            if not unassigned_face_ids:
-                logger.info(
-                    "All faces in batch were assigned to existing persons."
+    with heavy_writer(name="cluster_persons", cancelled=is_cancelled):
+        last_id = 0
+        while True:
+            logger.info("--- Starting new Clustering Batch ---")
+            with Session(engine) as session:
+                logger.debug("Continuing from id: %s", last_id)
+                batch_face_ids, batch_embeddings = _fetch_faces_and_embeddings(
+                    session, last_id=last_id, limit=settings.ai.cluster_batch_size
                 )
-                continue  # Go to the next batch
+                if batch_face_ids:
+                    last_id = batch_face_ids[-1]
 
-            new_faces_ids, new_embs = _filter_embeddings_by_id(
-                batch_face_ids, batch_embeddings, unassigned_face_ids
-            )
-        else:
-            new_faces_ids, new_embs = batch_face_ids, batch_embeddings
+            if len(batch_face_ids) == 0:
+                logger.info("No more unassigned faces found. Finishing process.")
+                break  # Exit the while loop
 
-        if len(new_embs) >= max(
-            2, int(settings.face_recognition.person_min_face_count)
-        ):
-            labels = _cluster_embeddings(new_embs)
-            clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
-            logger.debug("Created %s Persons!", len(clusters))
-            _assign_faces_to_clusters(clusters, task_id)
-        if len(batch_face_ids) < settings.ai.cluster_batch_size:
-            break
+            logger.info("Processing batch of %d faces...", len(batch_face_ids))
 
-    with Session(engine) as session:
-        task = session.get(ProcessingTask, task_id)
-        logger.info("FINISHED CLUSTERING!")
-        complete_task(session, task)
+            # Fetch embeddings once
+            person_exists = False
+            with Session(engine) as session:  # Quick, read-only check
+                person_exists = (
+                    session.exec(select(Person).limit(1)).first() is not None
+                )
+
+            if person_exists:
+                logger.debug(
+                    "Trying to assign faces to known persons: thresh: %s",
+                    settings.face_recognition.face_match_cosine_threshold,
+                )
+                unassigned_face_ids = assign_to_existing_persons(
+                    batch_face_ids,
+                    batch_embeddings,
+                    task_id,
+                    threshold=settings.face_recognition.face_match_cosine_threshold,
+                )
+                if not unassigned_face_ids:
+                    logger.info(
+                        "All faces in batch were assigned to existing persons."
+                    )
+                    continue  # Go to the next batch
+
+                new_faces_ids, new_embs = _filter_embeddings_by_id(
+                    batch_face_ids, batch_embeddings, unassigned_face_ids
+                )
+            else:
+                new_faces_ids, new_embs = batch_face_ids, batch_embeddings
+
+            if len(new_embs) >= max(
+                2, int(settings.face_recognition.person_min_face_count)
+            ):
+                labels = _cluster_embeddings(new_embs)
+                clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
+                logger.debug("Created %s Persons!", len(clusters))
+                _assign_faces_to_clusters(clusters, task_id)
+            if len(batch_face_ids) < settings.ai.cluster_batch_size:
+                break
+
+        with Session(engine) as session:
+            task = session.get(ProcessingTask, task_id)
+            logger.info("FINISHED CLUSTERING!")
+            complete_task(session, task)
 
 
 # ─── 3) CANCEL / LIST / GET TASKS ─────────────────────────────────────────────
@@ -780,9 +868,16 @@ def _run_duplicate_detection(task_id: str, threshold: int):
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
         session.commit()
-    generate_hashes(task_id)
-    processor = DuplicateProcessor(task_id, threshold)
-    processor.process()
+
+    def is_cancelled() -> bool:
+        with Session(engine) as s:
+            t = s.get(ProcessingTask, task_id)
+            return bool(t and t.status == "cancelled")
+
+    with heavy_writer(name="find_duplicates", cancelled=is_cancelled):
+        generate_hashes(task_id)
+        processor = DuplicateProcessor(task_id, threshold)
+        processor.process()
 
     # Clean up any empty duplicate groups that were created
     with Session(engine) as session:
@@ -816,18 +911,19 @@ def reset_processing(session: Session = Depends(get_session)):
             status_code=403,
             detail="Not allowed in settings.general.read_only mode.",
         )
-    session.exec(update(Media).values(faces_extracted=False))
-    session.exec(update(Media).values(embeddings_created=False))
-    session.exec(text("DELETE FROM face_embeddings"))
-    session.exec(text("DELETE FROM media_embeddings"))
-    for face in tqdm(session.exec(select(Face)).all()):
-        path = face.thumbnail_path
-        if path:
-            path = Path(path)
-        if path and path.exists():
-            path.unlink()
-        session.exec(delete(Face).where(Face.id == face.id))
-    safe_commit(session)
+    with heavy_writer(name="reset_processing"):
+        session.exec(update(Media).values(faces_extracted=False))
+        session.exec(update(Media).values(embeddings_created=False))
+        session.exec(text("DELETE FROM face_embeddings"))
+        session.exec(text("DELETE FROM media_embeddings"))
+        for face in tqdm(session.exec(select(Face)).all()):
+            path = face.thumbnail_path
+            if path:
+                path = Path(path)
+            if path and path.exists():
+                path.unlink()
+            session.exec(delete(Face).where(Face.id == face.id))
+        safe_commit(session)
     return "OK"
 
 
@@ -838,14 +934,15 @@ def reset_clustering(session: Session = Depends(get_session)):
             status_code=403,
             detail="Not allowed in settings.general.read_only mode.",
         )
-    session.exec(delete(PersonSimilarity))
-    session.exec(
-        update(Face).values(person_id=None).where(Face.person_id != None)
-    )
-    session.exec(delete(Person))
-    session.exec(text("UPDATE face_embeddings SET person_id=-1"))
-    session.exec(text("DELETE FROM person_embeddings"))
-    safe_commit(session)
+    with heavy_writer(name="reset_clustering"):
+        session.exec(delete(PersonSimilarity))
+        session.exec(
+            update(Face).values(person_id=None).where(Face.person_id != None)
+        )
+        session.exec(delete(Person))
+        session.exec(text("UPDATE face_embeddings SET person_id=-1"))
+        session.exec(text("DELETE FROM person_embeddings"))
+        safe_commit(session)
     return "OK"
 
 
@@ -868,30 +965,35 @@ def _clean_missing_files(task_id: str):
         batch_size = 100
         offset = 0
 
-        while True:
-            media_batch = session.exec(
-                select(Media).offset(offset).limit(batch_size)
-            ).all()
+        def is_cancelled() -> bool:
+            session.refresh(task, attribute_names=["status"])  # cheap
+            return task.status == "cancelled"
 
-            if not media_batch:
-                break
+        with heavy_writer(name="clean_missing_files", cancelled=is_cancelled):
+            while True:
+                media_batch = session.exec(
+                    select(Media).offset(offset).limit(batch_size)
+                ).all()
 
-            for media in media_batch:
-                if not Path(media.path).exists():
-                    delete_record(media.id, session)
-                    deleted_count += 1
-                    logger.info(
-                        "Deleted record for missing file: %s", media.path
-                    )
+                if not media_batch:
+                    break
 
-            offset += batch_size
-            task.processed = offset
+                for media in media_batch:
+                    if not Path(media.path).exists():
+                        delete_record(media.id, session)
+                        deleted_count += 1
+                        logger.info(
+                            "Deleted record for missing file: %s", media.path
+                        )
+
+                offset += batch_size
+                task.processed = offset
+                session.commit()
+
+            task.status = "completed"
+            task.finished_at = datetime.now(timezone.utc)
             session.commit()
-
-        task.status = "completed"
-        task.finished_at = datetime.now(timezone.utc)
-        session.commit()
-        logger.info("Cleaned %d missing file records", deleted_count)
+            logger.info("Cleaned %d missing file records", deleted_count)
 
 
 def _run_scan(task_id: str):
@@ -958,25 +1060,31 @@ def _run_scan(task_id: str):
         if media_obj:
             medias_to_add.append(media_obj)
     # TODO add option to move file directory from APPCONFIG to anywhere
-    with Session(engine) as sess:
-        task = sess.merge(task)
-        sess.add_all(medias_to_add)
-        sess.flush(medias_to_add)
-        broken_files = []
-        for media in medias_to_add:
-            thumbnail_path = generate_thumbnail(media)
-            if not thumbnail_path:
-                broken_files.append(thumbnail_path)
-                continue
-            media.thumbnail_path = thumbnail_path
-        for broken_media in broken_files:
-            sess.delete(broken_media)
-        task.processed = len(medias_to_add)
-        task.status = (
-            "completed" if task.status != "cancelled" else "cancelled"
-        )
-        task.finished_at = datetime.now(timezone.utc)
-        safe_commit(sess)
+    def is_cancelled() -> bool:
+        with Session(engine) as s:
+            t = s.get(ProcessingTask, task_id)
+            return bool(t and t.status == "cancelled")
+
+    with heavy_writer(name="scan", cancelled=is_cancelled):
+        with Session(engine) as sess:
+            task = sess.merge(task)
+            sess.add_all(medias_to_add)
+            sess.flush(medias_to_add)
+            broken_files = []
+            for media in medias_to_add:
+                thumbnail_path = generate_thumbnail(media)
+                if not thumbnail_path:
+                    broken_files.append(thumbnail_path)
+                    continue
+                media.thumbnail_path = thumbnail_path
+            for broken_media in broken_files:
+                sess.delete(broken_media)
+            task.processed = len(medias_to_add)
+            task.status = (
+                "completed" if task.status != "cancelled" else "cancelled"
+            )
+            task.finished_at = datetime.now(timezone.utc)
+            safe_commit(sess)
 
 
 def generate_hashes(task_id: int | None = None):
@@ -995,54 +1103,63 @@ def generate_hashes(task_id: int | None = None):
             task.total = total_count
             session.commit()  # Commit the initial total count
 
-        while True:
-            # Fetch a batch of media objects that need a hash
-            media_batch_stmt = (
-                select(Media).where(Media.phash.is_(None)).limit(BATCH_SIZE)
-            )
-            media_to_hash = session.exec(media_batch_stmt).all()
+        def is_cancelled() -> bool:
+            if not task:
+                return False
+            session.refresh(task, attribute_names=["status"])  # cheap
+            return task.status == "cancelled"
 
-            # If no media is returned, we are done
-            if not media_to_hash:
-                logger.info("No more media to hash. Task complete.")
-                break
+        with heavy_writer(name="generate_hashes", cancelled=is_cancelled):
+            while True:
+                # Fetch a batch of media objects that need a hash
+                media_batch_stmt = (
+                    select(Media).where(Media.phash.is_(None)).limit(BATCH_SIZE)
+                )
+                media_to_hash = session.exec(media_batch_stmt).all()
 
-            for media in tqdm(media_to_hash, desc="Generating Hashes"):
-                # If a task is running, check for cancellation periodically
+                # If no media is returned, we are done
+                if not media_to_hash:
+                    logger.info("No more media to hash. Task complete.")
+                    break
+
+                for media in tqdm(media_to_hash, desc="Generating Hashes"):
+                    # If a task is running, check for cancellation periodically
+                    if task:
+                        # Refresh the task object from the DB to get the latest status
+                        session.refresh(task, attribute_names=["status"])
+                        if task.status == "cancelled":
+                            logger.warning(
+                                f"Task {task_id} was cancelled. Aborting."
+                            )
+                            # Rollback any changes in the current uncommitted batch
+                            session.rollback()
+                            return
+
+                    try:
+                        # Generate the appropriate hash based on media type
+                        if media.duration is None:
+                            media.phash = generate_perceptual_hash(
+                                media, type="image"
+                            )
+                        else:
+                            media.phash = generate_perceptual_hash(
+                                media, type="video"
+                            )
+                        session.add(media)
+                    except Exception as e:
+                        logger.error(
+                            f"Could not generate hash for media {media.id}: {e}"
+                        )
+
+                # Update the task progress after processing each batch
                 if task:
-                    # Refresh the task object from the DB to get the latest status
-                    session.refresh(task, attribute_names=["status"])
-                    if task.status == "cancelled":
-                        logger.warning(
-                            f"Task {task_id} was cancelled. Aborting."
-                        )
-                        # Rollback any changes in the current uncommitted batch
-                        session.rollback()
-                        return
+                    task.processed += len(media_to_hash)
 
-                try:
-                    # Generate the appropriate hash based on media type
-                    if media.duration is None:
-                        media.phash = generate_perceptual_hash(
-                            media, type="image"
-                        )
-                    else:
-                        media.phash = generate_perceptual_hash(
-                            media, type="video"
-                        )
-                    session.add(media)
-                except Exception as e:
-                    logger.error(
-                        f"Could not generate hash for media {media.id}: {e}"
-                    )
-
-            # Update the task progress after processing each batch
-            if task:
-                task.processed += len(media_to_hash)
-
-            # Commit the changes for the current batch (media phashes and task progress)
-            session.commit()
-            logger.info(f"Committed batch of {len(media_to_hash)} hashes.")
+                # Commit the changes for the current batch (media phashes and task progress)
+                session.commit()
+                logger.info(
+                    f"Committed batch of {len(media_to_hash)} hashes."
+                )
 
 
 @router.post(
