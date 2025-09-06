@@ -408,15 +408,26 @@ def _fetch_faces_and_embeddings(
 
 
 def _cluster_embeddings(
-    embeddings: np.ndarray, min_cluster_size=6, min_samples=10
+    embeddings: np.ndarray, min_cluster_size=None, min_samples=None
 ):
     embeddings_64 = embeddings.astype(np.float64)
+    # Pull defaults from settings if not provided
+    min_cluster_size = (
+        min_cluster_size
+        if min_cluster_size is not None
+        else settings.ai.hdbscan_min_cluster_size
+    )
+    min_samples = (
+        min_samples
+        if min_samples is not None
+        else settings.ai.hdbscan_min_samples
+    )
     clusterer = hdbscan.HDBSCAN(
         metric="cosine",
         min_cluster_size=min_cluster_size,
         min_samples=min_samples,
-        cluster_selection_method="eom",
-        cluster_selection_epsilon=0.15,
+        cluster_selection_method=settings.ai.hdbscan_cluster_selection_method,
+        cluster_selection_epsilon=settings.ai.hdbscan_cluster_selection_epsilon,
         algorithm="generic",
     )
     labels = clusterer.fit_predict(embeddings_64)
@@ -456,6 +467,18 @@ def _assign_faces_to_clusters(
         similarities = embeddings_arr @ centroid
 
         best_face_id = face_ids[np.argmax(similarities)]
+
+        # Enforce compactness of the cluster to avoid over-merged persons
+        diffs = embeddings_arr - centroid
+        l2_radii = np.linalg.norm(diffs, axis=1)
+        if np.max(l2_radii) > settings.face_recognition.person_cluster_max_l2_radius:
+            logger.info(
+                "Skipping loose cluster (max radius=%.3f > %.3f) with %d faces",
+                float(np.max(l2_radii)),
+                settings.face_recognition.person_cluster_max_l2_radius,
+                len(face_ids),
+            )
+            continue
 
         # Each cluster gets its own self-contained transaction
         with Session(engine) as session:
@@ -517,8 +540,14 @@ def assign_to_existing_persons(
     If L2 <= mapped_threshold, assign face.person_id; else keep for clustering.
     """
     unassigned: list[int] = []
+    # Use stricter config for existing person assignment if available
     try:
-        cos_thr = float(threshold)
+        strict_cos_thr = getattr(
+            settings.face_recognition,
+            "existing_person_cosine_threshold",
+            threshold,
+        )
+        cos_thr = float(strict_cos_thr)
         l2_thr = float(np.sqrt(max(0.0, 2.0 * (1.0 - cos_thr))))
     except Exception:
         l2_thr = 0.8  # safe-ish fallback for normalized vectors (cos~0.68)
@@ -539,34 +568,107 @@ def assign_to_existing_persons(
                       FROM person_embeddings
                      WHERE embedding MATCH :vec
                      ORDER BY distance
-                     LIMIT 1
+                     LIMIT 2
                 """
             ).bindparams(vec=vec_param)
-            row = session.exec(sql).first()
+            rows = session.exec(sql).all()
 
-            if row and row[1] <= l2_thr:
+            if rows and rows[0][1] <= l2_thr:
                 # nearest person is good enough
-                person_id = row[0]
-                if not person_id:
-                    sql = text("""DELETE FROM person_embeddings
-                                WHERE person_id=:p_id""").bindparams(
-                        p_id=person_id
-                    )
-                    session.exec(sql)
-                    return
-                face.person_id = person_id
-                session.add(face)
+                person_id = rows[0][0]
 
-                sql = text(
-                    """
-                    UPDATE face_embeddings 
-                        SET person_id = :p_id
-                        WHERE face_id   = :f_id
-                    """
-                ).bindparams(p_id=person_id, f_id=face.id)
+                # Enforce margin between best and second-best matches (cosine space)
+                if len(rows) > 1:
+                    # convert L2->cos: cos = 1 - 0.5 * L2^2 (for normalized vecs)
+                    best_cos = 1.0 - 0.5 * float(rows[0][1]) ** 2
+                    second_cos = 1.0 - 0.5 * float(rows[1][1]) ** 2
+                    min_margin = getattr(
+                        settings.face_recognition,
+                        "existing_person_min_cosine_margin",
+                        0.0,
+                    )
+                    if (best_cos - second_cos) < float(min_margin):
+                        unassigned.append(face_id)
+                        task.processed += 1
+                        if task.processed % 100 == 0:
+                            session.add(task)
+                            safe_commit(session)
+                        continue
+
+                # Guard against NULL/invalid person_id in the index
+                if person_id is None:
+                    logger.warning(
+                        "Found person_embeddings row with NULL person_id; cleaning up."
+                    )
+                    session.exec(
+                        text("DELETE FROM person_embeddings WHERE person_id IS NULL")
+                    )
+                    unassigned.append(face_id)
+                    task.processed += 1
+                    if task.processed % 100 == 0:
+                        session.add(task)
+                        safe_commit(session)
+                    continue
+
                 person = session.get(Person, person_id)
-                person.appearance_count += 1
-                session.exec(sql)
+
+                # Handle dangling reference where the person no longer exists
+                if person is None:
+                    logger.warning(
+                        "Dangling person_id %s in person_embeddings; removing and skipping face %s",
+                        person_id,
+                        face_id,
+                    )
+                    session.exec(
+                        text("DELETE FROM person_embeddings WHERE person_id = :p_id").bindparams(
+                            p_id=person_id
+                        )
+                    )
+                    unassigned.append(face_id)
+                    task.processed += 1
+                    if task.processed % 100 == 0:
+                        session.add(task)
+                        safe_commit(session)
+                    continue
+
+                # Avoid attaching to tiny/immature persons
+                min_apps = getattr(
+                    settings.face_recognition,
+                    "existing_person_min_appearances",
+                    0,
+                )
+                if (person.appearance_count or 0) < int(min_apps):
+                    unassigned.append(face_id)
+                    task.processed += 1
+                    if task.processed % 100 == 0:
+                        session.add(task)
+                        safe_commit(session)
+                    continue
+
+                # Update face if it still exists
+                if face is not None:
+                    face.person_id = person_id
+                    session.add(face)
+
+                    # Keep face_embeddings in sync
+                    session.exec(
+                        text(
+                            """
+                            UPDATE face_embeddings
+                               SET person_id = :p_id
+                             WHERE face_id   = :f_id
+                            """
+                        ).bindparams(p_id=person_id, f_id=face_id)
+                    )
+
+                    # Increment appearance count safely
+                    person.appearance_count = (person.appearance_count or 0) + 1
+                    session.add(person)
+                else:
+                    logger.warning(
+                        "Face %s not found during assignment; skipping update.",
+                        face_id,
+                    )
             else:
                 unassigned.append(face_id)
 

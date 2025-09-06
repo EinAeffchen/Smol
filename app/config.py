@@ -248,18 +248,32 @@ class AISettings(BaseModel):
     min_similarity_dist: float = 1.2
     # reduce if ram is an issue, the higher the more accurate the clustering.
     cluster_batch_size: int = 10000
+    # HDBSCAN tuning to reduce over-merged clusters (e.g., side profiles)
+    hdbscan_min_cluster_size: int = 6
+    hdbscan_min_samples: int = 10
+    hdbscan_cluster_selection_method: str = "leaf"  # "leaf" for finer clusters
+    hdbscan_cluster_selection_epsilon: float = 0.10
 
 
 class FaceRecognitionSettings(BaseModel):
     # minimum confidence needed to extract a face
     face_recognition_min_confidence: float = 0.5
     # minimum threshold for a face needed to be matched to a person
-    face_match_cosine_threshold: float = 0.40
+    face_match_cosine_threshold: float = 0.70
+    # stricter threshold for assigning new faces to existing persons (vs general usage)
+    existing_person_cosine_threshold: float = 0.80
+    # requires a margin between best and second-best match (cosine space)
+    existing_person_min_cosine_margin: float = 0.05
+    # avoid attaching to very small/immature persons (helps prevent noise)
+    existing_person_min_appearances: int = 3
     # minimum size of a face in pixels to be detected. Base size for detection
     # is the original image, not a thumbnail!
     face_recognition_min_face_pixels: int = 1600
     # number of faces needed to automatically create a person
     person_min_face_count: int = 2
+    # enforce intra-cluster compactness when forming a new person
+    # maximum allowed L2 radius around centroid (normalized vectors)
+    person_cluster_max_l2_radius: float = 0.65
 
 
 class DuplicateSettings(BaseModel):
