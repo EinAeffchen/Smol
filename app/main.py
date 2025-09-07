@@ -232,7 +232,7 @@ async def spa_catch_all(full_path: str):
 def run_server():
     """Runs the Uvicorn server."""
     global server
-    config = uvicorn.Config(app, host="127.0.0.1", port=8000)
+    config = uvicorn.Config(app, host="127.0.0.1", port=8123)
     server = uvicorn.Server(config)
     server.run()
 
@@ -260,7 +260,7 @@ def run_migrations():
 
 def start_server():
     """Starts the Uvicorn server in a daemon thread."""
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8123)
 
 
 if __name__ == "__main__":
@@ -296,7 +296,7 @@ if __name__ == "__main__":
     # Create the pywebview window
     window = webview.create_window(
         "Smol",
-        "http://127.0.0.1:8000",  # Point to the URL
+        "http://127.0.0.1:8123",  # Point to the URL
         width=1280,
         height=720,
     )

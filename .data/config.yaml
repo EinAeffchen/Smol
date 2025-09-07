@@ -1,10 +1,10 @@
 general:
-  port: 8000
+  port: 8123
   read_only: true
   enable_people: true
   is_docker: true
   is_binary: false
-  domain: http://localhost:8000
+  domain: http://localhost:
   thumb_dir_folder_size: 1000
   data_dir: /app/data
   database_dir: /app/data/database

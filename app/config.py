@@ -6,7 +6,7 @@ from typing import TypeVar
 
 import open_clip
 import yaml
-from pydantic import BaseModel, Field, PlainSerializer
+from pydantic import BaseModel, Field, PlainSerializer, computed_field
 from typing_extensions import Annotated
 
 from app.logger import logger
@@ -15,18 +15,86 @@ E = TypeVar("E", bound=Enum)
 IS_DOCKER = os.getenv("IS_DOCKER", False)
 
 
-def get_user_data_path() -> Path:
-    """Gets the path to the config file in the user's app data directory."""
-    if IS_DOCKER:
-        return Path("/app/data")
-    app_data_dir = Path(
+# ----- Bootstrap/profile management -----
+def get_os_app_config_dir() -> Path:
+    """Returns the OS-specific config directory for Smol.
+
+    This is the stable location for bootstrap.yaml that remembers
+    which profile (data directory) is active.
+    """
+    base = Path(
         os.getenv("APPDATA")
         or os.getenv("XDG_CONFIG_HOME")
         or Path.home() / ".config"
     )
-    app_config_dir = app_data_dir / "Smol"  # Use your actual app name
-    app_config_dir.mkdir(parents=True, exist_ok=True)
-    return app_config_dir
+    d = base / "Smol"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def get_bootstrap_file() -> Path:
+    return get_os_app_config_dir() / "bootstrap.yaml"
+
+
+def read_bootstrap() -> dict:
+    p = get_bootstrap_file()
+    if not p.exists():
+        return {}
+    try:
+        with open(p, "r") as f:
+            data = yaml.safe_load(f) or {}
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def write_bootstrap(data: dict) -> None:
+    p = get_bootstrap_file()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with open(p, "w") as f:
+        yaml.safe_dump(data, f, sort_keys=False, indent=2)
+
+
+def _default_local_profile_dir() -> Path:
+    """Legacy default profile path used before profiles existed.
+
+    We continue to use the same path for backward compatibility so
+    existing users keep working seamlessly.
+    """
+    return get_os_app_config_dir()
+
+
+def get_user_data_path() -> Path:
+    """Resolve the active profile (data directory).
+
+    Priority:
+    - Docker: fixed to /app/data
+    - Desktop/binary: read bootstrap.yaml for active_profile; if not present,
+      bootstrap it pointing to the legacy default path.
+    """
+    if IS_DOCKER:
+        p = Path("/app/data")
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    bootstrap = read_bootstrap()
+    active = bootstrap.get("active_profile")
+    if active:
+        p = Path(active)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+
+    # Bootstrap missing: create initial profile using legacy location
+    default_profile = _default_local_profile_dir()
+    default_profile.mkdir(parents=True, exist_ok=True)
+    bootstrap = {
+        "active_profile": str(default_profile),
+        "profiles": [
+            {"name": "Default", "path": str(default_profile)},
+        ],
+    }
+    write_bootstrap(bootstrap)
+    return default_profile
 
 
 def get_static_assets_dir() -> Path:
@@ -137,7 +205,7 @@ class ClipModel(Enum):
 
 
 class GeneralSettings(BaseModel):
-    port: int = 8000
+    port: int = 8123
     # Run system in read_only mode or not
     read_only: bool = False
     # Enable face recognition and other person related features
@@ -150,21 +218,47 @@ class GeneralSettings(BaseModel):
     # maximum number of thumbnails per folder, adjust according to your systems inodes
     thumb_dir_folder_size: int = 1000
 
-    data_dir: Path = get_user_data_path()
-    database_dir: Path = data_dir / "database"
-    smol_dir: Path = data_dir / ".smol"
-    thumb_dir: Path = smol_dir / "thumbnails"
+    data_dir: Path = Field(default_factory=get_user_data_path)
+
+    # Derived paths (computed fields) keep in sync with data_dir
+    @computed_field
+    @property
+    def database_dir(self) -> Path:
+        return self.data_dir / "database"
+
+    @computed_field
+    @property
+    def smol_dir(self) -> Path:
+        return self.data_dir / ".smol"
+
+    @computed_field
+    @property
+    def thumb_dir(self) -> Path:
+        return self.smol_dir / "thumbnails"
+
     # only relevant when run as binary
     media_dirs: list[Path] = []
     static_dir: Path = get_static_assets_dir()
-    models_dir: Path = smol_dir / "models"
-    database_url: str = f"sqlite:///{database_dir}/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL"
+
+    @computed_field
+    @property
+    def models_dir(self) -> Path:
+        return self.smol_dir / "models"
+
+    @computed_field
+    @property
+    def database_url(self) -> str:
+        return (
+            f"sqlite:///{self.database_dir}/smol.db?cache=shared&mode=rwc"
+            f"&_journal_mode=WAL&_synchronous=NORMAL"
+        )
 
     def model_post_init(self, context) -> None:
+        # Ensure required directories exist based on current data_dir
         self.database_dir.mkdir(parents=True, exist_ok=True)
-        self.smol_dir.mkdir(parents=False, exist_ok=True)
-        self.thumb_dir.mkdir(exist_ok=True)
-        self.models_dir.mkdir(exist_ok=True)
+        self.smol_dir.mkdir(parents=True, exist_ok=True)
+        self.thumb_dir.mkdir(parents=True, exist_ok=True)
+        self.models_dir.mkdir(parents=True, exist_ok=True)
         if IS_DOCKER:
             self.media_dirs = [Path("/app/media")]
 

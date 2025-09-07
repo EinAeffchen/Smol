@@ -38,7 +38,7 @@ COPY --from=uv-installer /opt/uv/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/u
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PORT=8000 \
+    PORT=8123 \
     MEDIA_DIR=/app/media \
     DATA_DIR=/app/data
 
@@ -67,5 +67,5 @@ ENV IS_DOCKER=true
 
 # 7. Switch to the non-root user
 USER appuser
-EXPOSE 8000
-CMD ["/bin/bash", "-c", "alembic upgrade head; uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+EXPOSE 8123
+CMD ["/bin/bash", "-c", "alembic upgrade head; uvicorn app.main:app --host 0.0.0.0 --port 8123"]

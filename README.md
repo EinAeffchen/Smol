@@ -81,7 +81,7 @@ This application can be run directly on your machine or as a Docker container.
     ```
 
 4.  **Access the Application:**
-Your media manager will be available in your browser at Your media manager should now be running and be accssible at **[http://localhost:8000](http://localhost:8000)**
+Your media manager will be available in your browser at Your media manager should now be running and be accssible at **[http://localhost:8123](http://localhost:8123)**
 
 
 ---
