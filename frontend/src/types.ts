@@ -236,6 +236,10 @@ export interface AppConfig {
     min_search_dist: number;
     min_similarity_dist: number;
     cluster_batch_size: number;
+    hdbscan_min_cluster_size: number;
+    hdbscan_min_samples: number;
+    hdbscan_cluster_selection_method: string;
+    hdbscan_cluster_selection_epsilon: number;
   };
   tagging: {
     auto_tagging: boolean;
@@ -245,8 +249,12 @@ export interface AppConfig {
   face_recognition: {
     face_recognition_min_confidence: number;
     face_match_cosine_threshold: number;
+    existing_person_cosine_threshold: number;
+    existing_person_min_cosine_margin: number;
+    existing_person_min_appearances: number;
     face_recognition_min_face_pixels: number;
     person_min_face_count: number;
+    person_cluster_max_l2_radius: number;
   };
   duplicates: {
     duplicate_auto_handling: string;

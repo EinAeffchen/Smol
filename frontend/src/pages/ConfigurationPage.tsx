@@ -25,6 +25,7 @@ import {
   Tabs,
   Tab,
   Alert,
+  FormHelperText,
 } from "@mui/material";
 
 const clipModels = [
@@ -255,6 +256,7 @@ export default function ConfigurationPage() {
                   fullWidth
                   margin="normal"
                   type="number"
+                  helperText="HTTP port for the API/UI server (requires restart if running manually)"
                 />
               </Grid>
               <Grid size={{ xs: 12, sm: 6 }}>
@@ -266,6 +268,7 @@ export default function ConfigurationPage() {
                   }
                   fullWidth
                   margin="normal"
+                  helperText="Base URL used for generating links and API calls"
                 />
               </Grid>
             </>
@@ -333,6 +336,9 @@ export default function ConfigurationPage() {
                 }
                 label="Read Only"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Prevents writes: no deletes/moves or DB changes. Safe viewing mode.
+              </Typography>
               <FormControlLabel
                 control={
                   <Switch
@@ -348,7 +354,27 @@ export default function ConfigurationPage() {
                 }
                 label="Enable People"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Enables face detection, recognition, and person clustering features.
+              </Typography>
             </FormGroup>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Thumbs per Folder"
+              value={config.general.thumb_dir_folder_size}
+              onChange={(e) =>
+                handleValueChange(
+                  "general",
+                  "thumb_dir_folder_size",
+                  parseInt(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              helperText="Max thumbnails per subfolder (tune for filesystem inode limits)"
+            />
           </Grid>
         </Grid>
       ),
@@ -371,6 +397,7 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
               type="number"
+              helperText="How often to look for new/changed files when Auto Scan is on"
             />
           </Grid>
           <Grid size={{ xs: 12 }}>
@@ -386,6 +413,9 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Scan"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Periodically scans media directories in the background.
+              </Typography>
               <FormControlLabel
                 control={
                   <Switch
@@ -401,6 +431,9 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Clean on Scan"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Removes database records for files that no longer exist on disk.
+              </Typography>
               <FormControlLabel
                 control={
                   <Switch
@@ -416,6 +449,9 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Cluster on Scan"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Automatically clusters new faces into persons after each scan.
+              </Typography>
               <FormControlLabel
                 control={
                   <Switch
@@ -427,6 +463,9 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Rotate"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Applies EXIF orientation to files and normalizes rotation.
+              </Typography>
             </FormGroup>
           </Grid>
         </Grid>
@@ -451,6 +490,9 @@ export default function ConfigurationPage() {
                   </MenuItem>
                 ))}
               </Select>
+              <FormHelperText>
+                Larger models improve accuracy but require more memory/CPU.
+              </FormHelperText>
             </FormControl>
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
@@ -467,6 +509,7 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
               type="number"
+              helperText="Higher = stricter similarity for search (fewer, more accurate results)"
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
@@ -483,6 +526,103 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
               type="number"
+              helperText="Higher = stronger match needed to count media as similar"
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Cluster Batch Size"
+              value={config.ai.cluster_batch_size}
+              onChange={(e) =>
+                handleValueChange(
+                  "ai",
+                  "cluster_batch_size",
+                  parseInt(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              helperText="Faces processed per clustering batch (memory vs. speed)"
+            />
+          </Grid>
+
+          {/* HDBSCAN advanced clustering parameters */}
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="HDBSCAN Min Cluster Size"
+              value={config.ai.hdbscan_min_cluster_size}
+              onChange={(e) =>
+                handleValueChange(
+                  "ai",
+                  "hdbscan_min_cluster_size",
+                  parseInt(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              helperText="Minimum faces to form a cluster; larger merges clusters (fewer small identities)."
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="HDBSCAN Min Samples"
+              value={config.ai.hdbscan_min_samples}
+              onChange={(e) =>
+                handleValueChange(
+                  "ai",
+                  "hdbscan_min_samples",
+                  parseInt(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              helperText="Higher = more conservative (more points marked as noise/outliers)."
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="hdbscan-cluster-selection-method-label">
+                HDBSCAN Cluster Selection Method
+              </InputLabel>
+              <Select
+                labelId="hdbscan-cluster-selection-method-label"
+                value={config.ai.hdbscan_cluster_selection_method}
+                label="HDBSCAN Cluster Selection Method"
+                onChange={(e) =>
+                  handleValueChange(
+                    "ai",
+                    "hdbscan_cluster_selection_method",
+                    e.target.value as any
+                  )
+                }
+              >
+                <MenuItem value="leaf">leaf (finer, more granular clusters)</MenuItem>
+                <MenuItem value="eom">eom (more stable, fewer splits)</MenuItem>
+              </Select>
+              <FormHelperText>
+                Controls granularity of clusters; "leaf" yields finer segmentation.
+              </FormHelperText>
+            </FormControl>
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="HDBSCAN Cluster Selection Epsilon"
+              value={config.ai.hdbscan_cluster_selection_epsilon}
+              onChange={(e) =>
+                handleValueChange(
+                  "ai",
+                  "hdbscan_cluster_selection_epsilon",
+                  parseFloat(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              inputProps={{ step: 0.01 }}
+              helperText="Extra split sensitivity; larger values produce more, smaller clusters."
             />
           </Grid>
         </Grid>
@@ -525,6 +665,9 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Tagging"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Uses the CLIP model to generate descriptive tags for media.
+              </Typography>
               <FormControlLabel
                 control={
                   <Switch
@@ -540,6 +683,9 @@ export default function ConfigurationPage() {
                 }
                 label="Use Default Tags"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Includes a curated set of common tags alongside your custom list.
+              </Typography>
             </FormGroup>
           </Grid>
         </Grid>
@@ -563,6 +709,7 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
               type="number"
+              helperText="Lower = detect more faces (including low-quality), higher = stricter"
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
@@ -579,6 +726,59 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
               type="number"
+              helperText="Similarity threshold for attaching a face to a known person"
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Existing Person Cosine Threshold"
+              value={config.face_recognition.existing_person_cosine_threshold}
+              onChange={(e) =>
+                handleValueChange(
+                  "face_recognition",
+                  "existing_person_cosine_threshold",
+                  parseFloat(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              helperText="Stricter threshold when attaching to already-established persons"
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Existing Person Min Cosine Margin"
+              value={config.face_recognition.existing_person_min_cosine_margin}
+              onChange={(e) =>
+                handleValueChange(
+                  "face_recognition",
+                  "existing_person_min_cosine_margin",
+                  parseFloat(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              inputProps={{ step: 0.01 }}
+              helperText="Require a gap between best and 2nd-best match to avoid ambiguity"
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Existing Person Min Appearances"
+              value={config.face_recognition.existing_person_min_appearances}
+              onChange={(e) =>
+                handleValueChange(
+                  "face_recognition",
+                  "existing_person_min_appearances",
+                  parseInt(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              helperText="Do not attach to very small/immature persons (reduces noise)"
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
@@ -595,6 +795,7 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
               type="number"
+              helperText="Minimum face area (in pixels) to be considered detectible"
             />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
@@ -611,6 +812,25 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
               type="number"
+              helperText="Faces required to automatically create a new person"
+            />
+          </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Person Cluster Max L2 Radius"
+              value={config.face_recognition.person_cluster_max_l2_radius}
+              onChange={(e) =>
+                handleValueChange(
+                  "face_recognition",
+                  "person_cluster_max_l2_radius",
+                  parseFloat(e.target.value)
+                )
+              }
+              fullWidth
+              margin="normal"
+              type="number"
+              inputProps={{ step: 0.01 }}
+              helperText="Max allowed L2 distance around centroid when forming a new person"
             />
           </Grid>
         </Grid>
@@ -621,34 +841,56 @@ export default function ConfigurationPage() {
       content: (
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Auto Handling"
-              value={config.duplicates.duplicate_auto_handling}
-              onChange={(e) =>
-                handleValueChange(
-                  "duplicates",
-                  "duplicate_auto_handling",
-                  e.target.value
-                )
-              }
-              fullWidth
-              margin="normal"
-            />
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="dup-auto-handling-label">Auto Handling</InputLabel>
+              <Select
+                labelId="dup-auto-handling-label"
+                value={config.duplicates.duplicate_auto_handling}
+                label="Auto Handling"
+                onChange={(e) =>
+                  handleValueChange(
+                    "duplicates",
+                    "duplicate_auto_handling",
+                    e.target.value as any
+                  )
+                }
+              >
+                <MenuItem value="keep">keep (do nothing automatically)</MenuItem>
+                <MenuItem value="remove">remove (resolve without deleting files)</MenuItem>
+                <MenuItem value="blacklist">blacklist duplicates</MenuItem>
+                <MenuItem value="delete">delete duplicates</MenuItem>
+              </Select>
+              <FormHelperText>
+                Automatic action when duplicates are found. "keep" is the safest default.
+              </FormHelperText>
+            </FormControl>
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Auto Keep Rule"
-              value={config.duplicates.duplicate_auto_keep_rule}
-              onChange={(e) =>
-                handleValueChange(
-                  "duplicates",
-                  "duplicate_auto_keep_rule",
-                  e.target.value
-                )
-              }
-              fullWidth
-              margin="normal"
-            />
+            <FormControl fullWidth margin="normal">
+              <InputLabel id="dup-keep-rule-label">Auto Keep Rule</InputLabel>
+              <Select
+                labelId="dup-keep-rule-label"
+                value={config.duplicates.duplicate_auto_keep_rule}
+                label="Auto Keep Rule"
+                onChange={(e) =>
+                  handleValueChange(
+                    "duplicates",
+                    "duplicate_auto_keep_rule",
+                    e.target.value as any
+                  )
+                }
+              >
+                <MenuItem value="biggest">biggest file size</MenuItem>
+                <MenuItem value="smallest">smallest file size</MenuItem>
+                <MenuItem value="highest_res">highest resolution</MenuItem>
+                <MenuItem value="lowest_res">lowest resolution</MenuItem>
+                <MenuItem value="oldest">oldest file date</MenuItem>
+                <MenuItem value="newest">newest file date</MenuItem>
+              </Select>
+              <FormHelperText>
+                Which file to keep when auto-handling duplicates is enabled.
+              </FormHelperText>
+            </FormControl>
           </Grid>
         </Grid>
       ),
@@ -671,6 +913,7 @@ export default function ConfigurationPage() {
               fullWidth
               margin="normal"
               type="number"
+              helperText="Fallback frame sampling count when scene detection fails"
             />
           </Grid>
           <Grid size={{ xs: 12 }}>
@@ -690,6 +933,9 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Scene Detection"
               />
+              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+                Detects scene changes and uses those frames for thumbnails and search.
+              </Typography>
             </FormGroup>
           </Grid>
         </Grid>
@@ -714,6 +960,9 @@ export default function ConfigurationPage() {
             }
             label="EXIF Processor"
           />
+          <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+            Extracts date, camera, GPS and other metadata for search & maps.
+          </Typography>
           <FormControlLabel
             control={
               <Switch
@@ -729,6 +978,9 @@ export default function ConfigurationPage() {
             }
             label="Face Processor"
           />
+          <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+            Detects faces in images and prepares them for recognition.
+          </Typography>
           <FormControlLabel
             control={
               <Switch
@@ -744,6 +996,9 @@ export default function ConfigurationPage() {
             }
             label="Image Embedding Processor"
           />
+          <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+            Generates CLIP embeddings for search, similarity, and related content.
+          </Typography>
         </FormGroup>
       ),
     },
