@@ -1,9 +1,10 @@
-from sqlmodel import SQLModel, Field, Relationship
+import uuid
+from datetime import date, datetime
+from typing import Optional
+
 from sqlalchemy import Column
 from sqlalchemy.types import JSON
-from datetime import datetime, date
-import uuid
-from typing import Optional
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class TimelineEvent(SQLModel, table=True):
@@ -100,9 +101,6 @@ class Media(SQLModel, table=True):
     extracted_scenes: bool = Field(default=False)
 
     is_favorite: bool = Field(default=False)
-    embedding: list[float] | None = Field(
-        sa_column=Column(JSON, nullable=True, index=True)
-    )
     phash: str | None = Field(index=True)
     faces: list["Face"] = Relationship(back_populates="media")
     scenes: list["Scene"] = Relationship(back_populates="media")

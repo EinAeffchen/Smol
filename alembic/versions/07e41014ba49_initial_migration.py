@@ -83,7 +83,6 @@ def upgrade() -> None:
         sa.Column("ran_auto_tagging", sa.Boolean(), nullable=False),
         sa.Column("extracted_scenes", sa.Boolean(), nullable=False),
         sa.Column("is_favorite", sa.Boolean(), nullable=False),
-        sa.Column("embedding", sa.JSON(), nullable=True),
         sa.Column("phash", sqlmodel.sql.sqltypes.AutoString(), nullable=True),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("path"),
@@ -96,9 +95,6 @@ def upgrade() -> None:
     )
     op.create_index(
         op.f("ix_media_created_at"), "media", ["created_at"], unique=False
-    )
-    op.create_index(
-        op.f("ix_media_embedding"), "media", ["embedding"], unique=False
     )
     op.create_index(
         op.f("ix_media_embeddings_created"),

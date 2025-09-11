@@ -1,36 +1,36 @@
 import json
-import os
 from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import and_, or_, text, func, tuple_
-from sqlalchemy.orm import selectinload, aliased
+from sqlalchemy import and_, or_, text, tuple_
+from sqlalchemy.orm import aliased, selectinload
 from sqlmodel import Session, select
+
 from app.config import (
     settings,
 )
 from app.database import get_session
 from app.logger import logger
-from app.schemas.face import FaceRead
 from app.models import ExifData, Face, Media, Person, Scene, Tag
+from app.schemas.face import FaceRead
 from app.schemas.media import (
     CursorPage,
     GeoUpdate,
     MediaDetail,
     MediaLocation,
+    MediaNeighbors,
     MediaPreview,
     MediaRead,
     SceneRead,
-    MediaNeighbors,
 )
 from app.schemas.person import PersonRead
 from app.utils import (
+    delete_file,
+    delete_record,
     update_exif_gps,
 )
-from app.utils import delete_record
-from app.utils import delete_file
 
 router = APIRouter()
 
@@ -452,31 +452,43 @@ def read_exif(media_id: int, session=Depends(get_session)):
 
 @router.get("/{media_id}/get-similar", response_model=list[MediaPreview])
 def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
-    media = session.get(Media, media_id)
-    if not media or not media.embedding:
-        raise HTTPException(404, "Media not found")
-    max_dist = 2 - settings.ai.min_similarity_dist
-    sql = text(
-        """
-      SELECT media_id, distance
-        FROM media_embeddings
-       WHERE embedding MATCH :vec
-            AND k=:k
-            AND distance < :maxd
-       ORDER BY distance
-    """
-    ).bindparams(vec=json.dumps(media.embedding), maxd=max_dist, k=k + 1)
-    rows = session.exec(sql).all()
-    media_ids = [r[0] for r in rows if r[0] != media_id]
+    # Ensure an anchor embedding exists for this media
+    has_vec = session.exec(
+        text("SELECT 1 FROM media_embeddings WHERE media_id = :id").bindparams(
+            id=media_id
+        )
+    ).first()
+    if not has_vec:
+        raise HTTPException(404, "No embedding found for this media")
 
+    max_dist = 2.0 - settings.ai.min_similarity_dist
+    # Fully in-DB nearest-neighbor query using the anchor vector via subquery
+    rows = session.exec(
+        text(
+            """
+            SELECT media_id, distance
+              FROM media_embeddings
+             WHERE embedding MATCH (
+                       SELECT embedding
+                         FROM media_embeddings
+                        WHERE media_id = :id
+                   )
+               AND k = :k
+               AND distance < :maxd
+             ORDER BY distance
+            """
+        ).bindparams(id=media_id, k=k + 1, maxd=max_dist)
+    ).all()
+
+    # Exclude the anchor and preserve order; cap to k
+    media_ids = [row[0] for row in rows if row[0] != media_id][:k]
     if not media_ids:
         return []
 
-    stmt = select(Media).where(Media.id.in_(media_ids))
-    media_objs = session.exec(stmt).all()
-
+    media_objs = session.exec(select(Media).where(Media.id.in_(media_ids))).all()
     id_to_obj = {m.id: m for m in media_objs}
-    return [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
+    ordered = [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
+    return [MediaPreview.model_validate(m) for m in ordered]
 
 
 @router.get("/{media_id}/scenes", response_model=list[SceneRead])
