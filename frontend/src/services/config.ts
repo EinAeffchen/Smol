@@ -1,5 +1,5 @@
 import { API } from "../config";
-import { AppConfig } from "../types";
+import { AppConfig, ProfileListResponse, ProfileHealth } from "../types";
 
 export const getConfig = async (): Promise<AppConfig> => {
   const response = await fetch(`${API}/api/config/`);
@@ -67,4 +67,84 @@ export const pickDirectory = async (): Promise<string | null> => {
   }
   const data = await response.json();
   return (data?.path as string) || null;
+};
+
+export const listProfiles = async (): Promise<ProfileListResponse> => {
+  const res = await fetch(`${API}/api/config/profiles`);
+  if (!res.ok) {
+    throw new Error("Failed to list profiles");
+  }
+  return res.json();
+};
+
+export const switchProfile = async (path: string): Promise<void> => {
+  const res = await fetch(`${API}/api/config/profiles/switch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to switch profile");
+  }
+};
+
+export const createProfile = async (
+  path: string,
+  name: string
+): Promise<void> => {
+  const res = await fetch(`${API}/api/config/profiles/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, name }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to create profile");
+  }
+};
+
+export const removeProfile = async (path: string): Promise<void> => {
+  const res = await fetch(`${API}/api/config/profiles/remove`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to remove profile");
+  }
+};
+
+export const moveData = async (destPath: string): Promise<void> => {
+  const res = await fetch(`${API}/api/config/move-data`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ dest_path: destPath }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to move data directory");
+  }
+};
+
+export const getProfileHealth = async (): Promise<ProfileHealth> => {
+  const res = await fetch(`${API}/api/config/profile-health`);
+  if (!res.ok) throw new Error("Failed to fetch profile health");
+  return res.json();
+};
+
+export const addExistingProfile = async (
+  path: string,
+  name?: string
+): Promise<void> => {
+  const res = await fetch(`${API}/api/config/profiles/add`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path, name }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.detail || "Failed to add profile");
+  }
 };

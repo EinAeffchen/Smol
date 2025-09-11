@@ -19,7 +19,8 @@ from sqlmodel import Session, select
 from tqdm import tqdm
 
 from app.config import settings
-from app.database import engine, safe_commit
+import app.database as db
+from app.database import safe_commit
 from app.logger import logger
 from app.models import (
     DuplicateMedia,
@@ -420,7 +421,7 @@ def split_video(
 
 
 def refresh_similarities_for_person(person_id: int) -> None:
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         target = get_person_embedding(session, person_id)
         if target is None:
             return

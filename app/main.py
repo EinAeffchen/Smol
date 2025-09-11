@@ -35,15 +35,13 @@ from app.api import (
 from app.api.processors import router as proc_router
 from app.api.tasks import _run_cleanup_and_chain
 from app.config import settings
-from app.database import engine, ensure_vec_tables
-from app.logger import logger
+import app.database as db
+from app.database import ensure_vec_tables
+from app.logger import logger, configure_file_logging
 from app.models import ProcessingTask
 from app.processor_registry import load_processors
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+# Configure uvicorn loggers' verbosity
 logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
@@ -52,7 +50,7 @@ scheduler = AsyncIOScheduler()
 
 def scheduled_scan_job():
     logger.info("Running scheduled cleanup and process chain...")
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         # Check if any part of the chain is already running
         running_task = session.exec(
             select(ProcessingTask).where(
@@ -84,6 +82,48 @@ def scheduled_scan_job():
         _run_cleanup_and_chain(task.id)
 
 
+def _cleanup_tasks_on_startup():
+    """Cancel 'running' tasks and delete 'pending' tasks left from a previous run."""
+    try:
+        with Session(db.engine) as session:
+            tasks = session.exec(select(ProcessingTask)).all()
+            changed = False
+            for t in tasks:
+                if t.status == "running":
+                    t.status = "cancelled"
+                    t.finished_at = datetime.now()
+                    session.add(t)
+                    changed = True
+                elif t.status == "pending":
+                    session.delete(t)
+                    changed = True
+            if changed:
+                session.commit()
+    except Exception as e:
+        logger.warning("Task cleanup on startup failed: %s", e)
+
+
+def _cleanup_tasks_on_shutdown():
+    """Delete 'pending' tasks and cancel any 'running' tasks on shutdown."""
+    try:
+        with Session(db.engine) as session:
+            tasks = session.exec(select(ProcessingTask)).all()
+            changed = False
+            for t in tasks:
+                if t.status == "running":
+                    t.status = "cancelled"
+                    t.finished_at = datetime.now()
+                    session.add(t)
+                    changed = True
+                elif t.status == "pending":
+                    session.delete(t)
+                    changed = True
+            if changed:
+                session.commit()
+    except Exception as e:
+        logger.warning("Task cleanup on shutdown failed: %s", e)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Load the ML model
@@ -93,6 +133,9 @@ async def lifespan(app: FastAPI):
         ensure_vec_tables()
     except Exception as e:
         logger.warning("Could not ensure vec0 tables: %s", e)
+
+    # Clean up stale tasks from previous runs to avoid blocking actions
+    _cleanup_tasks_on_startup()
     if settings.scan.auto_scan:
         scheduler.add_job(
             scheduled_scan_job,
@@ -106,9 +149,18 @@ async def lifespan(app: FastAPI):
             f"Scheduler started. Scan job scheduled every {settings.scan.scan_interval_minutes} minutes."
         )
     yield
+    # On shutdown, clean up tasks so next run starts cleanly
+    _cleanup_tasks_on_shutdown()
 
 
 logger.debug(settings)
+
+# Enable persistent file logging inside the active data_dir
+try:
+    configure_file_logging(settings.general.data_dir / "logs")
+except Exception:
+    # Non-fatal if file logging cannot be initialized
+    pass
 
 app = FastAPI(lifespan=lifespan, redoc_url=None)
 origins = [os.environ.get("DOMAIN", ""), "http://localhost:5173"]
@@ -145,11 +197,29 @@ app.include_router(search, prefix="/api/search", tags=["search"])
 app.include_router(duplicates, prefix="/api/duplicates", tags=["duplicates"])
 app.include_router(config, prefix="/api/config", tags=["config"])
 
-app.mount(
-    "/thumbnails",
-    StaticFiles(directory=str(settings.general.thumb_dir), html=True),
-    name="thumbnails",
-)
+@app.get("/thumbnails/{file_path:path}", include_in_schema=False)
+async def serve_thumbnail(file_path: str):
+    base = settings.general.thumb_dir
+    requested = Path(file_path)
+    # Prevent path traversal by resolving and ensuring base is a parent
+    try:
+        full_path = (base / requested).resolve()
+        if not str(full_path).startswith(str(base.resolve())):
+            raise HTTPException(status_code=404, detail="File not found")
+    except Exception:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    if not full_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    # Guess MIME
+    mime_type, _ = mimetypes.guess_type(full_path)
+    if mime_type is None:
+        mime_type = "application/octet-stream"
+
+    resp = FileResponse(full_path, media_type=mime_type)
+    resp.headers["Accept-Ranges"] = "bytes"
+    return resp
 
 
 @app.get("/originals/{file_path:path}", include_in_schema=False)

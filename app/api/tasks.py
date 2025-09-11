@@ -16,10 +16,11 @@ from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
 
+import app.database as db
 from app.api.media import delete_record
 from app.concurrency import heavy_writer
 from app.config import settings
-from app.database import engine, get_session, safe_commit
+from app.database import get_session, safe_commit
 from app.logger import logger
 from app.models import (
     DuplicateMedia,
@@ -74,9 +75,11 @@ def create_and_run_task(
                 ProcessingTask.status == "running",
             )
         ).first()
-    except OperationalError:
-        logger.warning(f"Database currently busy, skipping {task_type}.")
-        return
+    except OperationalError as e:
+        logger.warning(f"Database error while checking tasks: {e}")
+        raise HTTPException(
+            status_code=503, detail="Database is busy; try again shortly."
+        )
 
     if existing_task:
         logger.info(f"{task_type} is already running. Skipping new task.")
@@ -152,7 +155,7 @@ def _run_cleanup_and_chain(task_id: str):
         _clean_missing_files(task_id)
 
     logger.info("Cleanup task finished, starting scan task.")
-    with Session(engine) as new_session:
+    with Session(db.engine) as new_session:
         next_task = ProcessingTask(task_type="scan", total=0, processed=0)
         new_session.add(next_task)
         new_session.commit()
@@ -166,7 +169,7 @@ def _run_scan_and_chain(task_id: str):
     _run_scan(task_id)
 
     logger.info("Scan task finished, starting media processing task.")
-    with Session(engine) as new_session:
+    with Session(db.engine) as new_session:
         next_task = ProcessingTask(
             task_type="process_media", total=0, processed=0
         )
@@ -184,15 +187,15 @@ def _run_media_processing_and_chain(task_id: str):
     logger.info("Media processing finished.")
     if settings.general.enable_people and settings.scan.auto_cluster_on_scan:
         logger.info("Starting Person Clustering...")
-        with Session(engine) as new_session:
-            next_task = ProcessingTask(
-                task_type="cluster_persons", total=0, processed=0
-            )
-            new_session.add(next_task)
-            new_session.commit()
-            new_session.refresh(next_task)
+    with Session(db.engine) as new_session:
+        next_task = ProcessingTask(
+            task_type="cluster_persons", total=0, processed=0
+        )
+        new_session.add(next_task)
+        new_session.commit()
+        new_session.refresh(next_task)
 
-            run_person_clustering(next_task.id)  # Call the final worker
+        run_person_clustering(next_task.id)  # Call the final worker
     logger.info("Task chain completed")
 
 
@@ -341,7 +344,7 @@ def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
 
 def _run_media_processing(task_id: str):
     BATCH_SIZE = 100
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id)
         if not task:
             logger.error("Task with id %s not found!", task_id)
@@ -576,7 +579,7 @@ def _assign_faces_to_clusters(
             continue
 
         # Each cluster gets its own self-contained transaction
-        with Session(engine) as session:
+        with Session(db.engine) as session:
             task = session.get(ProcessingTask, task_id)
             if task.status == "cancelled":
                 break
@@ -647,7 +650,7 @@ def assign_to_existing_persons(
     except Exception:
         l2_thr = 0.8  # safe-ish fallback for normalized vectors (cos~0.68)
 
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         for face_id, emb in tqdm(zip(face_ids, embs), total=len(face_ids)):
             face = session.get(Face, face_id)
             task = session.get(ProcessingTask, task_id)
@@ -800,7 +803,7 @@ def _get_face_total(session: Session):
 
 
 def run_person_clustering(task_id: str):
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id)
         if not task:
             logger.error("Task %s not found.", task_id)
@@ -813,7 +816,7 @@ def run_person_clustering(task_id: str):
         safe_commit(session)
 
     def is_cancelled() -> bool:
-        with Session(engine) as s:
+        with Session(db.engine) as s:
             t = s.get(ProcessingTask, task_id)
             return bool(t and t.status == "cancelled")
 
@@ -821,7 +824,7 @@ def run_person_clustering(task_id: str):
         last_id = 0
         while True:
             logger.info("--- Starting new Clustering Batch ---")
-            with Session(engine) as session:
+            with Session(db.engine) as session:
                 logger.debug("Continuing from id: %s", last_id)
                 batch_face_ids, batch_embeddings = _fetch_faces_and_embeddings(
                     session,
@@ -841,7 +844,7 @@ def run_person_clustering(task_id: str):
 
             # Fetch embeddings once
             person_exists = False
-            with Session(engine) as session:  # Quick, read-only check
+            with Session(db.engine) as session:  # Quick, read-only check
                 person_exists = (
                     session.exec(select(Person).limit(1)).first() is not None
                 )
@@ -881,7 +884,7 @@ def run_person_clustering(task_id: str):
             if len(batch_face_ids) < settings.ai.cluster_batch_size:
                 break
 
-        with Session(engine) as session:
+        with Session(db.engine) as session:
             task = session.get(ProcessingTask, task_id)
             logger.info("FINISHED CLUSTERING!")
             complete_task(session, task)
@@ -955,6 +958,12 @@ def start_scan(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
+    # Quick validation to avoid creating no-op tasks
+    if not settings.general.media_dirs:
+        raise HTTPException(
+            status_code=400, detail="No media directories configured."
+        )
+    logger.debug("Starting scan task...")
     task = create_and_run_task(
         session=session,
         background_tasks=background_tasks,
@@ -989,14 +998,14 @@ def start_duplicate_detection(
 
 
 def _run_duplicate_detection(task_id: str, threshold: int):
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id)
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
         session.commit()
 
     def is_cancelled() -> bool:
-        with Session(engine) as s:
+        with Session(db.engine) as s:
             t = s.get(ProcessingTask, task_id)
             return bool(t and t.status == "cancelled")
 
@@ -1006,7 +1015,7 @@ def _run_duplicate_detection(task_id: str, threshold: int):
         processor.process()
 
     # Clean up any empty duplicate groups that were created
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         empty_groups = session.exec(
             text("""
                 SELECT group_id FROM (
@@ -1074,7 +1083,7 @@ def reset_clustering(session: Session = Depends(get_session)):
 
 def _clean_missing_files(task_id: str):
     """Background task to scan for and delete records of missing files"""
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id)
         if not task:
             logger.error("Task %s not found", task_id)
@@ -1123,7 +1132,7 @@ def _clean_missing_files(task_id: str):
 
 
 def _run_scan(task_id: str):
-    with Session(engine) as sess:
+    with Session(db.engine) as sess:
         task = sess.get(ProcessingTask, task_id)
 
         if not task:
@@ -1135,6 +1144,7 @@ def _run_scan(task_id: str):
         safe_commit(sess)
 
         known_files = set(sess.exec(select(Media.path)).all())
+        logger.debug(list(known_files)[:5])
     media_paths = []
     for media_dir in settings.general.media_dirs:
         for root, dirs, files in tqdm(
@@ -1152,13 +1162,14 @@ def _run_scan(task_id: str):
                     + settings.scan.IMAGE_SUFFIXES
                 ):
                     continue
+                logger.debug(str(full))
                 if str(full) not in known_files:
                     media_paths.append(full)
                     known_files.add(str(full))
 
     logger.info("Found %s new files", len(media_paths))
 
-    with Session(engine) as sess:
+    with Session(db.engine) as sess:
         task = sess.merge(task)
         task.total = len(media_paths)
         logger.info("Set total to %s", task.total)
@@ -1174,7 +1185,7 @@ def _run_scan(task_id: str):
     medias_to_add: list[Media] = list()
     for i, filepath in tqdm(enumerate(media_paths, 1)):
         if i % 100 == 0:
-            with Session(engine) as sess:
+            with Session(db.engine) as sess:
                 task = sess.get(ProcessingTask, task_id)
                 task.processed += 100
                 task = sess.merge(task)
@@ -1186,14 +1197,13 @@ def _run_scan(task_id: str):
         if media_obj:
             medias_to_add.append(media_obj)
 
-    # TODO add option to move file directory from APPCONFIG to anywhere
     def is_cancelled() -> bool:
-        with Session(engine) as s:
+        with Session(db.engine) as s:
             t = s.get(ProcessingTask, task_id)
             return bool(t and t.status == "cancelled")
 
     with heavy_writer(name="scan", cancelled=is_cancelled):
-        with Session(engine) as sess:
+        with Session(db.engine) as sess:
             task = sess.merge(task)
             sess.add_all(medias_to_add)
             sess.flush(medias_to_add)
@@ -1217,7 +1227,7 @@ def _run_scan(task_id: str):
 def generate_hashes(task_id: int | None = None):
     """A task to find all media without a pHash and generate one."""
     BATCH_SIZE = 10
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id) if task_id else None
         logger.info("Got task!")
         # If there's a task, get the initial total count

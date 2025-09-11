@@ -11,6 +11,8 @@ import {
   ListItemIcon,
   ListItemText,
   Divider,
+  Snackbar,
+  Alert,
 } from "@mui/material";
 import { Task, TaskType } from "../types";
 import { getActiveTasks, startTask as startTaskService, cancelTask as cancelTaskService } from "../services/taskActions";
@@ -31,6 +33,7 @@ const TASK_LABELS: TaskLabels = {
 
 export default function TaskManager() {
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [snack, setSnack] = useState<{ open: boolean; msg: string; sev: "success" | "error" }>({ open: false, msg: "", sev: "success" });
 
   const fetchTasks = async () => {
     try {
@@ -45,8 +48,11 @@ export default function TaskManager() {
     try {
       await startTaskService(type);
       await fetchTasks();
-    } catch (err) {
+      setSnack({ open: true, msg: `${TASK_LABELS[type]} started`, sev: "success" });
+    } catch (err: any) {
       console.error("Error starting task", type, err);
+      const msg = err?.message || "Failed to start task";
+      setSnack({ open: true, msg, sev: "error" });
     }
   };
 
@@ -66,10 +72,20 @@ export default function TaskManager() {
   }, []);
 
   const isTaskRunning = (type: TaskType) =>
-    tasks.some((t) => t.task_type === type && t.status === "running");
+    tasks.some((t) => t.task_type === type && (t.status === "running" || t.status === "pending"));
 
   return (
     <Box>
+      <Snackbar
+        open={snack.open}
+        autoHideDuration={4000}
+        onClose={() => setSnack({ ...snack, open: false })}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity={snack.sev} onClose={() => setSnack({ ...snack, open: false })}>
+          {snack.msg}
+        </Alert>
+      </Snackbar>
       {/* Active Tasks Section */}
       {tasks.length > 0 && (
         <Stack spacing={2} mb={2}>

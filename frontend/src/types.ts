@@ -270,3 +270,21 @@ export interface AppConfig {
     image_embedding_processor_active: boolean;
   };
 }
+
+// Profiles
+export interface ProfileEntry {
+  name: string;
+  path: string;
+}
+
+export interface ProfileListResponse {
+  active_path: string;
+  profiles: ProfileEntry[];
+}
+
+export interface ProfileHealth {
+  active_path: string;
+  active_exists: boolean;
+  has_db: boolean;
+  has_thumbs: boolean;
+}

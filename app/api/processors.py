@@ -1,7 +1,8 @@
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlmodel import Session
 from app.models import Media, ProcessingTask
-from app.database import engine, get_session
+import app.database as db
+from app.database import get_session
 from app.processor_registry import load_processors
 from datetime import datetime, timezone
 from app.config import settings
@@ -66,7 +67,7 @@ def start_conversion(
 
 
 def _run_conversion(task_id: str, media_path: str, media_id: int):
-    with Session(engine) as session:
+    with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id)
         if not task:
             logger.error(f"Task {task_id} not found.")

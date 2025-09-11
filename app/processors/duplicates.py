@@ -1,5 +1,5 @@
 from sqlmodel import Session, select, delete, update
-from app.database import engine
+import app.database as db
 from app.logger import logger
 from app.models import Media, ProcessingTask, DuplicateGroup, DuplicateMedia
 from sqlalchemy import func
@@ -56,7 +56,7 @@ class DuplicateProcessor:
             session.refresh(task)
 
     def process(self):
-        with Session(engine) as session:
+        with Session(db.engine) as session:
             self._update_task_status(session, "running")
             logger.info(
                 f"Starting pHash duplicate detection task {self.task_id}"

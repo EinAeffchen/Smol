@@ -1,11 +1,21 @@
 import React, { useEffect, useState } from "react";
-import { getConfig, saveConfig, reloadConfig, pickDirectory } from "../services/config";
-import { AppConfig } from "../types";
+import {
+  getConfig,
+  saveConfig,
+  reloadConfig,
+  pickDirectory,
+  listProfiles,
+  createProfile as apiCreateProfile,
+  switchProfile as apiSwitchProfile,
+  removeProfile as apiRemoveProfile,
+  getProfileHealth,
+} from "../services/config";
+import { AppConfig, ProfileListResponse } from "../types";
 import { IconButton } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
 import FolderOpenIcon from "@mui/icons-material/FolderOpen";
-
+import { addExistingProfile } from "../services/config";
 import {
   Button,
   Container,
@@ -26,6 +36,7 @@ import {
   Tab,
   Alert,
   FormHelperText,
+  Radio,
 } from "@mui/material";
 
 const clipModels = [
@@ -94,12 +105,45 @@ export default function ConfigurationPage() {
     severity: "success" as "success" | "error",
   });
   const [tabValue, setTabValue] = useState(0);
+  const [profiles, setProfiles] = useState<ProfileListResponse | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [creatingProfile, setCreatingProfile] = useState(false);
+  const [selectedProfilePath, setSelectedProfilePath] = useState<string | null>(
+    null
+  );
+  const [isSwitchingProfile, setIsSwitchingProfile] = useState(false);
+  const [newProfileName, setNewProfileName] = useState("My Library");
+  const [newProfilePath, setNewProfilePath] = useState("");
+  const [profileHealth, setProfileHealth] = useState<
+    import("../types").ProfileHealth | null
+  >(null);
+  const [hasActiveTasks, setHasActiveTasks] = useState(false);
 
   useEffect(() => {
     const fetchConfig = async () => {
       try {
         const data = await getConfig();
         setConfig(data);
+        // Try to load profiles; ignore errors on Docker
+        try {
+          const p = await listProfiles();
+          setProfiles(p);
+          setSelectedProfilePath(p.active_path);
+        } catch (e) {
+          setProfiles(null);
+        }
+        // Fetch profile health to detect moved/missing profiles
+        try {
+          const h = await getProfileHealth();
+          setProfileHealth(h);
+        } catch {}
+        // Check active tasks to gate profile actions
+        try {
+          const tasks = await (
+            await import("../services/taskActions")
+          ).getActiveTasks();
+          setHasActiveTasks(tasks.length > 0);
+        } catch {}
       } catch {
         setError("Failed to load configuration.");
       } finally {
@@ -128,10 +172,35 @@ export default function ConfigurationPage() {
       };
 
       await saveConfig(sanitized);
+
+      // If a different profile is selected, switch to it as part of Save
+      if (
+        profiles &&
+        selectedProfilePath &&
+        selectedProfilePath !== profiles.active_path
+      ) {
+        setIsSwitchingProfile(true);
+        await apiSwitchProfile(selectedProfilePath);
+      }
+
       // Reload backend config and sync frontend runtime flags; also
       // update local state with the authoritative server config.
       const latest = await reloadConfig();
       setConfig(latest);
+      await refreshProfiles();
+
+      // If the profile changed, do a full page reload to ensure all pages pull fresh data
+      if (
+        profiles &&
+        selectedProfilePath &&
+        selectedProfilePath !== profiles.active_path
+      ) {
+        try {
+          window.location.reload();
+        } catch {}
+        return; // Unreachable after reload, but keeps intent clear
+      }
+
       setSnackbar({
         open: true,
         message: "Configuration saved and reloaded successfully!",
@@ -146,6 +215,7 @@ export default function ConfigurationPage() {
       });
     } finally {
       setIsSaving(false);
+      setIsSwitchingProfile(false);
     }
   };
 
@@ -153,11 +223,10 @@ export default function ConfigurationPage() {
     if (!config) return;
     const chosen = await pickDirectory();
     const value = chosen || "";
-    handleValueChange(
-      "general",
-      "media_dirs",
-      [...config.general.media_dirs, value] as any
-    );
+    handleValueChange("general", "media_dirs", [
+      ...config.general.media_dirs,
+      value,
+    ] as any);
   };
 
   const updateMediaDir = (index: number, value: string) => {
@@ -213,6 +282,95 @@ export default function ConfigurationPage() {
     setTabValue(newValue);
   };
 
+  const refreshProfiles = async () => {
+    try {
+      const p = await listProfiles();
+      setProfiles(p);
+      setProfileError(null);
+    } catch (e: any) {
+      setProfileError(e?.message || "Failed to load profiles");
+    }
+  };
+
+  const createProfile = async () => {
+    if (!newProfilePath) return;
+    setCreatingProfile(true);
+    try {
+      await apiCreateProfile(newProfilePath, newProfileName || "Profile");
+      const latest = await reloadConfig();
+      setConfig(latest);
+      const lp = await listProfiles();
+      setProfiles(lp);
+      setSelectedProfilePath(lp.active_path);
+      setSnackbar({
+        open: true,
+        message: "Profile created",
+        severity: "success",
+      });
+      setNewProfilePath("");
+    } catch (e: any) {
+      setSnackbar({
+        open: true,
+        message: e?.message || "Failed to create profile",
+        severity: "error",
+      });
+    } finally {
+      setCreatingProfile(false);
+    }
+  };
+
+  // Switching now happens as part of Save; users select via radio and then Save.
+
+  const removeProfile = async (path: string) => {
+    try {
+      await apiRemoveProfile(path);
+      await refreshProfiles();
+      setSnackbar({
+        open: true,
+        message: "Removed profile",
+        severity: "success",
+      });
+    } catch (e: any) {
+      setSnackbar({
+        open: true,
+        message: e?.message || "Failed to remove profile",
+        severity: "error",
+      });
+    }
+  };
+
+  const pickNewProfilePath = async () => {
+    const p = await pickDirectory();
+    if (p) setNewProfilePath(p);
+  };
+
+  // Relocate current profile if it was moved manually by selecting new path,
+  // then clicking Save (will run switchProfile)
+  const pickRelocatePath = async () => {
+    const p = await pickDirectory();
+    if (p) setSelectedProfilePath(p);
+  };
+  const handleAddExisting = async () => {
+    try {
+      const p = await pickDirectory();
+      if (!p) return;
+      await addExistingProfile(p);
+      await refreshProfiles();
+      setSelectedProfilePath(p);
+      setSnackbar({
+        open: true,
+        message: "Profile added",
+        severity: "success",
+      });
+    } catch (e: any) {
+      setSnackbar({
+        open: true,
+        message: e?.message || "Failed to add profile",
+        severity: "error",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <Box
@@ -235,7 +393,167 @@ export default function ConfigurationPage() {
   }
 
   const isBinary = !!config.general.is_binary;
-  const sections: { label: string; content: React.ReactNode }[] = [
+  let sections: { label: string; content: React.ReactNode }[] = [
+    {
+      label: "Profiles",
+      content: (
+        <Grid container spacing={2}>
+          {profiles && !config.general.is_docker ? (
+            <>
+              <Grid size={{ xs: 12 }}>
+                <Typography variant="h6">Active Profile</Typography>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  {profiles.active_path}
+                </Typography>
+                {profileHealth &&
+                  (!profileHealth.active_exists || !profileHealth.has_db) && (
+                    <Alert severity="warning" sx={{ mt: 1 }}>
+                      The active profile looks missing or empty. If you moved
+                      it, choose the new location and click Save to relink.
+                      <Button
+                        size="small"
+                        sx={{ ml: 2 }}
+                        variant="outlined"
+                        onClick={pickRelocatePath}
+                      >
+                        Choose directory…
+                      </Button>
+                    </Alert>
+                  )}
+              </Grid>
+              {hasActiveTasks && (
+                <Grid size={{ xs: 12 }}>
+                  <Alert severity="warning" sx={{ mt: 2 }}>
+                    Processing is active. Profile actions are disabled until
+                    tasks finish.
+                  </Alert>
+                </Grid>
+              )}
+              <Grid size={{ xs: 12 }}>
+                <Typography variant="h6" sx={{ mt: 2 }}>
+                  All Profiles
+                </Typography>
+                <Box sx={{ mb: 1 }}>
+                  <Button
+                    variant="outlined"
+                    onClick={handleAddExisting}
+                    disabled={hasActiveTasks}
+                  >
+                    Add Existing…
+                  </Button>
+                </Box>
+                {(profiles.profiles ?? []).map((p) => (
+                  <Box
+                    key={p.path}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      mt: 1,
+                    }}
+                  >
+                    <IconButton
+                      color="primary"
+                      onClick={() => setSelectedProfilePath(p.path)}
+                      disabled={hasActiveTasks || isSwitchingProfile}
+                    >
+                      <Radio checked={selectedProfilePath === p.path} />
+                    </IconButton>
+                    <TextField
+                      label="Name"
+                      value={p.name}
+                      fullWidth
+                      InputProps={{ readOnly: true }}
+                    />
+                    <TextField
+                      label="Path"
+                      value={p.path}
+                      fullWidth
+                      InputProps={{ readOnly: true }}
+                    />
+                    <IconButton
+                      aria-label="remove profile"
+                      onClick={() => removeProfile(p.path)}
+                      disabled={
+                        p.path === profiles.active_path ||
+                        hasActiveTasks ||
+                        isSwitchingProfile
+                      }
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </Box>
+                ))}
+                {profiles &&
+                  selectedProfilePath &&
+                  selectedProfilePath !== profiles.active_path && (
+                    <Typography
+                      variant="caption"
+                      sx={{ mt: 1, display: "block", color: "text.secondary" }}
+                    >
+                      Selected profile will become active when you click Save
+                      below.
+                    </Typography>
+                  )}
+              </Grid>
+              <Grid size={{ xs: 12 }}>
+                <Typography variant="h6" sx={{ mt: 2 }}>
+                  Create New Profile
+                </Typography>
+                <Box
+                  sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}
+                >
+                  <TextField
+                    label="Name"
+                    value={newProfileName}
+                    onChange={(e) => setNewProfileName(e.target.value)}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Directory"
+                    value={newProfilePath}
+                    onChange={(e) => setNewProfilePath(e.target.value)}
+                    fullWidth
+                  />
+                  <IconButton
+                    aria-label="browse"
+                    onClick={pickNewProfilePath}
+                    disabled={hasActiveTasks}
+                  >
+                    <FolderOpenIcon />
+                  </IconButton>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={!creatingProfile ? <AddIcon /> : undefined}
+                    onClick={createProfile}
+                    disabled={
+                      !newProfilePath || creatingProfile || hasActiveTasks
+                    }
+                    sx={{ minWidth: 120 }}
+                  >
+                    {creatingProfile ? (
+                      <CircularProgress size={18} color="inherit" />
+                    ) : (
+                      "Create"
+                    )}
+                  </Button>
+                </Box>
+                <FormHelperText>
+                  Destination directory must be empty or non-existent.
+                </FormHelperText>
+              </Grid>
+            </>
+          ) : (
+            <Grid size={{ xs: 12 }}>
+              <Alert severity="info">
+                Profiles are not available in this environment.
+              </Alert>
+            </Grid>
+          )}
+        </Grid>
+      ),
+    },
     {
       label: "General",
       content: (
@@ -336,8 +654,12 @@ export default function ConfigurationPage() {
                 }
                 label="Read Only"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
-                Prevents writes: no deletes/moves or DB changes. Safe viewing mode.
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
+                Prevents writes: no deletes/moves or DB changes. Safe viewing
+                mode.
               </Typography>
               <FormControlLabel
                 control={
@@ -354,8 +676,12 @@ export default function ConfigurationPage() {
                 }
                 label="Enable People"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
-                Enables face detection, recognition, and person clustering features.
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
+                Enables face detection, recognition, and person clustering
+                features.
               </Typography>
             </FormGroup>
           </Grid>
@@ -413,7 +739,10 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Scan"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
                 Periodically scans media directories in the background.
               </Typography>
               <FormControlLabel
@@ -431,7 +760,10 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Clean on Scan"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
                 Removes database records for files that no longer exist on disk.
               </Typography>
               <FormControlLabel
@@ -449,7 +781,10 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Cluster on Scan"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
                 Automatically clusters new faces into persons after each scan.
               </Typography>
               <FormControlLabel
@@ -463,7 +798,10 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Rotate"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
                 Applies EXIF orientation to files and normalizes rotation.
               </Typography>
             </FormGroup>
@@ -599,11 +937,14 @@ export default function ConfigurationPage() {
                   )
                 }
               >
-                <MenuItem value="leaf">leaf (finer, more granular clusters)</MenuItem>
+                <MenuItem value="leaf">
+                  leaf (finer, more granular clusters)
+                </MenuItem>
                 <MenuItem value="eom">eom (more stable, fewer splits)</MenuItem>
               </Select>
               <FormHelperText>
-                Controls granularity of clusters; "leaf" yields finer segmentation.
+                Controls granularity of clusters; "leaf" yields finer
+                segmentation.
               </FormHelperText>
             </FormControl>
           </Grid>
@@ -665,7 +1006,10 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Tagging"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
                 Uses the CLIP model to generate descriptive tags for media.
               </Typography>
               <FormControlLabel
@@ -683,8 +1027,12 @@ export default function ConfigurationPage() {
                 }
                 label="Use Default Tags"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
-                Includes a curated set of common tags alongside your custom list.
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
+                Includes a curated set of common tags alongside your custom
+                list.
               </Typography>
             </FormGroup>
           </Grid>
@@ -842,7 +1190,9 @@ export default function ConfigurationPage() {
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6 }}>
             <FormControl fullWidth margin="normal">
-              <InputLabel id="dup-auto-handling-label">Auto Handling</InputLabel>
+              <InputLabel id="dup-auto-handling-label">
+                Auto Handling
+              </InputLabel>
               <Select
                 labelId="dup-auto-handling-label"
                 value={config.duplicates.duplicate_auto_handling}
@@ -855,13 +1205,18 @@ export default function ConfigurationPage() {
                   )
                 }
               >
-                <MenuItem value="keep">keep (do nothing automatically)</MenuItem>
-                <MenuItem value="remove">remove (resolve without deleting files)</MenuItem>
+                <MenuItem value="keep">
+                  keep (do nothing automatically)
+                </MenuItem>
+                <MenuItem value="remove">
+                  remove (resolve without deleting files)
+                </MenuItem>
                 <MenuItem value="blacklist">blacklist duplicates</MenuItem>
                 <MenuItem value="delete">delete duplicates</MenuItem>
               </Select>
               <FormHelperText>
-                Automatic action when duplicates are found. "keep" is the safest default.
+                Automatic action when duplicates are found. "keep" is the safest
+                default.
               </FormHelperText>
             </FormControl>
           </Grid>
@@ -933,8 +1288,12 @@ export default function ConfigurationPage() {
                 }
                 label="Auto Scene Detection"
               />
-              <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
-                Detects scene changes and uses those frames for thumbnails and search.
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
+                Detects scene changes and uses those frames for thumbnails and
+                search.
               </Typography>
             </FormGroup>
           </Grid>
@@ -960,7 +1319,10 @@ export default function ConfigurationPage() {
             }
             label="EXIF Processor"
           />
-          <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+          <Typography
+            variant="caption"
+            sx={{ ml: 6, mt: -1, display: "block" }}
+          >
             Extracts date, camera, GPS and other metadata for search & maps.
           </Typography>
           <FormControlLabel
@@ -978,7 +1340,10 @@ export default function ConfigurationPage() {
             }
             label="Face Processor"
           />
-          <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
+          <Typography
+            variant="caption"
+            sx={{ ml: 6, mt: -1, display: "block" }}
+          >
             Detects faces in images and prepares them for recognition.
           </Typography>
           <FormControlLabel
@@ -996,13 +1361,22 @@ export default function ConfigurationPage() {
             }
             label="Image Embedding Processor"
           />
-          <Typography variant="caption" sx={{ ml: 6, mt: -1, display: "block" }}>
-            Generates CLIP embeddings for search, similarity, and related content.
+          <Typography
+            variant="caption"
+            sx={{ ml: 6, mt: -1, display: "block" }}
+          >
+            Generates CLIP embeddings for search, similarity, and related
+            content.
           </Typography>
         </FormGroup>
       ),
     },
   ];
+
+  if (config.general.is_docker) {
+    // Hide the Profiles tab entirely in Docker environments
+    sections = sections.filter((s) => s.label !== "Profiles");
+  }
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>

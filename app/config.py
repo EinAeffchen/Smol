@@ -442,13 +442,38 @@ def load_settings() -> AppSettings:
     return AppSettings.model_validate(config_data)
 
 
+def _sanitize_for_save(settings_model: AppSettings) -> dict:
+    """Return a dict for config.yaml that excludes derived fields and enforces
+    data_dir from the active bootstrap profile.
+
+    We avoid persisting computed paths (database_dir, smol_dir, thumb_dir,
+    models_dir, static_dir, database_url) and the mutable data_dir itself.
+    On load, data_dir always derives from the active profile in bootstrap.
+    """
+    data = settings_model.model_dump(mode="json")
+    general = data.get("general", {})
+    # Force data_dir to the active profile path (or omit entirely)
+    # Omitting keeps YAML clean; runtime will compute from bootstrap.
+    for k in [
+        "data_dir",
+        "database_dir",
+        "smol_dir",
+        "thumb_dir",
+        "models_dir",
+        "static_dir",
+        "database_url",
+    ]:
+        general.pop(k, None)
+    data["general"] = general
+    return data
+
+
 def save_settings(settings_model: AppSettings):
     """Saves the provided settings model to the config.yaml file."""
     config_file = get_user_data_path() / "config.yaml"
     with open(config_file, "w") as f:
-        # `sort_keys=False` helps maintain the order from your Pydantic model
         yaml.dump(
-            settings_model.model_dump(mode="json"),
+            _sanitize_for_save(settings_model),
             f,
             sort_keys=False,
             indent=2,
@@ -471,17 +496,80 @@ def reload_settings():
     global settings, model, preprocess, tokenizer
     logger.info("Reloading settings...")
     new_settings = load_settings()
-    # Update the existing settings object in place
-    for section_name, section_settings in new_settings.model_dump().items():
-        if hasattr(settings, section_name):
-            section = getattr(settings, section_name)
-            for key, value in section_settings.items():
-                if section_name == "ai" and key == "clip_model":
-                    setattr(section, key, ClipModel(value))
-                else:
+    # Always anchor data_dir to the active profile from bootstrap, ignoring
+    # any stale values that may exist in config.yaml (e.g., copied from
+    # another profile).
+    try:
+        new_settings.general.data_dir = get_user_data_path()
+    except Exception:
+        pass
+    # Ensure required directories exist for the (possibly new) data_dir
+    try:
+        new_settings.general.database_dir.mkdir(parents=True, exist_ok=True)
+        new_settings.general.smol_dir.mkdir(parents=True, exist_ok=True)
+        new_settings.general.thumb_dir.mkdir(parents=True, exist_ok=True)
+        new_settings.general.models_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as e:
+        logger.warning("Could not create profile directories: %s", e)
+    # Update the existing settings object in place, skipping computed fields
+    for section_name in new_settings.model_fields:
+        if not hasattr(settings, section_name):
+            continue
+        section = getattr(settings, section_name)
+        # Determine assignable fields on this section (exclude computed properties)
+        try:
+            assignable_keys = set(section.model_fields.keys())  # type: ignore[attr-defined]
+        except Exception:
+            # Fallback: allow all keys from dump if model_fields unavailable
+            assignable_keys = set()
+
+        section_settings = getattr(new_settings, section_name)
+        if hasattr(section_settings, "model_dump"):
+            section_dump = section_settings.model_dump()
+        else:
+            section_dump = {}
+
+        for key, value in section_dump.items():
+            if assignable_keys and key not in assignable_keys:
+                # Skip computed or non-settable attributes
+                continue
+            if section_name == "ai" and key == "clip_model":
+                setattr(section, key, ClipModel(value))
+            else:
+                try:
                     setattr(section, key, value)
+                except AttributeError:
+                    # Some attributes may be properties without setters (computed fields)
+                    continue
+
+    # Rebuild DB engine to reflect possible database_url changes after profile switch
+    try:
+        from app.database import (
+            ensure_vec_tables,
+            reset_engine,
+            run_migrations,
+        )
+
+        reset_engine(settings.general.database_url)
+        # Ensure schema and vector tables exist on the new DB
+        run_migrations()
+        ensure_vec_tables()
+    except Exception as e:
+        logger.warning(
+            "Could not reset database engine or run migrations: %s", e
+        )
 
     model, preprocess, tokenizer = get_model(settings)
+    try:
+        logger.info(
+            "Active profile: data_dir=%s smol_dir=%s thumb_dir=%s db_dir=%s",
+            settings.general.data_dir,
+            settings.general.smol_dir,
+            settings.general.thumb_dir,
+            settings.general.database_dir,
+        )
+    except Exception:
+        pass
     logger.info("Settings reloaded successfully.")
 
 

@@ -11,63 +11,104 @@ from sqlmodel import Session, create_engine
 from app.config import settings
 from app.logger import logger
 
-engine = create_engine(
-    settings.general.database_url,
-    echo=False,
-    connect_args={"check_same_thread": False, "timeout": 30},
-    pool_size=5,
-    max_overflow=10,
-)
+def _attach_engine_listeners(eng):
+    """Attach sqlite-vec loader and PRAGMA setup to the given engine."""
+
+    def _load_sqlite_extensions(dbapi_conn, connection_record):
+        dbapi_conn.enable_load_extension(True)
+        try:
+            vec_name = {
+                "win32": "vec0.dll",
+                "cygwin": "vec0.dll",
+                "darwin": "vec0.dylib",
+            }.get(sys.platform, "vec0.so")
+
+            if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+                os.environ.setdefault(
+                    "SQLITE_VEC_PATH", str(Path(sys._MEIPASS) / vec_name)
+                )
+
+            vec_path = os.environ.get("SQLITE_VEC_PATH")
+            if vec_path and Path(vec_path).exists():
+                dbapi_conn.load_extension(vec_path)
+            else:
+                try:
+                    import sqlite_vec
+
+                    sqlite_vec.load(dbapi_conn)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to load sqlite-vec extension: {e}"
+                    )
+        finally:
+            dbapi_conn.enable_load_extension(False)
+
+    def _set_sqlite_pragmas(dbapi_conn, connection_record):
+        try:
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL;")
+            cur.execute("PRAGMA synchronous=NORMAL;")
+            cur.execute("PRAGMA foreign_keys=ON;")
+            cur.close()
+        except Exception as e:
+            logger.warning("Failed to set SQLite pragmas: %s", e)
+
+    event.listen(eng, "connect", _load_sqlite_extensions)
+    event.listen(eng, "connect", _set_sqlite_pragmas)
 
 
-@event.listens_for(engine, "connect")
-def _load_sqlite_extensions(dbapi_conn, connection_record):
-    # 1) allow loading
-    dbapi_conn.enable_load_extension(True)
+def _make_engine(url: str):
+    eng = create_engine(
+        url,
+        echo=False,
+        connect_args={"check_same_thread": False, "timeout": 30},
+        pool_size=5,
+        max_overflow=10,
+    )
+    _attach_engine_listeners(eng)
+    return eng
+
+
+engine = _make_engine(settings.general.database_url)
+
+def reset_engine(new_url: str):
+    """Recreate the global engine for a new database URL."""
+    global engine
     try:
-        # Prefer explicit path via env or bundled location
-        vec_name = {
-            "win32": "vec0.dll",
-            "cygwin": "vec0.dll",
-            "darwin": "vec0.dylib",
-        }.get(sys.platform, "vec0.so")
-
-        # If running as a bundled app, provide a sensible default path
-        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-            os.environ.setdefault(
-                "SQLITE_VEC_PATH", str(Path(sys._MEIPASS) / vec_name)
-            )
-
-        vec_path = os.environ.get("SQLITE_VEC_PATH")
-        if vec_path and Path(vec_path).exists():
-            dbapi_conn.load_extension(vec_path)
-        else:
-            # Fallback: let sqlite_vec resolve its own packaged library
-            try:
-                import sqlite_vec
-
-                sqlite_vec.load(dbapi_conn)
-            except Exception as e:
-                # Re-raise with clearer context
-                raise RuntimeError(f"Failed to load sqlite-vec extension: {e}")
-    finally:
-        dbapi_conn.enable_load_extension(False)
+        engine.dispose()
+    except Exception:
+        pass
+    engine = _make_engine(new_url)
 
 
-@event.listens_for(engine, "connect")
-def _set_sqlite_pragmas(dbapi_conn, connection_record):
-    """Ensure useful SQLite pragmas are set on each connection."""
+def run_migrations():
+    """Ensure schema exists for the current database.
+
+    Prefer Alembic migrations; if unavailable or failing (e.g., env
+    requires external sqlite-vec path), fall back to creating tables
+    via SQLModel metadata to support fresh/empty databases.
+    """
+    # Try Alembic first
     try:
-        cur = dbapi_conn.cursor()
-        # WAL allows readers during writes; NORMAL reduces fsync overhead.
-        cur.execute("PRAGMA journal_mode=WAL;")
-        cur.execute("PRAGMA synchronous=NORMAL;")
-        cur.execute("PRAGMA foreign_keys=ON;")
-        # Make write waits explicit at the driver level if needed (dup to timeout arg)
-        # cur.execute("PRAGMA busy_timeout=30000;")
-        cur.close()
+        from alembic import command
+        from alembic.config import Config
+
+        alembic_cfg = Config("alembic.ini")
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations applied successfully.")
+        return
     except Exception as e:
-        logger.warning("Failed to set SQLite pragmas: %s", e)
+        logger.warning("Alembic upgrade failed; falling back to create_all: %s", e)
+
+    # Fallback: create tables for a fresh DB
+    try:
+        from app.models import SQLModel
+
+        SQLModel.metadata.create_all(engine)
+        logger.info("Created SQLModel tables successfully.")
+    except Exception as e:
+        logger.error("Failed to create schema: %s", e)
+        raise
 
 
 def ensure_vec_tables():
