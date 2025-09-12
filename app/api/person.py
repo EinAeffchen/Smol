@@ -19,7 +19,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import defer
 from sqlmodel import Session, delete, distinct, select, text, update
 
-from app.config import READ_ONLY
+from app.config import settings
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
 from app.models import Face, Media, Person, PersonTagLink, TimelineEvent
@@ -163,7 +163,7 @@ def get_person_timeline(
             except ValueError:
                 continue
 
-    def get_date(item: Media|TimelineEvent) -> date:
+    def get_date(item: Media | TimelineEvent) -> date:
         return (
             item.created_at.date()
             if isinstance(item, Media)
@@ -175,13 +175,17 @@ def get_person_timeline(
     timeline_items = []
     for item in combined_items:
         if isinstance(item, Media):
-            timeline_items.append(
-                {"type": "media", "date": get_date(item), "items": item}
-            )
+            timeline_items.append({
+                "type": "media",
+                "date": get_date(item),
+                "items": item,
+            })
         elif isinstance(item, TimelineEvent):
-            timeline_items.append(
-                {"type": "event", "date": get_date(item), "event": item}
-            )
+            timeline_items.append({
+                "type": "event",
+                "date": get_date(item),
+                "event": item,
+            })
 
     return {"items": timeline_items, "next_cursor": next_cursor}
 
@@ -463,13 +467,12 @@ def get_person(person_id: int, session: Session = Depends(get_session)):
         .join_from(Face, Media, Face.media_id == Media.id)
         .where(Person.id == person_id)
     )
-    logger.info(stmt)
     media_count = session.scalar(stmt)
     if person.profile_face:
         profile_face = ProfileFace(
-                id=person.profile_face.id,
-                thumbnail_path=person.profile_face.thumbnail_path,
-            )
+            id=person.profile_face.id,
+            thumbnail_path=person.profile_face.thumbnail_path,
+        )
     else:
         profile_face = None
     return PersonDetail(
@@ -492,9 +495,10 @@ def update_person(
     data: PersonUpdate,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     person = session.get(Person, person_id)
     if not person:
@@ -514,9 +518,10 @@ def set_profile_face(
     face_id: int | None,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     person = session.get(Person, person_id)
     if not person:
@@ -537,9 +542,10 @@ def merge_persons(
     body: MergePersonsRequest,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     sid, tid = body.source_id, body.target_id
     if sid == tid:
@@ -582,9 +588,10 @@ def merge_persons(
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_person(person_id: int, session: Session = Depends(get_session)):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     person = session.get(Person, person_id)
     if not person:
@@ -695,9 +702,10 @@ def refresh_similarities(
     person_id: int,
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     if not session.get(Person, person_id):
         raise HTTPException(404, "Person not found")

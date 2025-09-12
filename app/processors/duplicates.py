@@ -1,10 +1,10 @@
 from sqlmodel import Session, select, delete, update
-from app.database import engine
+import app.database as db
 from app.logger import logger
 from app.models import Media, ProcessingTask, DuplicateGroup, DuplicateMedia
 from sqlalchemy import func
 from datetime import datetime, timezone
-from app.config import DUPLICATE_AUTO_HANDLING, DUPLICATE_AUTO_KEEP_RULE, DuplicateHandlingRule, DuplicateKeepRule
+from app.config import settings, DuplicateHandlingRule
 
 class UnionFind:
     def __init__(self, elements):
@@ -56,7 +56,7 @@ class DuplicateProcessor:
             session.refresh(task)
 
     def process(self):
-        with Session(engine) as session:
+        with Session(db.engine) as session:
             self._update_task_status(session, "running")
             logger.info(
                 f"Starting pHash duplicate detection task {self.task_id}"
@@ -82,7 +82,7 @@ class DuplicateProcessor:
                     media_items = session.exec(media_with_same_hash_stmt).all()
                     media_ids = [m.id for m in media_items]
 
-                    if DUPLICATE_AUTO_HANDLING is DuplicateHandlingRule.KEEP:
+                    if settings.duplicates.duplicate_auto_handling is DuplicateHandlingRule.KEEP:
                         # This function will handle creating/merging groups and committing
                         self._create_or_update_group(session, media_ids)
                     else:

@@ -1,9 +1,10 @@
-from sqlmodel import SQLModel, Field, Relationship
+import uuid
+from datetime import date, datetime
+from typing import Optional
+
 from sqlalchemy import Column
 from sqlalchemy.types import JSON
-from datetime import datetime, date
-import uuid
-from typing import Optional
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class TimelineEvent(SQLModel, table=True):
@@ -16,7 +17,7 @@ class TimelineEvent(SQLModel, table=True):
     # e.g., "yearly", "monthly". We'll start with just "yearly".
     recurrence: Optional[str] = Field(default=None)
 
-    person_id: int = Field(foreign_key="person.id")
+    person_id: int = Field(foreign_key="person.id", index=True)
     person: "Person" = Relationship(back_populates="timeline_events")
 
 
@@ -30,7 +31,7 @@ class MediaTagLink(SQLModel, table=True):
 
 class Blacklist(SQLModel, table=True):
     id: int = Field(default=None, primary_key=True)
-    path: str = Field(unique=True)
+    path: str = Field(unique=True, index=True)
 
 
 class PersonTagLink(SQLModel, table=True):
@@ -61,9 +62,11 @@ class Tag(SQLModel, table=True):
 
 class Face(SQLModel, table=True):
     id: int = Field(default=None, primary_key=True)
-    media_id: int = Field(foreign_key="media.id")
-    person_id: int | None = Field(foreign_key="person.id", default=None)
-    thumbnail_path: str
+    media_id: int = Field(foreign_key="media.id", index=True)
+    person_id: int | None = Field(
+        foreign_key="person.id", default=None, index=True
+    )
+    thumbnail_path: str | None = Field(default=None)
     bbox: list[int] = Field(sa_column=Column(JSON))
     embedding: list[float] | None = Field(
         sa_column=Column(JSON, nullable=True)
@@ -83,7 +86,7 @@ class Media(SQLModel, table=True):
     id: int = Field(default=None, primary_key=True)
     path: str = Field(unique=True)
     filename: str = Field(index=True)
-    thumbnail_path: str = Field(default=None)
+    thumbnail_path: str | None = Field(default=None, nullable=True)
     size: int
     duration: float | None = None
     width: int | None = None
@@ -98,9 +101,6 @@ class Media(SQLModel, table=True):
     extracted_scenes: bool = Field(default=False)
 
     is_favorite: bool = Field(default=False)
-    embedding: list[float] | None = Field(
-        sa_column=Column(JSON, nullable=True, index=True)
-    )
     phash: str | None = Field(index=True)
     faces: list["Face"] = Relationship(back_populates="media")
     scenes: list["Scene"] = Relationship(back_populates="media")
@@ -129,7 +129,9 @@ class Scene(SQLModel, table=True):
     media_id: int = Field(foreign_key="media.id", index=True)
     start_time: float  # in seconds
     end_time: float  # in seconds
-    thumbnail_path: str  # relative path under THUMB_DIR
+    thumbnail_path: str | None = Field(
+        default=None, nullable=True
+    )  # relative path under THUMB_DIR
     description: str | None = Field(default=None)
     embedding: list[float] | None = Field(
         sa_column=Column(JSON, nullable=True, index=True), default=None

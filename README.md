@@ -71,25 +71,47 @@ This application can be run directly on your machine or as a Docker container.
     cp .env.template .env
     ```
     Set the variables as described within the <> in your new .env file
-
-2.  **Create Environment File for smol:**
-    Copy the `smol.env.template` and rename it `smol.env` file.
-    ```bash
-    cp smol.env.template smol.env
-    ```
-    Adjust the newly created template file to your liking. By default it is set to run in read/write mode with people tracking enabled, as well as regular auto scans on your mounted volume. 
+    Make sure you create the folder your HOST_DATA_DIR shows to, otherwise docker will create it as root!
 
 3.  **Start the Container:**
     This command will build the Docker image (if it doesn't exist) and start the container.
-    ```bash
-    make docker-start
-    ```
-    or 
+
     ```bash
     docker compose up -d
     ```
 
 4.  **Access the Application:**
-    Your media manager will be available in your browser at Your media manager should now be running and be accssible at **[http://localhost:8000](http://localhost:8000)**
+Your media manager will be available in your browser at Your media manager should now be running and be accssible at **[http://localhost:8123](http://localhost:8123)**
 
 
+---
+
+## License
+
+- Project license: PolyForm Noncommercial License 1.0.0. See `LICENSE.md`.
+- Third‑party software remains under its own licenses. See `THIRD_PARTY_NOTICES.md`.
+
+Noncommercial only: You may use, run, modify, and share this project for non‑commercial purposes, but commercial use is not permitted under this license.
+
+## Redistribution Notes (Binaries and Docker)
+
+- Binaries (PyInstaller):
+  - The application may bundle Qt/PySide6 components. PySide6 is licensed under LGPL‑3.0.
+  - Include copies of the LGPL‑3.0 and relevant Qt/PySide6 license texts in your distribution, allow reverse engineering for debugging such modifications, and ensure dynamic linking to Qt libraries (PyInstaller typically bundles shared libraries).
+  - If you include Apache‑2.0 components with `NOTICE` files (e.g., some ML libraries), include their `NOTICE` content.
+
+- Docker Image:
+  - The image installs `ffmpeg` via Debian packages. FFmpeg’s licenses and notices are included in the image (e.g., `/usr/share/doc/ffmpeg/`). Preserve those when redistributing the image and comply with the license terms for enabled codecs.
+  - The image contains additional third‑party packages installed via `uv` (Python). Refer to `THIRD_PARTY_NOTICES.md` for attribution and consider including generated license reports in releases.
+
+## Third‑Party License Reports (Optional)
+
+For precise attribution per release, you can generate machine‑readable reports:
+
+- Python:
+  - `uv pip install pip-licenses`
+  - `uv run pip-licenses --with-system --format=markdown --output-file THIRD_PARTY_LICENSES_PY.md`
+
+- Frontend:
+  - `npm i -g license-checker`
+  - `license-checker --production --summary --json > THIRD_PARTY_LICENSES_JS.json`

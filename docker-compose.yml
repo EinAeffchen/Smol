@@ -3,7 +3,7 @@ services:
     image: einaeffchen2/smol
     container_name: smol
     ports:
-      - "${PORT}:8000"
+      - "${PORT}:8123"
     # entrypoint: ["tail","-f", "/dev/null"]
     # to mount multipe volumes for processing, mount them into
     # various sub-folders of /app/media
@@ -11,6 +11,6 @@ services:
     # /local/photo/folder:/app/media/photos
     volumes:
       - ${HOST_MEDIA_DIR}:/app/media
+      - /mnt/d/GooglePhotos:/app/media/Google #/mnt/d/GooglePhotos
       - ${HOST_DATA_DIR}:/app/data
-    env_file: ${ENV_FILE}
     restart: unless-stopped

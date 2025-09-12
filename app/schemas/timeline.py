@@ -1,11 +1,13 @@
-from pydantic import BaseModel
-from typing import Literal
-from app.schemas.media import MediaPreview
 from datetime import date
+from typing import Literal
+
+from pydantic import BaseModel
+
+from app.schemas.media import MediaPreview
 
 
 class TimelineEventBase(BaseModel):
-    id: int|None=None
+    id: int | None = None
     title: str
     description: str | None = None
     event_date: date
@@ -45,8 +47,7 @@ class TimelineEventUpdate(BaseModel):
 
 
 class TimelineEvent(TimelineEventBase):
-    id: int
     person_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True

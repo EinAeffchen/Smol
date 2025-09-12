@@ -6,7 +6,7 @@ import react from "@vitejs/plugin-react";
 import path from "path";
 
 export default defineConfig(({ mode, command }) => {
-  const domain = process.env.DOMAIN || "http://localhost:8000/";
+  const domain = process.env.DOMAIN || "http://localhost:8123/";
 
   // ---- START DEBUG LOG ----
   console.log(`[vite.config.js] Mode: ${mode}`);

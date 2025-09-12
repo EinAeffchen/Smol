@@ -19,23 +19,13 @@ endif
 VENV		?= $(shell pwd)/venv
 PIP			:= $(VENV)/bin/pip
 PYTHON		:= $(VENV)/bin/python
-UVICORN		:= $(VENV)/bin/uvicorn
-
-install:
-	@python3 -m venv "$(VENV)"
-	@$(PIP) install --upgrade pip
-	@$(PIP) install -r requirements.txt
 
 up: 
-	$(UVICORN) app.main:app --reload --log-level debug --host 0.0.0.0 --port $(PORT)
+	uvicorn app.main:app --reload --log-level debug --host 0.0.0.0 --port 8000 
 
-build: install
-	ifndef MEDIA_DIR
-	$(error MEDIA_DIR is not set)
-	endif
+build: 
 	cd frontend && npm install && npm run build
-	mkdir -p "${MEDIA_DIR}/.smol/static"
-	cp -r frontend/dist/* "${MEDIA_DIR}/.smol/static"
+	pyinstaller .\main.spec
 
 dev:
 	cd frontend && npm install && npm run dev

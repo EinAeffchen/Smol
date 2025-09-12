@@ -17,7 +17,9 @@ RUN npm run build
 
 # ---- Stage 2: Optimized Final Python Application ----
 FROM python:3.12-slim
-
+ENV UV_PYTHON_DOWNLOADS=never \
+    UV_LINK_MODE=copy \
+    UV_PROJECT_ENVIRONMENT=/usr/local 
 # Create a non-root user and group first
 RUN groupadd --gid 1000 appgroup && \
     useradd --uid 1000 --gid appgroup -s /bin/sh -m appuser
@@ -36,50 +38,34 @@ COPY --from=uv-installer /opt/uv/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/u
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    VENV_PATH=/app/venv \
-    PORT=8000 \
+    PORT=8123 \
     MEDIA_DIR=/app/media \
-    DATA_DIR=/app/data \
-    STATIC_ASSETS_PATH=/app/static
+    DATA_DIR=/app/data
 
-ENV PATH="$VENV_PATH/bin:$PATH"
 # Further ENV VARS for application
-ENV SQLITE_VEC_PATH=${VENV_PATH}/lib/python3.12/site-packages/sqlite_vec/vec0
+ENV SQLITE_VEC_PATH=/usr/local/lib/python3.12/site-packages/sqlite_vec/vec0.so
 ENV HF_HOME=${DATA_DIR}/.smol/models \
-    TORCH_HOME=${DATA_DIR}/.smol/models \
-    INSIGHTFACE_HOME=${DATA_DIR}/.smol/models
+    TORCH_HOME=${DATA_DIR}/.smol/models 
 
 # --- OPTIMIZED LAYER ORDER ---
 
-RUN python3 -m venv $VENV_PATH
-
-# 2. Copy only the requirements file and install dependencies.
-# This layer is now cached and will only be rebuilt if requirements.txt changes.
-COPY requirements.txt .
-RUN uv pip install \
-        --no-cache \
-        --no-compile \
-        -r requirements.txt \
-        torch torchvision torchaudio --extra-index-url https://download.pytorch.org/whl/cpu \
-    && apt-get remove -y build-essential
-
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-dev --no-cache
+RUN apt-get remove -y build-essential || true
 # 4. Copy application source code, setting ownership directly.
 # This is now separate from the dependency layers.
 COPY --chown=appuser:appgroup ./app ./app
 COPY --chown=appuser:appgroup alembic /app/alembic
 COPY --chown=appuser:appgroup alembic.ini /app/alembic.ini
-COPY --chown=appuser:appgroup entrypoint.sh /entrypoint.sh
-# RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
-RUN chmod +x /entrypoint.sh
 
 # 5. Copy frontend assets from the build stage.
-COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist ${STATIC_ASSETS_PATH}
+COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist /app/static
 
 # 6. Create mount points for volumes and set permissions. This is a small final layer.
 RUN mkdir -p ${DATA_DIR} ${MEDIA_DIR}
+ENV IS_DOCKER=true
 
 # 7. Switch to the non-root user
-# USER appuser
-
-EXPOSE $PORT
-ENTRYPOINT ["/entrypoint.sh"]
+USER appuser
+EXPOSE 8123
+CMD ["/bin/bash", "-c", "alembic upgrade head; uvicorn app.main:app --host 0.0.0.0 --port 8123"]

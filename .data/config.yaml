@@ -1,0 +1,65 @@
+general:
+  port: 8123
+  read_only: true
+  enable_people: true
+  is_docker: true
+  is_binary: false
+  domain: http://localhost:
+  thumb_dir_folder_size: 1000
+  data_dir: /app/data
+  database_dir: /app/data/database
+  smol_dir: /app/data/.smol
+  thumb_dir: /app/data/.smol/thumbnails
+  media_dirs:
+  - /app/media
+  static_dir: /app/static
+  models_dir: /app/data/.smol/models
+  database_url: sqlite:////app/data/database/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL
+scan:
+  auto_scan: false
+  scan_interval_minutes: 15
+  auto_clean_on_scan: false
+  auto_cluster_on_scan: false
+  auto_rotate: true
+  VIDEO_SUFFIXES:
+  - .mp4
+  - .mov
+  - .wmv
+  - .avi
+  - .flv
+  - .mkv
+  - .webm
+  - .gp3
+  - .ts
+  - .mpeg
+  IMAGE_SUFFIXES:
+  - .jpg
+  - .jpeg
+  - .png
+  - .tiff
+  - .gif
+  - .bmp
+ai:
+  clip_model: xlm-roberta-base-ViT-B-32
+  min_search_dist: 0.68
+  min_similarity_dist: 1.2
+  cluster_batch_size: 10000
+tagging:
+  auto_tagging: true
+  use_default_tags: true
+  custom_tags: []
+face_recognition:
+  face_recognition_min_confidence: 0.78
+  face_match_cosine_threshold: 0.55
+  face_recognition_min_face_pixels: 3600
+  person_min_face_count: 2
+duplicates:
+  duplicate_auto_handling: keep
+  duplicate_auto_keep_rule: highest_res
+video:
+  auto_scene_detection: true
+  max_frames_per_video: 30
+processors:
+  exif_processor_active: true
+  face_processor_active: true
+  image_embedding_processor_active: true

@@ -50,11 +50,14 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
     }
   };
 
-  // --- ADDED: Logic to create a mixed list of media and person thumbnails ---
+  // Normalize thumbnail paths for the StaticFiles mount (expects forward slashes)
+  const normThumb = (p?: string | null) => (p ?? "").replace(/\\/g, "/");
+
+  // --- Logic to create a mixed list of media and person thumbnails ---
   const mediaPreviews = tag.media.slice(0, 4).map((m) => ({
     type: "media",
     id: m.id,
-    url: `${API}/thumbnails/${m.id}.jpg`,
+    url: `${API}/thumbnails/${normThumb(m.thumbnail_path || `${m.id}.jpg`)}`,
   }));
 
   const personPreviews = tag.persons
@@ -63,9 +66,7 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
     .map((p) => ({
       type: "person",
       id: p.id,
-      url: `${API}/thumbnails/${encodeURIComponent(
-        p.profile_face!.thumbnail_path
-      )}`,
+      url: `${API}/thumbnails/${normThumb(p.profile_face!.thumbnail_path)}`,
     }));
 
   // Combine and slice to ensure we have a max of 4 total previews for the collage
@@ -111,6 +112,9 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
             {previewItems.map((item, index) => (
               <Box
                 key={`${item.type}-${item.id}`}
+                component="img"
+                src={item.url}
+                draggable={false}
                 sx={{
                   // Make the first item larger if possible
                   gridRow:
@@ -119,9 +123,10 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
                     index === 0 && previewItems.length === 2
                       ? "span 2"
                       : "auto",
-                  background: `url(${item.url})`,
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
+                  width: "100%",
+                  height: "100%",
+                  objectFit: "cover",
+                  display: "block",
                 }}
               />
             ))}

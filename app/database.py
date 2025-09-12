@@ -1,32 +1,197 @@
+import os
+import sys
 import time
+from pathlib import Path
 
-from sqlalchemy.exc import OperationalError
-from sqlmodel import Session, SQLModel, create_engine
-from app.config import DATABASE_URL, SCENE_EMBEDDING_SIZE
-from app.logger import logger
-from sqlalchemy import event, text
+from sqlalchemy import event
 from sqlalchemy.engine.result import ScalarResult
+from sqlalchemy.exc import OperationalError
+from sqlmodel import Session, create_engine
 
-engine = create_engine(
-    DATABASE_URL,
-    echo=False,
-    connect_args={"check_same_thread": False, "timeout": 30},
-    pool_size=5,
-    max_overflow=10,
-)
+from app.config import settings
+from app.logger import logger
 
 
-@event.listens_for(engine, "connect")
-def _load_sqlite_extensions(dbapi_conn, connection_record):
-    # 1) allow loading
-    dbapi_conn.enable_load_extension(True)
+def _attach_engine_listeners(eng):
+    """Attach sqlite-vec loader and PRAGMA setup to the given engine."""
+
+    def _load_sqlite_extensions(dbapi_conn, connection_record):
+        dbapi_conn.enable_load_extension(True)
+        try:
+            # Provide a reasonable default path in frozen mode if unset
+            if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+                base = Path(sys._MEIPASS)
+                # Only set if not already provided by environment
+                if not os.environ.get("SQLITE_VEC_PATH"):
+                    candidates = []
+                    try:
+                        for pat in ("vec0*.dll", "vec0*.so", "vec0*.dylib"):
+                            candidates += list(base.glob(pat))
+                    except Exception:
+                        candidates = []
+                    if candidates:
+                        os.environ["SQLITE_VEC_PATH"] = str(candidates[0])
+                    else:
+                        vec_name = {
+                            "win32": "vec0.dll",
+                            "cygwin": "vec0.dll",
+                            "darwin": "vec0.dylib",
+                        }.get(sys.platform, "vec0.so")
+                        os.environ["SQLITE_VEC_PATH"] = str(base / vec_name)
+
+            vec_path = os.environ.get("SQLITE_VEC_PATH")
+            if vec_path and Path(vec_path).exists():
+                dbapi_conn.load_extension(vec_path)
+            else:
+                try:
+                    import sqlite_vec
+
+                    sqlite_vec.load(dbapi_conn)
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to load sqlite-vec extension: {e}"
+                    )
+        finally:
+            dbapi_conn.enable_load_extension(False)
+
+    def _set_sqlite_pragmas(dbapi_conn, connection_record):
+        try:
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA journal_mode=WAL;")
+            cur.execute("PRAGMA synchronous=NORMAL;")
+            cur.execute("PRAGMA foreign_keys=ON;")
+            cur.close()
+        except Exception as e:
+            logger.warning("Failed to set SQLite pragmas: %s", e)
+
+    event.listen(eng, "connect", _load_sqlite_extensions)
+    event.listen(eng, "connect", _set_sqlite_pragmas)
+
+
+def _make_engine(url: str):
+    eng = create_engine(
+        url,
+        echo=False,
+        connect_args={"check_same_thread": False, "timeout": 30},
+        pool_size=5,
+        max_overflow=10,
+    )
+    _attach_engine_listeners(eng)
+    return eng
+
+
+engine = _make_engine(settings.general.database_url)
+
+
+def reset_engine(new_url: str):
+    """Recreate the global engine for a new database URL."""
+    global engine
     try:
-        # Assuming sqlite_vec is imported elsewhere
-        import sqlite_vec
+        engine.dispose()
+    except Exception:
+        pass
+    engine = _make_engine(new_url)
 
-        sqlite_vec.load(dbapi_conn)
-    finally:
-        dbapi_conn.enable_load_extension(False)
+
+def run_migrations():
+    """Ensure schema exists for the current database.
+
+    Prefer Alembic migrations; if unavailable or failing (e.g., env
+    requires external sqlite-vec path), fall back to creating tables
+    via SQLModel metadata to support fresh/empty databases.
+    """
+    # Try Alembic first
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        # Locate alembic.ini and scripts both in dev and PyInstaller
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            base_dir = Path(sys._MEIPASS)
+        else:
+            base_dir = Path(__file__).resolve().parent.parent
+
+        ini_path = base_dir / "alembic.ini"
+        scripts_path = base_dir / "alembic"
+
+        alembic_cfg = Config(str(ini_path))
+        alembic_cfg.set_main_option("script_location", str(scripts_path))
+        # env.py sets sqlalchemy.url from app settings
+
+        command.upgrade(alembic_cfg, "head")
+        logger.info("Alembic migrations applied successfully.")
+        return
+    except Exception as e:
+        logger.warning(
+            "Alembic upgrade failed; falling back to create_all: %s", e
+        )
+
+    # Fallback: create tables for a fresh DB
+    try:
+        from app.models import SQLModel
+
+        SQLModel.metadata.create_all(engine)
+        logger.info("Created SQLModel tables successfully.")
+    except Exception as e:
+        logger.error("Failed to create schema: %s", e)
+        raise
+
+
+def ensure_vec_tables():
+    """Ensure vec0 virtual tables exist (idempotent)."""
+    # Try best to ensure the sqlite-vec extension can be located in binary mode
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        # Provide default path to bundled vec0 binary if not set
+        base = Path(sys._MEIPASS)
+        if not os.environ.get("SQLITE_VEC_PATH"):
+            candidates = []
+            try:
+                for pat in ("vec0*.dll", "vec0*.so", "vec0*.dylib"):
+                    candidates += list(base.glob(pat))
+            except Exception:
+                candidates = []
+            if candidates:
+                os.environ["SQLITE_VEC_PATH"] = str(candidates[0])
+            else:
+                vec_name = {
+                    "win32": "vec0.dll",
+                    "cygwin": "vec0.dll",
+                    "darwin": "vec0.dylib",
+                }.get(sys.platform, "vec0.so")
+                os.environ.setdefault(
+                    "SQLITE_VEC_PATH", str(base / vec_name)
+                )
+
+    dim_media = settings.ai.clip_model_embedding_size
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS media_embeddings
+            USING vec0(
+                media_id  integer primary key,
+                embedding float[{dim_media}]
+            );
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE VIRTUAL TABLE IF NOT EXISTS face_embeddings
+            USING vec0(
+                face_id   integer primary key,
+                person_id integer,
+                embedding float[512]
+            );
+            """
+        )
+        conn.exec_driver_sql(
+            """
+            CREATE VIRTUAL TABLE IF NOT EXISTS person_embeddings
+            USING vec0(
+                person_id integer,
+                embedding float[512]
+               );
+            """
+        )
 
 
 def safe_commit(session, retries=5, delay=0.5):
@@ -49,7 +214,6 @@ def safe_commit(session, retries=5, delay=0.5):
 def safe_execute(
     session: Session, query, retries=5, delay=0.5
 ) -> ScalarResult:
-
     for i in range(retries):
         try:
             return session.exec(query)
@@ -62,67 +226,6 @@ def safe_execute(
             session.rollback()
             raise
     raise RuntimeError("Failed to commit due to database lock.")
-
-
-def init_db():
-    logger.debug("Setting up db!")
-    from app.models import Face, Media, MediaTagLink, Person, Tag, Scene
-
-    with engine.connect() as connection:
-        # Get the underlying DBAPI connection
-
-        # --- SET PRAGMAS HERE ---
-        # These will be set once for the database file.
-        logger.debug("Setting database PRAGMAs...")
-        # connection.execute(text("PRAGMA journal_mode=WAL;"))
-        connection.execute(text("PRAGMA synchronous=NORMAL;"))
-        connection.execute(text("PRAGMA busy_timeout = 30000;"))
-        logger.debug("PRAGMAs set.")
-
-        # Create all tables
-        logger.debug("Creating database tables...")
-        SQLModel.metadata.create_all(connection)
-        logger.debug("Database tables created.")
-
-
-def init_vec_index():
-    logger.debug("Setting up vector index!")
-    with engine.begin() as conn:
-        # 1) virtual table over (media_id, embedding)
-        conn.execute(
-            text(
-                f"""
-          CREATE VIRTUAL TABLE IF NOT EXISTS media_embeddings
-          USING vec0(
-            media_id    integer primary key,
-            embedding   float[{SCENE_EMBEDDING_SIZE}]
-          );
-        """
-            )
-        )
-        conn.execute(
-            text(
-                """
-          CREATE VIRTUAL TABLE IF NOT EXISTS face_embeddings
-          USING vec0(
-            face_id    integer primary key,
-            person_id   integer,
-            embedding   float[512]
-          );
-        """
-            )
-        )
-        conn.execute(
-            text(
-                """
-          CREATE VIRTUAL TABLE IF NOT EXISTS person_embeddings
-          USING vec0(
-            person_id   integer,
-            embedding   float[512]
-          );
-        """
-            )
-        )
 
 
 def get_session():

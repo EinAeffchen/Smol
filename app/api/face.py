@@ -10,11 +10,11 @@ from pydantic import BaseModel
 from sqlalchemy.orm import defer
 from sqlmodel import Session, delete, select, text
 
-from app.config import READ_ONLY, THUMB_DIR
+from app.config import settings
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
-from app.schemas.face import CursorPage, FaceAssign, FaceAssignReturn
+from app.schemas.face import CursorPage, FaceAssign
 from app.schemas.person import PersonMinimal
 from app.utils import update_person_embedding
 
@@ -30,9 +30,9 @@ async def assign_faces(
     body: FaceAssign = Body(...),
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     new_person_id = body.person_id
     new_person = session.get(Person, new_person_id)
@@ -76,9 +76,9 @@ async def detach_faces(
     face_ids: list[int] = Body(..., embed=True),
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
 
     for face_id in face_ids:
@@ -115,9 +115,9 @@ def update_face_embedding(
     person_id: int | None,
     delete_face: bool = False,
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     if not delete_face and person_id:
         sql = text(
@@ -141,9 +141,9 @@ def update_face_embedding(
     status_code=status.HTTP_200_OK,
 )
 def delete_faces(face_ids: list[int] = Query(..., alias="face_ids"), session: Session = Depends(get_session)):
-    if READ_ONLY:
+    if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     for face_id in face_ids:
         face = session.get(Face, face_id)
@@ -152,7 +152,7 @@ def delete_faces(face_ids: list[int] = Query(..., alias="face_ids"), session: Se
             continue
 
         # remove thumbnail from disk
-        thumb = THUMB_DIR / face.thumbnail_path
+        thumb = settings.general.thumb_dir / face.thumbnail_path
         if thumb.exists():
             thumb.unlink()
 
@@ -217,9 +217,9 @@ async def create_person_from_faces(
     name: str | None = Body(None),
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     if not face_ids:
         raise HTTPException(status_code=400, detail="No face IDs provided")

@@ -4,7 +4,7 @@ from cv2.typing import MatLike
 from PIL.ImageFile import ImageFile
 from app.processors.base import MediaProcessor
 from sqlmodel import select, text, or_
-from app.config import tokenizer, model, AUTO_TAGGER_ACTIVE
+from app.config import settings, model, tokenizer
 from app.api.tags import get_or_create_tag, attach_tag_to_media
 from app.database import safe_commit
 from app.logger import logger
@@ -102,7 +102,7 @@ class AutoTagger(MediaProcessor):
     tag_map: dict[str, np.ndarray] = dict()
 
     def load_model(self):
-        if AUTO_TAGGER_ACTIVE:
+        if settings.tagging.auto_tagging:
             self.active = True
 
         custom_tags_list = []

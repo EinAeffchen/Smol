@@ -5,19 +5,18 @@ from pathlib import Path
 import numpy as np
 from cv2.typing import MatLike
 from insightface.app import FaceAnalysis
-from app.config import MODELS_DIR
 from PIL import Image, ImageOps
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text
 from tqdm import tqdm
 
 from app.api.media import delete_media_record
-from app.config import FACE_RECOGNITION_MIN_FACE_PIXELS, ENABLE_PEOPLE, THUMB_DIR, FACE_PROCESSOR_ACTIVE
+from app.config import settings
 from app.database import safe_commit
 from app.logger import logger
 from app.models import ExifData, Face, Media, Scene
 from app.processors.base import MediaProcessor
-from app.utils import get_thumb_folder
+from app.utils import get_thumb_folder, to_posix_str
 
 
 class FaceProcessor(MediaProcessor):
@@ -57,12 +56,15 @@ class FaceProcessor(MediaProcessor):
                 scene, [x1, y1, x2 - x1, y2 - y1], pad_pct=0.2
             )
             h, w = crop.shape[:2]
-            if h * w < FACE_RECOGNITION_MIN_FACE_PIXELS:
+            if (
+                h * w
+                < settings.face_recognition.face_recognition_min_face_pixels
+            ):
                 continue
 
             ts = int(time.time() * 1000)
             name = f"{Path(media.path).stem}_ins_{i}_{ts}.jpg"
-            thumb_dir = get_thumb_folder(THUMB_DIR / "faces")
+            thumb_dir = get_thumb_folder(settings.general.thumb_dir / "faces")
             thumb_file = thumb_dir / name
             pil_img = Image.fromarray(crop)
             pil_img.thumbnail((320, -1), Image.LANCZOS)
@@ -79,7 +81,9 @@ class FaceProcessor(MediaProcessor):
                 vec /= norm
             face = Face(
                 media=media,
-                thumbnail_path=str(thumb_file.relative_to(THUMB_DIR)),
+                thumbnail_path=to_posix_str(
+                    thumb_file.relative_to(settings.general.thumb_dir)
+                ),
                 bbox=[x1, y1, x2 - x1, y2 - y1],
                 embedding=vec.tolist(),
             )
@@ -103,19 +107,45 @@ class FaceProcessor(MediaProcessor):
         for scene in tqdm(scenes):
             try:
                 if isinstance(scene, tuple):
+                    # scenes from videos arrive as RGB ndarray already
                     scene = scene[1]
                 elif isinstance(scene, Scene):
-                    scene = Image.open(THUMB_DIR / scene.thumbnail_path)
+                    # stored scene thumbnails on disk → open as RGB
+                    scene = Image.open(
+                        settings.general.thumb_dir / scene.thumbnail_path
+                    )
                     scene = ImageOps.exif_transpose(scene)
                     scene = np.array(scene.convert("RGB"))
                 else:
+                    # plain PIL.Image -> ensure correct orientation + RGB
+                    scene = ImageOps.exif_transpose(scene)
                     scene = np.array(scene.convert("RGB"))
             except OSError:
                 logger.warning("FAILED ON %s", media.path)
                 delete_media_record(media.id, session)
                 return False
 
-            faces = self.model.get(scene)
+            # Guard against invalid/empty frames
+            if scene is None:
+                logger.warning(
+                    "Skipping empty scene frame for media: %s", media.path
+                )
+                continue
+            if not isinstance(scene, np.ndarray) or scene.size == 0:
+                logger.warning(
+                    "Skipping invalid scene array for media: %s", media.path
+                )
+                continue
+
+            try:
+                faces = self.model.get(scene)
+            except Exception as e:
+                # Guard against occasional internal errors for problematic frames
+                logger.exception(
+                    "InsightFace failed on media %s scene: %s", media.path, e
+                )
+                continue
+
             face_objs = self._parse_faces(faces, scene, media)
 
             if not face_objs:
@@ -140,14 +170,20 @@ class FaceProcessor(MediaProcessor):
         return True
 
     def load_model(self):
-        if ENABLE_PEOPLE and FACE_PROCESSOR_ACTIVE:
+        if (
+            settings.general.enable_people
+            and settings.processors.face_processor_active
+        ):
             self.active = True
         self.model = FaceAnalysis(
             "buffalo_l",
-            root=str(MODELS_DIR),
+            root=str(settings.general.models_dir),
+            # Avoid 3D landmark module which can error on some frames.
+            allowed_modules=["detection", "landmark_2d_106", "recognition"],
             providers=["CPUExecutionProvider"],
         )
-        self.model.prepare(ctx_id=0)  # ctx_id=0 for GPU, -1 for CPU
+        # Use CPU explicitly. Set a stable detector input size.
+        self.model.prepare(ctx_id=-1, det_size=(640, 640))
 
     def unload(self):
         if self.model:

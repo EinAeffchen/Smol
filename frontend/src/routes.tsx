@@ -14,6 +14,7 @@ import SearchPage from "./pages/SearchResultPage";
 import OrphanFacesPage from "./pages/OrphanFaces";
 import MapEditorPage from "./pages/MapEditorPage";
 import DuplicatesPage from "./pages/DuplicatesPage";
+import ConfigurationPage from "./pages/ConfigurationPage";
 
 export const AppRoutes = () => {
   const location = useLocation();
@@ -36,6 +37,7 @@ export const AppRoutes = () => {
           <Route path="/person/:id" element={<PersonDetailPage />} />
           <Route path="/tag/:id" element={<TagDetailPage />} />
           <Route path="/duplicates" element={<DuplicatesPage />} />
+          <Route path="/configuration" element={<ConfigurationPage />} />
         </Route>
       </Routes>
       {backgroundLocation && (

@@ -7,7 +7,7 @@ from app.database import get_session
 from app.models import Tag, Media, Person, MediaTagLink, PersonTagLink
 from app.schemas.tag import TagRead
 from app.database import safe_commit
-from app.config import READ_ONLY
+from app.config import settings
 from app.schemas.tag import CursorPage
 
 
@@ -82,9 +82,9 @@ def create_tag(
     name: str = Body(..., embed=True),
     session: Session = Depends(get_session),
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     tag = get_or_create_tag(name, session)
     return tag
@@ -106,9 +106,9 @@ def get_tag(tag_id: int, session: Session = Depends(get_session)):
 def add_tag_to_media(
     media_id: int, tag_id: int, session: Session = Depends(get_session)
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     attach_tag_to_media(media_id, tag_id, session)
 
@@ -119,9 +119,9 @@ def add_tag_to_media(
 def remove_tag_from_media(
     media_id: int, tag_id: int, session: Session = Depends(get_session)
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     session.exec(
         delete(MediaTagLink).where(
@@ -133,9 +133,9 @@ def remove_tag_from_media(
 
 @router.delete("/{tag_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_tag(tag_id: int, session: Session = Depends(get_session)):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     session.exec(delete(MediaTagLink).where(MediaTagLink.tag_id == tag_id))
     session.exec(delete(Tag).where(Tag.id == tag_id))
@@ -149,9 +149,9 @@ def remove_tag(tag_id: int, session: Session = Depends(get_session)):
 def add_tag_to_person(
     person_id: int, tag_id: int, session: Session = Depends(get_session)
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     if not session.get(Person, person_id):
         raise HTTPException(404, "Person not found")
@@ -168,9 +168,9 @@ def add_tag_to_person(
 def remove_tag_from_person(
     person_id: int, tag_id: int, session: Session = Depends(get_session)
 ):
-    if READ_ONLY:
+    if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in READ_ONLY mode."
+            status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
     session.exec(
         delete(PersonTagLink).where(

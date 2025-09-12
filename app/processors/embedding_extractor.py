@@ -1,20 +1,20 @@
-import cv2
+import json
 
+import cv2
+import numpy as np
 import torch
 from cv2.typing import MatLike
 from PIL import Image
 from PIL.ImageFile import ImageFile
+from sqlalchemy import text
 from sqlmodel import select
+from tqdm import tqdm
 
+from app.api.media import delete_media_record
+from app.config import model, preprocess, settings
+from app.logger import logger
 from app.models import Media, Scene, Tag
 from app.processors.base import MediaProcessor
-from app.logger import logger
-import numpy as np
-from app.config import preprocess, model, IMAGE_EMBEDDING_PROCESSOR_ACTIVE
-from sqlalchemy import text
-import json
-from tqdm import tqdm
-from app.api.media import delete_media_record
 from app.utils import safe_commit
 
 
@@ -23,7 +23,7 @@ class EmbeddingExtractor(MediaProcessor):
     order = 10
 
     def load_model(self):
-        if IMAGE_EMBEDDING_PROCESSOR_ACTIVE:
+        if settings.processors.image_embedding_processor_active:
             self.active = True
 
     def unload(self):
@@ -72,18 +72,20 @@ class EmbeddingExtractor(MediaProcessor):
                 embeddings.append(embedding)
                 scene[0].embedding = embedding
                 session.add(scene[0])
+            elif isinstance(scene, Scene):
+                embeddings.append(scene.embedding)
             else:
                 logger.warning("Got instance: %s", type(scene))
 
         if not media.duration:  # is photo/picture
-            media.embedding = embeddings[0]
+            vec_embedding = embeddings[0]
         else:
             arr = np.stack([np.array(e, dtype=np.float32) for e in embeddings])
             avg = arr.mean(axis=0)
             norm = np.linalg.norm(avg)
             if norm > 0:
                 avg /= norm
-            media.embedding = avg.tolist()
+            vec_embedding = avg.tolist()
         media.embeddings_created = True
         session.add(media)
         sql = text(
@@ -91,7 +93,7 @@ class EmbeddingExtractor(MediaProcessor):
             INSERT OR REPLACE INTO media_embeddings(media_id, embedding)
             VALUES (:id, :emb)
             """
-        ).bindparams(id=media.id, emb=json.dumps(media.embedding))
+        ).bindparams(id=media.id, emb=json.dumps(vec_embedding))
         session.exec(sql)
         safe_commit(session)
         return True
