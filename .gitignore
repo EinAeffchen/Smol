@@ -138,7 +138,6 @@ media2
 app/models/*.tar
 app/models/*.txt
 node_modules/
-models/
 .locks/
 smol_tst/
 smol.env
