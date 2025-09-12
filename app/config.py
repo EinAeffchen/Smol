@@ -104,11 +104,6 @@ def get_static_assets_dir() -> Path:
     """
     # 1. Check if running as a bundled executable (PyInstaller)
     static_dir = Path("dist/assets")
-    logger.info(
-        "STATE: %s - %s",
-        getattr(sys, "frozen", False),
-        hasattr(sys, "_MEIPASS"),
-    )
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # The path is absolute, inside the temporary _MEIPASS directory
         # This must match the DESTINATION part of your --add-data flag
@@ -576,3 +571,11 @@ def reload_settings():
 settings = load_settings()
 model, preprocess, tokenizer = get_model(settings)
 logger.info("DATA_DIR: %s", settings.general.data_dir)
+
+vec_name = {
+    "win32": "vec0.dll",
+    "cygwin": "vec0.dll",
+    "darwin": "vec0.dylib",
+}.get(sys.platform, "vec0.so")
+logger.warning("VEC PLUGIN: %s", vec_name)
+logger.warning("DIR: %s", [p for p in Path(sys._MEIPASS).iterdir()])

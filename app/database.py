@@ -11,22 +11,33 @@ from sqlmodel import Session, create_engine
 from app.config import settings
 from app.logger import logger
 
+
 def _attach_engine_listeners(eng):
     """Attach sqlite-vec loader and PRAGMA setup to the given engine."""
 
     def _load_sqlite_extensions(dbapi_conn, connection_record):
         dbapi_conn.enable_load_extension(True)
         try:
-            vec_name = {
-                "win32": "vec0.dll",
-                "cygwin": "vec0.dll",
-                "darwin": "vec0.dylib",
-            }.get(sys.platform, "vec0.so")
-
+            # Provide a reasonable default path in frozen mode if unset
             if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-                os.environ.setdefault(
-                    "SQLITE_VEC_PATH", str(Path(sys._MEIPASS) / vec_name)
-                )
+                base = Path(sys._MEIPASS)
+                # Only set if not already provided by environment
+                if not os.environ.get("SQLITE_VEC_PATH"):
+                    candidates = []
+                    try:
+                        for pat in ("vec0*.dll", "vec0*.so", "vec0*.dylib"):
+                            candidates += list(base.glob(pat))
+                    except Exception:
+                        candidates = []
+                    if candidates:
+                        os.environ["SQLITE_VEC_PATH"] = str(candidates[0])
+                    else:
+                        vec_name = {
+                            "win32": "vec0.dll",
+                            "cygwin": "vec0.dll",
+                            "darwin": "vec0.dylib",
+                        }.get(sys.platform, "vec0.so")
+                        os.environ["SQLITE_VEC_PATH"] = str(base / vec_name)
 
             vec_path = os.environ.get("SQLITE_VEC_PATH")
             if vec_path and Path(vec_path).exists():
@@ -71,6 +82,7 @@ def _make_engine(url: str):
 
 engine = _make_engine(settings.general.database_url)
 
+
 def reset_engine(new_url: str):
     """Recreate the global engine for a new database URL."""
     global engine
@@ -93,12 +105,26 @@ def run_migrations():
         from alembic import command
         from alembic.config import Config
 
-        alembic_cfg = Config("alembic.ini")
+        # Locate alembic.ini and scripts both in dev and PyInstaller
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            base_dir = Path(sys._MEIPASS)
+        else:
+            base_dir = Path(__file__).resolve().parent.parent
+
+        ini_path = base_dir / "alembic.ini"
+        scripts_path = base_dir / "alembic"
+
+        alembic_cfg = Config(str(ini_path))
+        alembic_cfg.set_main_option("script_location", str(scripts_path))
+        # env.py sets sqlalchemy.url from app settings
+
         command.upgrade(alembic_cfg, "head")
         logger.info("Alembic migrations applied successfully.")
         return
     except Exception as e:
-        logger.warning("Alembic upgrade failed; falling back to create_all: %s", e)
+        logger.warning(
+            "Alembic upgrade failed; falling back to create_all: %s", e
+        )
 
     # Fallback: create tables for a fresh DB
     try:
@@ -116,14 +142,25 @@ def ensure_vec_tables():
     # Try best to ensure the sqlite-vec extension can be located in binary mode
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         # Provide default path to bundled vec0 binary if not set
-        vec_name = {
-            "win32": "vec0.dll",
-            "cygwin": "vec0.dll",
-            "darwin": "vec0.dylib",
-        }.get(sys.platform, "vec0.so")
-        os.environ.setdefault(
-            "SQLITE_VEC_PATH", str(Path(sys._MEIPASS) / vec_name)
-        )
+        base = Path(sys._MEIPASS)
+        if not os.environ.get("SQLITE_VEC_PATH"):
+            candidates = []
+            try:
+                for pat in ("vec0*.dll", "vec0*.so", "vec0*.dylib"):
+                    candidates += list(base.glob(pat))
+            except Exception:
+                candidates = []
+            if candidates:
+                os.environ["SQLITE_VEC_PATH"] = str(candidates[0])
+            else:
+                vec_name = {
+                    "win32": "vec0.dll",
+                    "cygwin": "vec0.dll",
+                    "darwin": "vec0.dylib",
+                }.get(sys.platform, "vec0.so")
+                os.environ.setdefault(
+                    "SQLITE_VEC_PATH", str(base / vec_name)
+                )
 
     dim_media = settings.ai.clip_model_embedding_size
     with engine.begin() as conn:

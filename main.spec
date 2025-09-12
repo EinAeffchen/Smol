@@ -84,17 +84,45 @@ try:
 except Exception:
     pass
 
-# Ensure vec0 extension is available at runtime root (sys._MEIPASS)
-# so Alembic and app startup can load it via SQLITE_VEC_PATH or default path.
+"""
+Bundle sqlite-vec extension (vec0.*) to bundle root so runtime can load it.
+
+We try multiple strategies because the file may be packaged as data rather
+than a Python extension:
+  1) collect_dynamic_libs('sqlite_vec')
+  2) collect_data_files('sqlite_vec')
+  3) Direct glob inside the package directory
+"""
+_found_vec = False
 try:
     vec_libs = collect_dynamic_libs('sqlite_vec')
-    for src, dest in vec_libs:
+    for src, _dest in vec_libs:
         name = os.path.basename(src).lower()
-        if name.startswith('vec0') and (name.endswith('.dll') or name.endswith('.so') or name.endswith('.dylib')):
-            # Place at top-level of the bundle
+        if name.startswith('vec0') and name.endswith(('.dll', '.so', '.dylib')):
             binaries.append((src, '.'))
+            _found_vec = True
 except Exception:
-    # If sqlite_vec is not installed in this environment, skip gracefully
+    pass
+
+try:
+    if not _found_vec:
+        for src, _dest in collect_data_files('sqlite_vec', include_py_files=False):
+            name = os.path.basename(src).lower()
+            if name.startswith('vec0') and name.endswith(('.dll', '.so', '.dylib')):
+                binaries.append((src, '.'))
+                _found_vec = True
+except Exception:
+    pass
+
+try:
+    if not _found_vec:
+        pkg_dir = get_package_path('sqlite_vec')
+        if pkg_dir and os.path.isdir(pkg_dir):
+            for pat in ('vec0*.dll', 'vec0*.so', 'vec0*.dylib'):
+                for src in glob.glob(os.path.join(pkg_dir, pat)):
+                    binaries.append((src, '.'))
+                    _found_vec = True
+except Exception:
     pass
 
 # Bundle OpenCV Haar cascade files so cv2.data.haarcascades works in PyInstaller.
@@ -146,6 +174,18 @@ except Exception:
 try:
     hiddenimports_list += collect_submodules('webview')
     hiddenimports_list += ['webview.platforms.qt']
+except Exception:
+    pass
+
+# Ensure optional sqlite_vec helper is included for fallback loading.
+try:
+    hiddenimports_list += ['sqlite_vec']
+except Exception:
+    pass
+
+# Ensure qtpy shim is bundled (pywebview's Qt backend depends on it).
+try:
+    hiddenimports_list += ['qtpy']
 except Exception:
     pass
 

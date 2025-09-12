@@ -1,11 +1,14 @@
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from sqlalchemy import engine_from_config, event, pool
 
 from alembic import context
-from app.models import SQLModel
 from app.config import settings
+from app.logger import logger
+from app.models import SQLModel
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -72,23 +75,81 @@ def run_migrations_online() -> None:
     @event.listens_for(connectable, "connect")
     def _load_vec_extension(dbapi_connection, connection_record):
         """
-        Ensures that the sqlite-vec extension is loaded for every connection
-        that Alembic makes to the database.
-        """
-        # The path to the extension must be provided via an environment variable
-        vec_path = os.environ.get("SQLITE_VEC_PATH")
-        if not vec_path:
-            raise RuntimeError(
-                "SQLITE_VEC_PATH environment variable not set. "
-                "Cannot load sqlite-vec extension for Alembic."
-            )
+        Ensure the sqlite-vec extension is loaded for every Alembic connection.
 
-        # In Python 3, the dbapi_connection is a 'sqlite3.Connection' object
+        Tries, in order:
+        1) Load from SQLITE_VEC_PATH as-is
+        2) Retry without platform suffix to avoid double-extension issues
+        3) Fallback: import sqlite_vec and call sqlite_vec.load(...)
+        """
+        # Establish a candidate path in frozen mode, preferring actual filenames in _MEIPASS
+        vec_path = os.environ.get("SQLITE_VEC_PATH")
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            base = Path(sys._MEIPASS)
+            if not vec_path or not Path(vec_path).exists():
+                candidates = []
+                try:
+                    for pat in ("vec0*.dll", "vec0*.so", "vec0*.dylib"):
+                        candidates += list(base.glob(pat))
+                except Exception:
+                    candidates = []
+                if candidates:
+                    vec_path = str(candidates[0])
+                    os.environ["SQLITE_VEC_PATH"] = vec_path
+                else:
+                    # Fallback to conventional name
+                    vec_name = {
+                        "win32": "vec0.dll",
+                        "cygwin": "vec0.dll",
+                        "darwin": "vec0.dylib",
+                    }.get(sys.platform, "vec0.so")
+                    vec_path = str(base / vec_name)
+                    os.environ.setdefault("SQLITE_VEC_PATH", vec_path)
+
+        def _strip_suffix(p: str) -> str:
+            for suf in (".so", ".dylib", ".dll"):
+                if p.lower().endswith(suf):
+                    return p[: -len(suf)]
+            return p
+
         dbapi_connection.enable_load_extension(True)
-        dbapi_connection.load_extension(vec_path)
-        dbapi_connection.enable_load_extension(
-            False
-        )  # Disable again for security
+        try:
+            tried = []
+            if vec_path:
+                # 1) try as provided
+                tried.append(vec_path)
+                try:
+                    dbapi_connection.load_extension(vec_path)
+                    return
+                except Exception:
+                    pass
+
+                # 2) try without suffix to avoid double-extension behavior
+                alt = _strip_suffix(vec_path)
+                if alt != vec_path:
+                    tried.append(alt)
+                    try:
+                        dbapi_connection.load_extension(alt)
+                        return
+                    except Exception:
+                        pass
+
+            # 3) fallback: try python package helper
+            try:
+                import sqlite_vec  # type: ignore
+
+                sqlite_vec.load(dbapi_connection)
+                return
+            except Exception as e:
+                raise RuntimeError(
+                    f"Failed to load sqlite-vec extension. Tried: {tried}. Error: {e}"
+                )
+        finally:
+            # Disable again for security
+            try:
+                dbapi_connection.enable_load_extension(False)
+            except Exception:
+                pass
 
     # --- END OF BLOCK TO ADD ---
 

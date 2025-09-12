@@ -12,6 +12,7 @@ from pathlib import Path
 os.environ["QT_API"] = "pyside6"
 import uvicorn
 import webview
+from alembic.config import Config
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,8 +21,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import and_, or_, select
 from sqlmodel import Session
 
+import app.database as db
 from alembic import command
-from alembic.config import Config
 from app.api import (
     config,
     duplicates,
@@ -35,9 +36,8 @@ from app.api import (
 from app.api.processors import router as proc_router
 from app.api.tasks import _run_cleanup_and_chain
 from app.config import settings
-import app.database as db
 from app.database import ensure_vec_tables
-from app.logger import logger, configure_file_logging
+from app.logger import configure_file_logging, logger
 from app.models import ProcessingTask
 from app.processor_registry import load_processors
 
@@ -197,6 +197,7 @@ app.include_router(search, prefix="/api/search", tags=["search"])
 app.include_router(duplicates, prefix="/api/duplicates", tags=["duplicates"])
 app.include_router(config, prefix="/api/config", tags=["config"])
 
+
 @app.get("/thumbnails/{file_path:path}", include_in_schema=False)
 async def serve_thumbnail(file_path: str):
     base = settings.general.thumb_dir
@@ -317,10 +318,27 @@ def shutdown():
 
 
 def run_migrations():
-    """Runs Alembic migrations programmatically."""
+    """Runs Alembic migrations programmatically.
+
+    Locates `alembic.ini` and the `alembic/` scripts whether running
+    from source or from a PyInstaller bundle (sys._MEIPASS).
+    """
     print("Running database migrations...")
     try:
-        alembic_cfg = Config("alembic.ini")
+        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+            base_dir = Path(sys._MEIPASS)
+        else:
+            # Project root relative to this file (app/ -> repo root)
+            base_dir = Path(__file__).resolve().parent.parent
+
+        ini_path = base_dir / "alembic.ini"
+        scripts_path = base_dir / "alembic"
+
+        alembic_cfg = Config(str(ini_path))
+        # Be explicit about the scripts location to avoid CWD issues
+        alembic_cfg.set_main_option("script_location", str(scripts_path))
+        # Let env.py compute URL from settings; no need to override here
+
         command.upgrade(alembic_cfg, "head")
         print("Migrations applied successfully.")
     except Exception as e:
@@ -338,14 +356,26 @@ if __name__ == "__main__":
     # Ensure SQLITE_VEC_PATH is set to the correct bundled library name
     try:
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-            if sys.platform in ("win32", "cygwin"):
-                vec_name = "vec0.dll"
-            elif sys.platform == "darwin":
-                vec_name = "vec0.dylib"
+            # Prefer the actual bundled filename if present
+            base = Path(sys._MEIPASS)
+            candidates = []
+            try:
+                for pat in ("vec0*.dll", "vec0*.so", "vec0*.dylib"):
+                    candidates += list(base.glob(pat))
+            except Exception:
+                candidates = []
+
+            if candidates:
+                os.environ["SQLITE_VEC_PATH"] = str(candidates[0])
             else:
-                vec_name = "vec0.so"
-            vec_path = os.path.join(sys._MEIPASS, vec_name)
-            os.environ["SQLITE_VEC_PATH"] = vec_path
+                # Fallback to conventional name; env.py/database will also try stripping suffix
+                if sys.platform in ("win32", "cygwin"):
+                    vec_name = "vec0.dll"
+                elif sys.platform == "darwin":
+                    vec_name = "vec0.dylib"
+                else:
+                    vec_name = "vec0.so"
+                os.environ["SQLITE_VEC_PATH"] = str(base / vec_name)
     except Exception:
         # Non-fatal: alembic/env.py and database hooks will also attempt to set this
         pass
@@ -374,7 +404,7 @@ if __name__ == "__main__":
     # Register the shutdown function to be called when the window is closed
     window.events.closed += shutdown
 
-    webview.start(debug=True, gui="qt")
+    webview.start(debug=True)
 
     # Wait for the server thread to finish before exiting the script
     print("Waiting for server thread to close...")
