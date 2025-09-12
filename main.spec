@@ -169,6 +169,9 @@ for base in possible_model_dirs:
         datas.append((str(ssd_caffemodel), 'models'))
 
 import importlib.util as _importlib_util
+import sys as _sys
+import tomllib as _tomllib
+from datetime import datetime as _dt
 
 # Conditionally include optional heavy modules only if present to avoid build failures.
 optional_mods = ['dlib']
@@ -178,6 +181,26 @@ for _m in optional_mods:
             hiddenimports_list.append(_m)
     except Exception:
         pass
+
+def _resolve_version():
+    # 1) Prefer CI-provided env var
+    v = os.environ.get('APP_VERSION')
+    if v:
+        return v
+    # 2) Try from pyproject.toml
+    try:
+        with open('pyproject.toml', 'rb') as _f:
+            data = _tomllib.load(_f)
+            v = data.get('project', {}).get('version')
+            if v:
+                return v
+    except Exception:
+        pass
+    # 3) Fallback using date
+    return _dt.now().strftime('%Y.%m.%d')
+
+APP_VERSION = _resolve_version()
+APP_NAME = f"Smol-{APP_VERSION}"
 
 a = Analysis(
     ['app/main.py'],
@@ -202,29 +225,23 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# Onefile build: embed binaries, datas, and zipfiles directly into the EXE.
 exe = EXE(
     pyz,
     a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
     [],
-    exclude_binaries=True,
-    name='Smol',
+    name=APP_NAME,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,
+    console=False,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-)
-coll = COLLECT(
-    exe,
-    a.binaries,
-    a.datas,
-    strip=False,
-    upx=True,
-    upx_exclude=[],
-    name='Smol',
 )
