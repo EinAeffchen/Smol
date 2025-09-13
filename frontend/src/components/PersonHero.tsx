@@ -1,13 +1,6 @@
 import React from "react";
-import {
-  Box,
-  Typography,
-  Avatar,
-  Stack,
-  Button,
-  Paper,
-  useTheme,
-} from "@mui/material";
+import { Box, Typography, Avatar, Stack, Button, Paper, useTheme } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import Grid from "@mui/material/Grid";
 import { Person } from "../types";
 import { PersonEditForm } from "./PersonEditForm";
@@ -103,7 +96,10 @@ export function PersonHero({
         <Paper
           sx={{
             p: { xs: 2, md: 3 },
-            bgcolor: "rgba(255,255,255,0.05)",
+            bgcolor: (theme) =>
+              theme.palette.mode === 'dark'
+                ? alpha(theme.palette.common.white, 0.05)
+                : alpha(theme.palette.common.black, 0.02),
             mt: 4,
             borderRadius: 3,
           }}

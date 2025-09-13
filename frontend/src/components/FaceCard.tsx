@@ -1,15 +1,8 @@
 // components/FaceCard.tsx
 
 import React from "react";
-import {
-  Avatar,
-  Box,
-  Card,
-  IconButton,
-  Tooltip,
-  Checkbox,
-  useTheme,
-} from "@mui/material";
+import { Avatar, Box, Card, IconButton, Tooltip, Checkbox, useTheme } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { useNavigate, useLocation } from "react-router-dom";
 import StarIcon from "@mui/icons-material/Star";
 import { API } from "../config";
@@ -78,10 +71,10 @@ export default function FaceCard({
           position: "absolute",
           top: 0,
           left: 0,
-          color: "white",
-          "&.Mui-checked": { color: "white" },
+          color: (theme) => theme.palette.common.white,
+          "&.Mui-checked": { color: (theme) => theme.palette.common.white },
           p: 0.5,
-          backgroundColor: "rgba(0,0,0,0.3)",
+          backgroundColor: (theme) => alpha(theme.palette.common.black, 0.3),
           borderRadius: "20%",
         }}
       />
@@ -91,8 +84,10 @@ export default function FaceCard({
             <IconButton
               size="small"
               sx={{
-                bgcolor: "rgba(0,0,0,0.4)",
-                "&:hover": { bgcolor: "rgba(0,0,0,0.6)" },
+                bgcolor: (theme) => alpha(theme.palette.common.black, 0.4),
+                "&:hover": {
+                  bgcolor: (theme) => alpha(theme.palette.common.black, 0.6),
+                },
               }}
               onClick={(e) => {
                 e.stopPropagation();

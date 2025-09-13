@@ -1,17 +1,7 @@
 import React, { useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import {
-  Box,
-  Typography,
-  IconButton,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogContentText,
-  DialogTitle,
-  Button,
-  useTheme,
-} from "@mui/material";
+import { Box, Typography, IconButton, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, Button, useTheme } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import MovieIcon from "@mui/icons-material/Movie";
 import PersonIcon from "@mui/icons-material/Person";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -138,7 +128,8 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
               alignItems: "center",
               justifyContent: "center",
               height: "100%",
-              background: "linear-gradient(135deg, primary.main, primary.dark)",
+              background: (theme) =>
+                `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
             }}
           />
         )}
@@ -151,13 +142,13 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
             left: 0,
             width: "100%",
             height: "100%",
-            background:
-              "linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0.5) 100%)",
+            background: (theme) =>
+              `linear-gradient(to top, ${alpha(theme.palette.common.black, 0.9)} 0%, ${alpha(theme.palette.common.black, 0.1)} 60%, ${alpha(theme.palette.common.black, 0.5)} 100%)`,
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
             p: 1.5,
-            color: "white",
+            color: (theme) => theme.palette.common.white,
           }}
         >
           <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
@@ -165,13 +156,13 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
               onClick={handleOpenConfirmDialog}
               size="small"
               sx={{
-                color: "rgba(255,255,255,0.7)",
-                backgroundColor: "rgba(0,0,0,0.3)",
+                color: (theme) => alpha(theme.palette.common.white, 0.8),
+                backgroundColor: (theme) => alpha(theme.palette.common.black, 0.3),
                 opacity: hovered ? 1 : 0,
                 transition: "opacity 0.2s ease-in-out",
                 "&:hover": {
                   color: "accent.main",
-                  backgroundColor: "rgba(0, 0, 0, 0.5)",
+                  backgroundColor: (theme) => alpha(theme.palette.common.black, 0.5),
                 },
               }}
             >
@@ -187,7 +178,7 @@ export default function TagCard({ tag, onTagDeleted }: TagCardProps) {
                 display: "flex",
                 alignItems: "center",
                 gap: 1.5,
-                color: "rgba(255,255,255,0.7)",
+                color: (theme) => alpha(theme.palette.common.white, 0.7),
               }}
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>

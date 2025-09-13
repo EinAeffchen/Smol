@@ -1,11 +1,11 @@
+import gc
 import os
 import sys
+import threading
 from enum import Enum
 from pathlib import Path
 from typing import TypeVar
 
-import threading
-import gc
 import yaml
 from pydantic import BaseModel, Field, PlainSerializer, computed_field
 from typing_extensions import Annotated
@@ -483,6 +483,7 @@ def get_model(settings: AppSettings):
     acquire_clip()/get_clip_bundle() helpers below to reuse a shared instance.
     """
     import open_clip
+
     model, preprocess, _ = open_clip.create_model_and_transforms(
         settings.ai.clip_model.model_name,
         pretrained=settings.ai.clip_model_pretrained,
@@ -511,7 +512,9 @@ def get_clip_bundle():
     with _clip_lock:
         if _clip_model is None:
             logger.info("Loading OpenCLIP bundle (lazy)...")
-            _clip_model, _clip_preprocess, _clip_tokenizer = get_model(settings)
+            _clip_model, _clip_preprocess, _clip_tokenizer = get_model(
+                settings
+            )
         return _clip_model, _clip_preprocess, _clip_tokenizer
 
 
@@ -649,11 +652,3 @@ def reload_settings():
 
 settings = load_settings()
 logger.info("DATA_DIR: %s", settings.general.data_dir)
-
-vec_name = {
-    "win32": "vec0.dll",
-    "cygwin": "vec0.dll",
-    "darwin": "vec0.dylib",
-}.get(sys.platform, "vec0.so")
-logger.warning("VEC PLUGIN: %s", vec_name)
-logger.warning("DIR: %s", [p for p in Path(sys._MEIPASS).iterdir()])

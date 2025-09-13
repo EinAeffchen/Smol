@@ -10,18 +10,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 os.environ["QT_API"] = "pyside6"
+import socket
+
 import uvicorn
 import webview
-import socket
-import socket
 from alembic.config import Config
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import and_, or_, select
-from sqlmodel import Session
+from sqlalchemy import and_, or_
+from sqlmodel import Session, select
 
 import app.database as db
 from alembic import command
@@ -86,23 +86,23 @@ def scheduled_scan_job():
 
 def _cleanup_tasks_on_startup():
     """Cancel 'running' tasks and delete 'pending' tasks left from a previous run."""
-    try:
-        with Session(db.engine) as session:
-            tasks = session.exec(select(ProcessingTask)).all()
-            changed = False
-            for t in tasks:
-                if t.status == "running":
-                    t.status = "cancelled"
-                    t.finished_at = datetime.now()
-                    session.add(t)
-                    changed = True
-                elif t.status == "pending":
-                    session.delete(t)
-                    changed = True
-            if changed:
-                session.commit()
-    except Exception as e:
-        logger.warning("Task cleanup on startup failed: %s", e)
+    with Session(db.engine) as session:
+        # Fetch all tasks; we'll resolve running/pending below
+        tasks = session.exec(
+            select(ProcessingTask).where(ProcessingTask.status != "finished")
+        ).all()
+        changed = False
+        for t in tasks:
+            if t.status == "running":
+                t.status = "cancelled"
+                t.finished_at = datetime.now()
+                session.add(t)
+                changed = True
+            elif t.status == "pending":
+                session.delete(t)
+                changed = True
+        if changed:
+            session.commit()
 
 
 def _cleanup_tasks_on_shutdown():

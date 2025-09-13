@@ -74,8 +74,8 @@ export function MediaHeader({
         </Typography>
       </Box>
       <Box>
-        <IconButton onClick={handleMenuClick}>
-          <MoreVert sx={{ color: "primary" }} />
+        <IconButton onClick={handleMenuClick} color="primary">
+          <MoreVert />
         </IconButton>
 
         {!config.READ_ONLY && (
@@ -103,10 +103,7 @@ export function MediaHeader({
                   <ListItemText>Convert</ListItemText>
                 </MenuItem>
               )}
-              <MenuItem
-                onClick={() => handleAction("deleteRecord")}
-                sx={{ color: ERROR_COLOR }}
-              >
+              <MenuItem onClick={() => handleAction("deleteRecord")} sx={{ color: ERROR_COLOR }}>
                 <ListItemIcon>
                   <Delete fontSize="small" sx={{ color: ERROR_COLOR }} />
                 </ListItemIcon>

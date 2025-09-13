@@ -342,7 +342,7 @@ export default function MediaDetailPage() {
       fullWidth
       maxWidth="xl"
       slotProps={{
-        backdrop: { sx: { backgroundColor: "rgba(0, 0, 0, 0.8)" } },
+        backdrop: { sx: { backgroundColor: (theme) => `rgba(0,0,0,${theme.palette.mode === 'dark' ? 0.85 : 0.8})` } },
         paper: {
           sx: {
             mt: { xs: 2, sm: 4, md: 8 },
@@ -454,7 +454,7 @@ export default function MediaDetailPage() {
                       alignItems: "center",
                       justifyContent: "space-between",
                       px: 2,
-                      color: "white",
+                      color: (theme) => theme.palette.common.white,
                       pointerEvents: "none", // Allow swipes to pass through
                       zIndex: 100,
                     }}
@@ -464,7 +464,7 @@ export default function MediaDetailPage() {
                     />
                     <Typography
                       sx={{
-                        bgcolor: "rgba(0,0,0,0.6)",
+                        bgcolor: (theme) => `rgba(0,0,0,${theme.palette.mode==='dark'?0.6:0.5})`,
                         px: 2,
                         py: 1,
                         borderRadius: 2,

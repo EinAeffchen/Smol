@@ -1165,7 +1165,6 @@ def _run_scan(task_id: str):
                     + settings.scan.IMAGE_SUFFIXES
                 ):
                     continue
-                logger.debug(str(full))
                 if str(full) not in known_files:
                     media_paths.append(full)
                     known_files.add(str(full))

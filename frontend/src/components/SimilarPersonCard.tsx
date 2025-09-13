@@ -1,6 +1,7 @@
 import React from "react";
 import { Link as RouterLink } from "react-router-dom";
 import { Box, Typography, useTheme } from "@mui/material";
+import { alpha } from "@mui/material/styles";
 import { SimilarPerson } from "../types";
 import { API } from "../config";
 
@@ -35,11 +36,12 @@ export default function SimilarPersonCard({
         overflow: "hidden",
         borderRadius: 3,
         textDecoration: "none",
-        color: "white",
+        color: (theme) => theme.palette.common.white,
         transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
         background: thumbUrl
           ? `url(${thumbUrl})`
-          : "linear-gradient(135deg, primary.main, primary.dark)",
+          : (theme) =>
+              `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
 
@@ -72,8 +74,8 @@ export default function SimilarPersonCard({
           left: 0,
           width: "100%",
           height: "100%",
-          background:
-            "linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 50%)",
+          background: (theme) =>
+            `linear-gradient(to top, ${alpha(theme.palette.common.black, 0.8)} 0%, ${alpha(theme.palette.common.black, 0)} 50%)`,
           display: "flex",
           flexDirection: "column",
           justifyContent: "flex-end",
@@ -85,7 +87,7 @@ export default function SimilarPersonCard({
         </Typography>
         <Typography
           variant="caption"
-          sx={{ color: "rgba(255,255,255,0.7)", mt: 0.5 }}
+          sx={{ color: (theme) => alpha(theme.palette.common.white, 0.7), mt: 0.5 }}
         >
           {similarity != null ? `${similarity.toFixed(1)}% match` : ""}
         </Typography>

@@ -158,7 +158,7 @@ export default function MediaCard({ media, mediaListKey }: MediaCardProps) {
                 pointerEvents: "none",
               }}
             >
-              <PlayArrowIcon sx={{ fontSize: "3rem", color: "white" }} />
+              <PlayArrowIcon sx={{ fontSize: "3rem", color: (theme) => theme.palette.common.white }} />
             </Box>
           )}
 
@@ -169,9 +169,9 @@ export default function MediaCard({ media, mediaListKey }: MediaCardProps) {
               left: 0,
               width: "100%",
               p: 1.5,
-              color: "white",
-              background:
-                "linear-gradient(to top, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0) 50%)",
+              color: (theme) => theme.palette.common.white,
+              background: (theme) =>
+                `linear-gradient(to top, ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.7)'} 0%, rgba(0,0,0,0) 50%)`,
               pointerEvents: "none",
             }}
           >

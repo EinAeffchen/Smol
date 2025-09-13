@@ -130,7 +130,7 @@ export function VideoWithPreview({ media }: { media: Media }) {
         width: "100%",
         position: "relative",
         paddingTop: "56.25%",
-        backgroundColor: "#000",
+        bgcolor: "common.black",
         cursor: "pointer", // Indicate interactivity
       }}
     >
@@ -172,8 +172,8 @@ export function VideoWithPreview({ media }: { media: Media }) {
             bottom: "80px", // Adjust this based on your control bar height
             left: hoverData.x,
             transform: "translateX(-50%)",
-            bgcolor: "#000",
-            border: "1px solid #fff",
+            bgcolor: "common.black",
+            border: (theme) => `1px solid ${theme.palette.common.white}`,
             p: "2px",
             zIndex: 2, // Ensure it's on top
             pointerEvents: "none", // Prevent the preview from capturing mouse events
