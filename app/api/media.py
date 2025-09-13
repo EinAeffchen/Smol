@@ -3,6 +3,10 @@ from datetime import datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+import os
+import sys
+import subprocess
+from pathlib import Path
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import and_, or_, text, tuple_
 from sqlalchemy.orm import aliased, selectinload
@@ -275,6 +279,42 @@ def list_videos(
     results = session.exec(stmt.limit(limit)).all()
     next_cursor = str(results[-1].id) if len(results) == limit else None
     return CursorPage(items=results, next_cursor=next_cursor)
+
+
+@router.post("/{media_id}/open-folder", status_code=204)
+def open_media_folder(
+    media_id: int,
+    session: Session = Depends(get_session),
+):
+    """Open the directory containing the media file in the OS file browser.
+
+    Only supported when running as a packaged/binary app and not in Docker.
+    """
+    if settings.general.is_docker:
+        raise HTTPException(400, "Opening folders not supported in Docker")
+    if not settings.general.is_binary:
+        raise HTTPException(400, "Opening folders only allowed in binary mode")
+
+    media = session.get(Media, media_id)
+    if not media:
+        raise HTTPException(404, "Media not found")
+
+    media_path = Path(media.path)
+    parent = media_path.parent
+    if not parent.exists():
+        raise HTTPException(404, "Media directory not found")
+
+    try:
+        if sys.platform.startswith("win"):
+            subprocess.Popen(["explorer", str(parent)])
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(parent)])
+        else:
+            # Linux and others
+            subprocess.Popen(["xdg-open", str(parent)])
+    except Exception as e:
+        raise HTTPException(500, f"Failed to open folder: {e}")
+    return
 
 
 @router.get("/{media_id}/neighbors", response_model=MediaNeighbors)

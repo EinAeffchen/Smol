@@ -9,7 +9,7 @@ import {
   IconButton,
   Divider,
 } from "@mui/material";
-import { MoreVert, Vrpano, Delete } from "@mui/icons-material";
+import { MoreVert, Vrpano, Delete, FolderOpen } from "@mui/icons-material";
 import { Media } from "../types";
 import config from "../config";
 const ERROR_COLOR = "error.main";
@@ -19,11 +19,15 @@ interface MediaHeaderProps {
   showExif: boolean;
   onToggleExif: () => void;
   onOpenDialog: (type: "convert" | "deleteRecord" | "deleteFile") => void;
+  isBinary?: boolean;
+  onOpenFolder?: (mediaId: number) => void;
 }
 
 export function MediaHeader({
   media,
   onOpenDialog,
+  isBinary = false,
+  onOpenFolder,
 }: MediaHeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
@@ -78,6 +82,19 @@ export function MediaHeader({
           <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose}>
             <>
               <Divider />
+              {isBinary && (
+                <MenuItem
+                  onClick={() => {
+                    onOpenFolder?.(media.id);
+                    handleMenuClose();
+                  }}
+                >
+                  <ListItemIcon>
+                    <FolderOpen fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Open Containing Folder</ListItemText>
+                </MenuItem>
+              )}
               {media.duration && (
                 <MenuItem onClick={() => handleAction("convert")}>
                   <ListItemIcon>

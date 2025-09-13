@@ -11,7 +11,7 @@ from sqlmodel import select
 from tqdm import tqdm
 
 from app.api.media import delete_media_record
-from app.config import model, preprocess, settings
+from app.config import settings, get_clip_bundle
 from app.logger import logger
 from app.models import Media, Scene, Tag
 from app.processors.base import MediaProcessor
@@ -25,8 +25,11 @@ class EmbeddingExtractor(MediaProcessor):
     def load_model(self):
         if settings.processors.image_embedding_processor_active:
             self.active = True
+            # Use shared CLIP bundle; keep it warm to avoid repeated init
+            self._clip_model, self._preprocess, _ = get_clip_bundle()
 
     def unload(self):
+        # Keep CLIP warm; no action needed here to avoid per-task reinit
         pass
 
     def _get_embedding(self, media: ImageFile | cv2.typing.MatLike):
@@ -35,12 +38,12 @@ class EmbeddingExtractor(MediaProcessor):
         else:
             media_obj = media
         try:
-            img_tensor = preprocess(media_obj).unsqueeze(0)
+            img_tensor = self._preprocess(media_obj).unsqueeze(0)
         except OSError as e:
             logger.warning("Failed processing because %s", e)
             return False
         with torch.no_grad():
-            img_features = model.encode_image(img_tensor)
+            img_features = self._clip_model.encode_image(img_tensor)
         img_features /= img_features.norm(dim=-1, keepdim=True)
         return img_features.squeeze(0).tolist()
 

@@ -1,4 +1,6 @@
 import json
+import os
+import gc
 import time
 from pathlib import Path
 
@@ -175,6 +177,8 @@ class FaceProcessor(MediaProcessor):
             and settings.processors.face_processor_active
         ):
             self.active = True
+        # Reduce ORT's long-lived CPU memory arenas so memory is released faster
+        os.environ.setdefault("ORT_DISABLE_MEMORY_ARENA", "1")
         self.model = FaceAnalysis(
             "buffalo_l",
             root=str(settings.general.models_dir),
@@ -186,8 +190,12 @@ class FaceProcessor(MediaProcessor):
         self.model.prepare(ctx_id=-1, det_size=(640, 640))
 
     def unload(self):
-        if self.model:
-            del self.model
+        try:
+            if getattr(self, "model", None) is not None:
+                # Drop references and encourage release of ORT allocations
+                self.model = None
+        finally:
+            gc.collect()
 
     def get_results(self, media_id: int, session):
         return session.exec(

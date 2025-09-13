@@ -443,9 +443,12 @@ def _run_media_processing(task_id: str):
 
                 # end for media in batch
 
-            # Unload Models
+            # Allow processors to unload if they need, but keep instances warm
             for proc in processors:
-                proc.unload()
+                try:
+                    proc.unload()
+                except Exception:
+                    pass
 
             # Finalize Task
             session.refresh(task)  # Get final status before updating

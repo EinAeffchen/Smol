@@ -4,7 +4,7 @@ from cv2.typing import MatLike
 from PIL.ImageFile import ImageFile
 from app.processors.base import MediaProcessor
 from sqlmodel import select, text, or_
-from app.config import settings, model, tokenizer
+from app.config import settings, get_clip_bundle
 from app.api.tags import get_or_create_tag, attach_tag_to_media
 from app.database import safe_commit
 from app.logger import logger
@@ -109,6 +109,8 @@ class AutoTagger(MediaProcessor):
         if custom_tags := os.environ.get("CUSTOM_TAGS"):
             custom_tags_list = [tag.strip() for tag in custom_tags.split(",")]
         tags = list(set(self.default_tags + custom_tags_list))
+        # Use shared CLIP and keep it warm to avoid re-init leaks
+        self._clip_model, _, self._tokenizer = get_clip_bundle()
         self.tag_map = {tag: self._tag_to_vector(tag) for tag in tags}
 
     def unload(self):
@@ -116,10 +118,10 @@ class AutoTagger(MediaProcessor):
         self.tags = []
 
     def _tag_to_vector(self, tag) -> np.ndarray:
-        tokenized_text = tokenizer([tag])
+        tokenized_text = self._tokenizer([tag])
         with torch.no_grad():
             # Encode the tokenized text
-            text_embedding = model.encode_text(tokenized_text)
+            text_embedding = self._clip_model.encode_text(tokenized_text)
             # Normalize the embedding to a unit vector
             text_embedding /= text_embedding.norm(dim=-1, keepdim=True)
         # Return as a NumPy array

@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import TypeVar
 
 import open_clip
+import threading
+import gc
 import yaml
 from pydantic import BaseModel, Field, PlainSerializer, computed_field
 from typing_extensions import Annotated
@@ -476,6 +478,11 @@ def save_settings(settings_model: AppSettings):
 
 
 def get_model(settings: AppSettings):
+    """Create a new OpenCLIP model bundle on CPU.
+
+    Note: This constructs a fresh model; callers should prefer the
+    acquire_clip()/get_clip_bundle() helpers below to reuse a shared instance.
+    """
     model, preprocess, _ = open_clip.create_model_and_transforms(
         settings.ai.clip_model.model_name,
         pretrained=settings.ai.clip_model_pretrained,
@@ -484,6 +491,77 @@ def get_model(settings: AppSettings):
 
     tokenizer = open_clip.get_tokenizer(settings.ai.clip_model.model_name)
     return model, preprocess, tokenizer
+
+
+# ----- Lazy, shared CLIP bundle management -----
+_clip_lock = threading.RLock()
+_clip_model = None
+_clip_preprocess = None
+_clip_tokenizer = None
+_clip_refs = 0
+
+
+def get_clip_bundle():
+    """Return a shared CLIP bundle, loading it lazily if needed.
+
+    Does not change the reference count; use acquire_clip()/release_clip()
+    when you want lifecycle management (e.g., processors and long tasks).
+    """
+    global _clip_model, _clip_preprocess, _clip_tokenizer
+    with _clip_lock:
+        if _clip_model is None:
+            logger.info("Loading OpenCLIP bundle (lazy)...")
+            _clip_model, _clip_preprocess, _clip_tokenizer = get_model(settings)
+        return _clip_model, _clip_preprocess, _clip_tokenizer
+
+
+def acquire_clip():
+    """Acquire a reference to the shared CLIP bundle and return it.
+
+    While at least one reference is held, the bundle remains loaded.
+    """
+    global _clip_refs
+    with _clip_lock:
+        model, preprocess, tokenizer = get_clip_bundle()
+        _clip_refs += 1
+        return model, preprocess, tokenizer
+
+
+def release_clip():
+    """Release a previously acquired CLIP bundle reference.
+
+    When the refcount drops to zero, unload the bundle to free memory.
+    """
+    global _clip_refs, _clip_model, _clip_preprocess, _clip_tokenizer
+    with _clip_lock:
+        if _clip_refs > 0:
+            _clip_refs -= 1
+        if _clip_refs == 0 and _clip_model is not None:
+            logger.info("Releasing OpenCLIP bundle from memory")
+            try:
+                _clip_model = None
+                _clip_preprocess = None
+                _clip_tokenizer = None
+            finally:
+                gc.collect()
+
+
+def _reset_clip_after_settings_change():
+    """Clear the shared CLIP bundle if nothing is using it.
+
+    If references are held, defer reset until they are released.
+    """
+    global _clip_model, _clip_preprocess, _clip_tokenizer
+    with _clip_lock:
+        if _clip_refs == 0:
+            _clip_model = None
+            _clip_preprocess = None
+            _clip_tokenizer = None
+        else:
+            logger.info(
+                "Deferring CLIP reload until current users release it (refs=%s)",
+                _clip_refs,
+            )
 
 
 def reload_settings():
@@ -554,7 +632,8 @@ def reload_settings():
             "Could not reset database engine or run migrations: %s", e
         )
 
-    model, preprocess, tokenizer = get_model(settings)
+    # Invalidate CLIP bundle to reflect possible AI model changes; will reload lazily
+    _reset_clip_after_settings_change()
     try:
         logger.info(
             "Active profile: data_dir=%s smol_dir=%s thumb_dir=%s db_dir=%s",
@@ -569,7 +648,6 @@ def reload_settings():
 
 
 settings = load_settings()
-model, preprocess, tokenizer = get_model(settings)
 logger.info("DATA_DIR: %s", settings.general.data_dir)
 
 vec_name = {

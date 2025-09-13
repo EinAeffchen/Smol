@@ -22,3 +22,13 @@ export const deleteMediaFile = async (mediaId: number) => {
   });
   if (!res.ok) throw new Error("Failed to delete media file");
 };
+
+export const openMediaFolder = async (mediaId: number): Promise<void> => {
+  const res = await fetch(`${API}/api/media/${mediaId}/open-folder`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const msg = await res.text().catch(() => "Failed to open folder");
+    throw new Error(msg || "Failed to open folder");
+  }
+};

@@ -7,7 +7,7 @@ from sqlalchemy import desc, func, text, tuple_
 from sqlmodel import Session, select
 import io
 from PIL import Image
-from app.config import settings, model, tokenizer, preprocess
+from app.config import settings, get_clip_bundle
 from app.database import get_session
 from app.logger import logger
 
@@ -35,19 +35,21 @@ def encode_uploaded_image(image_bytes: bytes) -> np.ndarray:
             status_code=400, detail="Invalid or corrupt image file."
         )
 
+    # Use a shared, persistent CLIP bundle to avoid per-call reinitialization
+    clip_model, preprocess, _ = get_clip_bundle()
     image_transformed = preprocess(image).unsqueeze(0)
-
     with torch.no_grad():
-        image_feat = model.encode_image(image_transformed)
+        image_feat = clip_model.encode_image(image_transformed)
         image_feat /= image_feat.norm(dim=-1, keepdim=True)
 
     return image_feat.squeeze(0).cpu().numpy().tolist()
 
 
 def encode_text_query(query: str) -> np.ndarray:
+    clip_model, _, tokenizer = get_clip_bundle()
     tokenized = tokenizer([query])
     with torch.no_grad():
-        text_feat = model.encode_text(tokenized)
+        text_feat = clip_model.encode_text(tokenized)
     text_feat /= text_feat.norm(dim=-1, keepdim=True)
     return text_feat.squeeze(0).cpu().numpy().tolist()
 

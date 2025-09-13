@@ -27,10 +27,12 @@ import { MediaContentTabs } from "../components/MediaContentTabs";
 
 import { Media, MediaDetail, Tag, Task } from "../types";
 import { getMedia } from "../services/media";
+import { getConfig } from "../services/config";
 import {
   convertMedia,
   deleteMediaRecord,
   deleteMediaFile,
+  openMediaFolder,
 } from "../services/mediaActions";
 import { getTask } from "../services/task";
 
@@ -77,6 +79,7 @@ export default function MediaDetailPage() {
   const [tabValue, setTabValue] = useState(0);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [showSwipeHint, setShowSwipeHint] = useState(false);
+  const [isBinary, setIsBinary] = useState<boolean>(false);
 
   // --- 2. DERIVED DATA & CONTEXT ---
 
@@ -128,6 +131,10 @@ export default function MediaDetailPage() {
       setDetail({ media: currentPreloaded, persons: [], orphans: [] });
     }
     fetchDetail(controller.signal);
+    // Load app configuration to determine if running as binary
+    getConfig()
+      .then((cfg) => setIsBinary(!!cfg.general.is_binary))
+      .catch(() => setIsBinary(false));
     return () => controller.abort();
   }, [id, location.key, fetchDetail]);
 
@@ -420,6 +427,18 @@ export default function MediaDetailPage() {
                     onOpenDialog={setDialogType}
                     onToggleExif={() => setTabValue(3)}
                     showExif={tabValue === 3}
+                    isBinary={isBinary}
+                    onOpenFolder={async (mediaId) => {
+                      try {
+                        await openMediaFolder(mediaId);
+                      } catch (e: any) {
+                        setSnackbar({
+                          open: true,
+                          message: e?.message || "Failed to open folder",
+                          severity: "error",
+                        });
+                      }
+                    }}
                   />
                   <MediaDisplay media={detail.media} />
                 </Box>
