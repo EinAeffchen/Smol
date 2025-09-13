@@ -4,7 +4,6 @@ from enum import Enum
 from pathlib import Path
 from typing import TypeVar
 
-import open_clip
 import threading
 import gc
 import yaml
@@ -483,6 +482,7 @@ def get_model(settings: AppSettings):
     Note: This constructs a fresh model; callers should prefer the
     acquire_clip()/get_clip_bundle() helpers below to reuse a shared instance.
     """
+    import open_clip
     model, preprocess, _ = open_clip.create_model_and_transforms(
         settings.ai.clip_model.model_name,
         pretrained=settings.ai.clip_model_pretrained,

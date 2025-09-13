@@ -6,7 +6,6 @@ from pathlib import Path
 
 import numpy as np
 from cv2.typing import MatLike
-from insightface.app import FaceAnalysis
 from PIL import Image, ImageOps
 from PIL.ImageFile import ImageFile
 from sqlmodel import select, text
@@ -179,6 +178,8 @@ class FaceProcessor(MediaProcessor):
             self.active = True
         # Reduce ORT's long-lived CPU memory arenas so memory is released faster
         os.environ.setdefault("ORT_DISABLE_MEMORY_ARENA", "1")
+        # Import InsightFace lazily to speed up application startup
+        from insightface.app import FaceAnalysis
         self.model = FaceAnalysis(
             "buffalo_l",
             root=str(settings.general.models_dir),

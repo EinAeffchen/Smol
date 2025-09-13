@@ -3,10 +3,11 @@ from app.logger import logger
 
 # Explicit imports ensure PyInstaller bundles these modules
 # and avoids relying on filesystem scanning at runtime.
-from app.processors.exif import ExifProcessor
-from app.processors.embedding_extractor import EmbeddingExtractor
-from app.processors.faces import FaceProcessor
-from app.processors.auto_tagger import AutoTagger
+"""
+Import heavy processors lazily inside load_processors to improve startup time.
+PyInstaller bundles the whole 'app' package via main.spec (collect_submodules),
+so dynamic imports here remain safe in binaries.
+"""
 
 processors: list[MediaProcessor] = []
 
@@ -25,7 +26,12 @@ def load_processors() -> list[MediaProcessor]:
     if processors:
         return processors
 
-    # Keep order stable by class 'order' attribute
+    # Lazy import to avoid importing heavy deps (torch/onnx) on startup
+    from app.processors.exif import ExifProcessor
+    from app.processors.embedding_extractor import EmbeddingExtractor
+    from app.processors.faces import FaceProcessor
+    from app.processors.auto_tagger import AutoTagger
+
     known_processor_classes: list[type[MediaProcessor]] = [
         ExifProcessor,
         EmbeddingExtractor,

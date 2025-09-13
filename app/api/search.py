@@ -1,7 +1,6 @@
 import json
 
 import numpy as np
-import torch
 from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from sqlalchemy import desc, func, text, tuple_
 from sqlmodel import Session, select
@@ -36,6 +35,8 @@ def encode_uploaded_image(image_bytes: bytes) -> np.ndarray:
         )
 
     # Use a shared, persistent CLIP bundle to avoid per-call reinitialization
+    # Lazy import torch to avoid heavy import cost during app boot
+    import torch
     clip_model, preprocess, _ = get_clip_bundle()
     image_transformed = preprocess(image).unsqueeze(0)
     with torch.no_grad():
@@ -46,6 +47,8 @@ def encode_uploaded_image(image_bytes: bytes) -> np.ndarray:
 
 
 def encode_text_query(query: str) -> np.ndarray:
+    # Lazy import torch to avoid heavy import cost during app boot
+    import torch
     clip_model, _, tokenizer = get_clip_bundle()
     tokenized = tokenizer([query])
     with torch.no_grad():

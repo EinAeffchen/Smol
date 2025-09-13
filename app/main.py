@@ -12,6 +12,8 @@ from pathlib import Path
 os.environ["QT_API"] = "pyside6"
 import uvicorn
 import webview
+import socket
+import socket
 from alembic.config import Config
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Response
@@ -379,34 +381,66 @@ if __name__ == "__main__":
     except Exception:
         # Non-fatal: alembic/env.py and database hooks will also attempt to set this
         pass
-    run_migrations()
-    # 2. Start the Uvicorn server in a separate thread
-    # server_thread = threading.Thread(target=start_server)
-    # server_thread.daemon = (
-    #    True  # This allows the main thread to exit and kill the server
-    # )
-    # server_thread.start()
-    base_path = sys._MEIPASS
-    print(f"Base path (_MEIPASS): {base_path}")
-    # 3. Create and start the pywebview window
-    # This is a blocking call and will run until the window is closed
-    server_thread = threading.Thread(target=run_server)
-    server_thread.start()
+    # Show the window immediately with a lightweight loading page
+    loading_html = """
+    <html>
+      <head>
+        <meta charset='utf-8' />
+        <title>Smol</title>
+        <style>
+          body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0b0b0c; color:#e6e6e6; }
+          .wrap { height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px; }
+          .spinner { width:48px; height:48px; border:4px solid #2d2f36; border-top-color:#6aa3ff; border-radius:50%; animation:spin 1s linear infinite; }
+          @keyframes spin { to { transform: rotate(360deg); } }
+          .sub { color:#9aa0a6; font-size:14px; }
+        </style>
+      </head>
+      <body>
+        <div class='wrap'>
+          <div class='spinner'></div>
+          <div>Starting Smol…</div>
+          <div class='sub'>Preparing database and services</div>
+        </div>
+      </body>
+    </html>
+    """
 
-    # Create the pywebview window
     window = webview.create_window(
         "Smol",
-        "http://127.0.0.1:8123",  # Point to the URL
+        html=loading_html,
         width=1280,
         height=720,
     )
 
-    # Register the shutdown function to be called when the window is closed
+    def _boot_and_switch():
+        logger.info("Boot: running migrations…")
+        # Run migrations first (may take time on first launch)
+        try:
+            run_migrations()
+        except Exception as e:
+            logger.error("Migrations failed: %s", e)
+        logger.info("Boot: starting server thread…")
+        # Start the Uvicorn server in background
+        server_thread = threading.Thread(target=run_server, daemon=True)
+        server_thread.start()
+        logger.info("Boot: waiting for server to become reachable…")
+        # Wait until server is reachable, then switch the window to the app URL
+        host, port = "127.0.0.1", 8123
+        deadline = time.time() + 120
+        while time.time() < deadline:
+            try:
+                with socket.create_connection((host, port), timeout=0.5):
+                    break
+            except OSError:
+                time.sleep(0.25)
+        logger.info("Boot: server reachable, loading app UI")
+        try:
+            window.load_url(f"http://{host}:{port}")
+        except Exception:
+            pass
+
+    threading.Thread(target=_boot_and_switch, daemon=True).start()
+
+    # Register shutdown and enter UI loop immediately
     window.events.closed += shutdown
-
-    webview.start(debug=True)
-
-    # Wait for the server thread to finish before exiting the script
-    print("Waiting for server thread to close...")
-    server_thread.join()
-    print("Application shut down cleanly.")
+    webview.start()
