@@ -32,14 +32,14 @@ logger = setup_logger()
 
 def configure_file_logging(
     log_dir,
-    filename: str = "smol.log",
+    filename: str = "omoide.log",
     max_bytes: int = 5 * 1024 * 1024,
     backup_count: int = 5,
 ):
     """Add a rotating file handler for persistent logs.
 
     - log_dir: directory to place the log file in
-    - filename: log file name (default: smol.log)
+    - filename: log file name (default: omoide.log)
     - max_bytes: rotate after this many bytes
     - backup_count: number of rotated files to keep
 
@@ -55,7 +55,10 @@ def configure_file_logging(
             for h in lg.handlers:
                 if isinstance(h, RotatingFileHandler):
                     try:
-                        if Path(getattr(h, "baseFilename", "")).resolve() == log_file:
+                        if (
+                            Path(getattr(h, "baseFilename", "")).resolve()
+                            == log_file
+                        ):
                             return True
                     except Exception:
                         continue
@@ -64,7 +67,10 @@ def configure_file_logging(
         if not _has_handler(logger):
             fmt = "%(asctime)s %(name)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s"
             fh = RotatingFileHandler(
-                os.fspath(log_file), maxBytes=max_bytes, backupCount=backup_count, encoding="utf-8"
+                os.fspath(log_file),
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding="utf-8",
             )
             fh.setLevel(logging.DEBUG)
             fh.setFormatter(logging.Formatter(fmt))

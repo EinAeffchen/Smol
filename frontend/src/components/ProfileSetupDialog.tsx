@@ -32,7 +32,7 @@ import {
 import { getActiveTasks } from "../services/taskActions";
 import type { AppConfig, ProfileListResponse } from "../types";
 
-const LS_KEY = "smol.profile.onboarding.v1";
+const LS_KEY = "omoide.profile.onboarding.v1";
 
 export default function ProfileSetupDialog() {
   const [open, setOpen] = useState(false);
@@ -194,7 +194,7 @@ export default function ProfileSetupDialog() {
               {!hasMultiple ? (
                 <>
                   <Typography>
-                    Choose where to store Smol’s data profile. If you’re unsure,
+                    Choose where to store omoide’s data profile. If you’re unsure,
                     keep the default location. You can change this later in Configuration.
                   </Typography>
                   <Box>

@@ -240,7 +240,7 @@ def _resolve_version():
     return _dt.now().strftime('%Y.%m.%d')
 
 APP_VERSION = _resolve_version()
-APP_NAME = f"Smol-{APP_VERSION}"
+APP_NAME = f"omoide-{APP_VERSION}"
 
 a = Analysis(
     ['app/main.py'],
@@ -272,6 +272,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name=APP_NAME,
+    icon=frontend/public/brand/favicon.ico,
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

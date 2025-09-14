@@ -212,7 +212,7 @@ export interface AppConfig {
     thumb_dir_folder_size: number;
     data_dir: string;
     database_dir: string;
-    smol_dir: string;
+    omoide_dir: string;
     thumb_dir: string;
     media_dirs: string[];
     static_dir: string;

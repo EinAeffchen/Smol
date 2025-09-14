@@ -44,8 +44,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 # Further ENV VARS for application
 ENV SQLITE_VEC_PATH=/usr/local/lib/python3.12/site-packages/sqlite_vec/vec0.so
-ENV HF_HOME=${DATA_DIR}/.smol/models \
-    TORCH_HOME=${DATA_DIR}/.smol/models 
+ENV HF_HOME=${DATA_DIR}/.omoide/models \
+    TORCH_HOME=${DATA_DIR}/.omoide/models 
 
 # --- OPTIMIZED LAYER ORDER ---
 

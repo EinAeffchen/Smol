@@ -26,9 +26,7 @@ import ThemeToggleButton from "../components/ThemeToggleButton";
 import { searchByImage } from "../services/searchActions";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import config from "../config";
-import { API } from "../config";
-
-const logoUrl = `${API}/static/logo.png`;
+import { useTheme } from "@mui/material/styles";
 
 const StyledNavLink = styled(RouterNavLink)(({ theme }) => ({
   color: theme.palette.text.primary,
@@ -55,6 +53,9 @@ function MobileDrawer({
   onClose: () => void;
   navItems: [string, string][];
 }) {
+  const theme = useTheme();
+  const base = import.meta.env.BASE_URL || "/";
+  const wordmarkSrc = `${base}brand/omoide_header_${theme.palette.mode}.png`;
   return (
     <Drawer
       anchor="right"
@@ -72,12 +73,7 @@ function MobileDrawer({
     >
       <Box sx={{ p: 1, display: "flex", alignItems: "center" }}>
         <Link to="/" onClick={onClose}>
-          <Box
-            component="img"
-            src={logoUrl}
-            alt="SMOL logo"
-            sx={{ height: 40 }}
-          />
+          <Box component="img" src={wordmarkSrc} alt="omoide" sx={{ width: 160, height: "auto" }} />
         </Link>
       </Box>
       <Divider />
@@ -112,6 +108,9 @@ function MobileDrawer({
 }
 
 export function Header() {
+  const theme = useTheme();
+  const base = import.meta.env.BASE_URL || "/";
+  const wordmarkSrc = `${base}brand/omoide_header_${theme.palette.mode}.png`;
   const [isControlPanelOpen, setIsControlPanelOpen] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
@@ -173,15 +172,15 @@ export function Header() {
       <Link to="/">
         <Box
           component="img"
-          src={logoUrl}
-          alt="SMOL logo"
-          sx={{ height: 48, display: { xs: "none", sm: "block" }, mr: 2 }}
+          src={wordmarkSrc}
+          alt="omoide logo"
+          sx={{ width: 180, height: "auto", display: { xs: "none", sm: "block" }, mr: 2 }}
         />
         <Box
           component="img"
-          src={logoUrl}
-          alt="SMOL logo"
-          sx={{ height: 40, display: { xs: "block", sm: "none" } }}
+          src={wordmarkSrc}
+          alt="omoide logo"
+          sx={{ width: 150, height: "auto", display: { xs: "block", sm: "none" } }}
         />
       </Link>
 

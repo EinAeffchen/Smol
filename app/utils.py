@@ -1,6 +1,7 @@
 import json
 import os
 from collections.abc import Iterable
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Literal
@@ -59,21 +60,85 @@ def get_image_taken_date(img_path: Path | None = None) -> datetime:
     return alt_time
 
 
-def process_file(filepath: Path) -> Media | None:
-    """Reads metadata from the file and generates a thumbnail"""
+def _ffprobe_json(path: Path, timeout: int = 15) -> dict | None:
+    """Run ffprobe with a timeout and return parsed JSON, or None on failure.
+
+    Using subprocess directly allows us to enforce a timeout to avoid hangs
+    on corrupted or tricky media files.
+    """
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-print_format",
+        "json",
+        "-show_format",
+        "-show_streams",
+        os.fspath(path),
+    ]
     try:
-        probe = ffmpeg.probe(filepath)
-    except Exception:
-        logger.error("Can't process %s", filepath)
-        return
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "ffprobe failed for %s: %s", path, result.stderr.strip()
+            )
+            return None
+        return json.loads(result.stdout or "{}")
+    except subprocess.TimeoutExpired:
+        logger.error("ffprobe timeout for %s after %ss", path, timeout)
+        return None
+    except Exception as e:
+        logger.error("ffprobe exception for %s: %s", path, e)
+        return None
+
+
+def process_file(filepath: Path) -> Media | None:
+    """Reads metadata from the file and prepares a Media record.
+
+    Adds timeouts to external probing to avoid hangs.
+    """
     size = os.path.getsize(filepath)
-    if filepath.suffix.lower() in settings.scan.VIDEO_SUFFIXES:
-        duration = float(probe["format"].get("duration", 0))
+    suffix = filepath.suffix.lower()
+
+    duration: float | None = None
+    width: int | None = None
+    height: int | None = None
+
+    if suffix in settings.scan.VIDEO_SUFFIXES:
+        # Prefer ffprobe with a timeout for videos
+        probe = _ffprobe_json(filepath, timeout=15)
+        if probe:
+            try:
+                duration = float(probe.get("format", {}).get("duration", 0))
+            except Exception:
+                duration = 0.0
+            try:
+                vs = [
+                    s for s in probe.get("streams", []) if s.get("codec_type") == "video"
+                ]
+                if vs:
+                    width = int(vs[0].get("width") or 0) or None
+                    height = int(vs[0].get("height") or 0) or None
+            except Exception:
+                width = width or None
+                height = height or None
+        else:
+            logger.warning("Skipping video probe metadata for %s", filepath)
     else:
-        duration = None
-    vs = [s for s in probe["streams"] if s.get("codec_type") == "video"]
-    width = int(vs[0]["width"]) if vs else None
-    height = int(vs[0]["height"]) if vs else None
+        # Images: avoid ffprobe entirely; use PIL for dimensions if possible
+        try:
+            with Image.open(filepath) as im:
+                width, height = im.size
+        except UnidentifiedImageError:
+            logger.warning("Skipping %s, not an image!", filepath)
+        except OSError as e:
+            logger.warning("Image %s could not be opened: %s", filepath, e)
+
     media = Media(
         path=str(filepath),
         filename=filepath.name,
@@ -162,12 +227,41 @@ def generate_thumbnail(media: Media) -> str | None:
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
     if filepath.suffix.lower() in settings.scan.VIDEO_SUFFIXES:
-        (
-            ffmpeg.input(str(filepath), ss=1)
-            .filter("scale", 360, -1)
-            .output(str(thumb_path), vframes=1)
-            .run(quiet=True, overwrite_output=True)
-        )
+        # Use direct subprocess to enforce a timeout; skip on failure
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-ss",
+            "1",
+            "-i",
+            os.fspath(filepath),
+            "-vf",
+            "scale=360:-1",
+            "-vframes",
+            "1",
+            "-y",
+            os.fspath(thumb_path),
+        ]
+        try:
+            subprocess.run(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=20,
+                check=True,
+            )
+        except subprocess.TimeoutExpired:
+            logger.error(
+                "ffmpeg timed out generating thumbnail for %s (20s)", filepath
+            )
+            return None
+        except subprocess.CalledProcessError as e:
+            logger.error(
+                "ffmpeg failed to generate thumbnail for %s: %s", filepath, e
+            )
+            return None
     else:
         try:
             fix_image_rotation(filepath)

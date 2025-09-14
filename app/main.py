@@ -386,7 +386,7 @@ if __name__ == "__main__":
     <html>
       <head>
         <meta charset='utf-8' />
-        <title>Smol</title>
+        <title>omoide</title>
         <style>
           body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:#0b0b0c; color:#e6e6e6; }
           .wrap { height:100vh; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:16px; }
@@ -398,7 +398,7 @@ if __name__ == "__main__":
       <body>
         <div class='wrap'>
           <div class='spinner'></div>
-          <div>Starting Smol…</div>
+          <div>Starting omoide…</div>
           <div class='sub'>Preparing database and services</div>
         </div>
       </body>
@@ -406,7 +406,7 @@ if __name__ == "__main__":
     """
 
     window = webview.create_window(
-        "Smol",
+        "omoide",
         html=loading_html,
         width=1280,
         height=720,

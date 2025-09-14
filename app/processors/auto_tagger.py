@@ -156,10 +156,10 @@ class AutoTagger(MediaProcessor):
         raw_media_embedding_bytes = session.exec(sql).first()
         if not raw_media_embedding_bytes:
             logger.warning(
-                "No embedding found for %s, can't apply auto tagging",
+                "AutoTagger: No embedding found for %s, skipping auto-tagging for this item",
                 media.path,
             )
-            return
+            return True
         
         media_embedding = np.frombuffer(raw_media_embedding_bytes[0], dtype=np.float32)
         for tag, tag_vector in self.tag_map.items():

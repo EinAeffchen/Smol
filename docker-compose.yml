@@ -1,7 +1,7 @@
 services:
-  smol:
-    image: einaeffchen2/smol
-    container_name: smol
+  omoide:
+    image: einaeffchen2/omoide
+    container_name: omoide
     ports:
       - "${PORT}:8123"
     # entrypoint: ["tail","-f", "/dev/null"]
@@ -11,6 +11,6 @@ services:
     # /local/photo/folder:/app/media/photos
     volumes:
       - ${HOST_MEDIA_DIR}:/app/media
-      - /mnt/d/GooglePhotos:/app/media/Google #/mnt/d/GooglePhotos
+      # - /mnt/d/GooglePhotos:/app/media/Google #/mnt/d/GooglePhotos
       - ${HOST_DATA_DIR}:/app/data
     restart: unless-stopped

@@ -129,7 +129,7 @@ dmypy.json
 .pyre/
 *.Zone.Identifier
 
-smol.db
+omoide.db
 .venv
 .env
 **/viewer/images
@@ -139,7 +139,8 @@ app/models/*.tar
 app/models/*.txt
 node_modules/
 .locks/
-smol_tst/
-smol.env
+omoide_tst/
+omoide.env
 .gemini
 .aider*
+.data

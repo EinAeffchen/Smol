@@ -40,7 +40,7 @@ class EmbeddingExtractor(MediaProcessor):
         try:
             img_tensor = self._preprocess(media_obj).unsqueeze(0)
         except OSError as e:
-            logger.warning("Failed processing because %s", e)
+            logger.error("EmbeddingExtractor: failed to preprocess image for %s due to %s", getattr(media_obj, 'filename', 'image'), e)
             return False
         with torch.no_grad():
             img_features = self._clip_model.encode_image(img_tensor)
@@ -65,7 +65,7 @@ class EmbeddingExtractor(MediaProcessor):
             if isinstance(scene, ImageFile):
                 embedding = self._get_embedding(scene)
                 if not embedding:
-                    logger.warning("FAILED ON %s", media.path)
+                    logger.error("EmbeddingExtractor: model returned empty embedding for %s", media.path)
                     delete_media_record(media.id, session)
                     safe_commit(session)
                     return False

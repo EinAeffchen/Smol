@@ -7,7 +7,6 @@ from sqlalchemy import engine_from_config, event, pool
 
 from alembic import context
 from app.config import settings
-from app.logger import logger
 from app.models import SQLModel
 
 # this is the Alembic Config object, which provides
@@ -16,7 +15,7 @@ config = context.config
 
 config.set_main_option(
     "sqlalchemy.url",
-    f"sqlite:///{settings.general.data_dir}/database/smol.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL",
+    f"sqlite:///{settings.general.data_dir}/database/omoide.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL",
 )
 
 # Interpret the config file for Python logging.

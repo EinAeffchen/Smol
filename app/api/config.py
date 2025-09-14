@@ -109,7 +109,7 @@ def profile_health():
     # Check for presence of a database file in the currently running settings
     # (which reflect the active profile at runtime)
     try:
-        db_file = Path(settings.general.database_dir) / "smol.db"
+        db_file = Path(settings.general.database_dir) / "omoide.db"
         has_db = db_file.exists()
     except Exception:
         has_db = False
@@ -154,15 +154,15 @@ class SwitchProfileRequest(BaseModel):
 
 
 def _sanitize_profile_path(p: Path) -> Path:
-    """Ensure chosen profile roots are not inside an internal '.smol' directory.
+    """Ensure chosen profile roots are not inside an internal '.omoide' directory.
 
-    If a user accidentally picks a path containing a '.smol' segment, lift the
-    profile root out of that internal directory to prevent nested '.smol'
-    folders such as 'E:\\ .smol \\ test \\.smol\\thumbnails'.
+    If a user accidentally picks a path containing a '.omoide' segment, lift the
+    profile root out of that internal directory to prevent nested '.omoide'
+    folders such as 'E:\\ .omoide \\ test \\.omoide\\thumbnails'.
     """
     parts = list(p.parts)
-    if ".smol" in parts:
-        i = parts.index(".smol")
+    if ".omoide" in parts:
+        i = parts.index(".omoide")
         try:
             p = Path(*parts[:i], *parts[i + 1 :])
         except Exception:
@@ -197,7 +197,7 @@ def switch_profile(req: SwitchProfileRequest):
             for k in [
                 "data_dir",
                 "database_dir",
-                "smol_dir",
+                "omoide_dir",
                 "thumb_dir",
                 "models_dir",
                 "static_dir",
@@ -273,7 +273,7 @@ def create_profile(req: CreateProfileRequest):
         for k in [
             "data_dir",
             "database_dir",
-            "smol_dir",
+            "omoide_dir",
             "thumb_dir",
             "models_dir",
             "static_dir",

@@ -18,7 +18,7 @@ IS_DOCKER = os.getenv("IS_DOCKER", False)
 
 # ----- Bootstrap/profile management -----
 def get_os_app_config_dir() -> Path:
-    """Returns the OS-specific config directory for Smol.
+    """Returns the OS-specific config directory for omoide.
 
     This is the stable location for bootstrap.yaml that remembers
     which profile (data directory) is active.
@@ -28,7 +28,7 @@ def get_os_app_config_dir() -> Path:
         or os.getenv("XDG_CONFIG_HOME")
         or Path.home() / ".config"
     )
-    d = base / "Smol"
+    d = base / "omoide"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -224,13 +224,13 @@ class GeneralSettings(BaseModel):
 
     @computed_field
     @property
-    def smol_dir(self) -> Path:
-        return self.data_dir / ".smol"
+    def omoide_dir(self) -> Path:
+        return self.data_dir / ".omoide"
 
     @computed_field
     @property
     def thumb_dir(self) -> Path:
-        return self.smol_dir / "thumbnails"
+        return self.omoide_dir / "thumbnails"
 
     # only relevant when run as binary
     media_dirs: list[Path] = []
@@ -239,20 +239,20 @@ class GeneralSettings(BaseModel):
     @computed_field
     @property
     def models_dir(self) -> Path:
-        return self.smol_dir / "models"
+        return self.omoide_dir / "models"
 
     @computed_field
     @property
     def database_url(self) -> str:
         return (
-            f"sqlite:///{self.database_dir}/smol.db?cache=shared&mode=rwc"
+            f"sqlite:///{self.database_dir}/omoide.db?cache=shared&mode=rwc"
             f"&_journal_mode=WAL&_synchronous=NORMAL"
         )
 
     def model_post_init(self, context) -> None:
         # Ensure required directories exist based on current data_dir
         self.database_dir.mkdir(parents=True, exist_ok=True)
-        self.smol_dir.mkdir(parents=True, exist_ok=True)
+        self.omoide_dir.mkdir(parents=True, exist_ok=True)
         self.thumb_dir.mkdir(parents=True, exist_ok=True)
         self.models_dir.mkdir(parents=True, exist_ok=True)
         if IS_DOCKER:
@@ -442,7 +442,7 @@ def _sanitize_for_save(settings_model: AppSettings) -> dict:
     """Return a dict for config.yaml that excludes derived fields and enforces
     data_dir from the active bootstrap profile.
 
-    We avoid persisting computed paths (database_dir, smol_dir, thumb_dir,
+    We avoid persisting computed paths (database_dir, omoide_dir, thumb_dir,
     models_dir, static_dir, database_url) and the mutable data_dir itself.
     On load, data_dir always derives from the active profile in bootstrap.
     """
@@ -453,7 +453,7 @@ def _sanitize_for_save(settings_model: AppSettings) -> dict:
     for k in [
         "data_dir",
         "database_dir",
-        "smol_dir",
+        "omoide_dir",
         "thumb_dir",
         "models_dir",
         "static_dir",
@@ -582,7 +582,7 @@ def reload_settings():
     # Ensure required directories exist for the (possibly new) data_dir
     try:
         new_settings.general.database_dir.mkdir(parents=True, exist_ok=True)
-        new_settings.general.smol_dir.mkdir(parents=True, exist_ok=True)
+        new_settings.general.omoide_dir.mkdir(parents=True, exist_ok=True)
         new_settings.general.thumb_dir.mkdir(parents=True, exist_ok=True)
         new_settings.general.models_dir.mkdir(parents=True, exist_ok=True)
     except Exception as e:
@@ -639,9 +639,9 @@ def reload_settings():
     _reset_clip_after_settings_change()
     try:
         logger.info(
-            "Active profile: data_dir=%s smol_dir=%s thumb_dir=%s db_dir=%s",
+            "Active profile: data_dir=%s omoide_dir=%s thumb_dir=%s db_dir=%s",
             settings.general.data_dir,
-            settings.general.smol_dir,
+            settings.general.omoide_dir,
             settings.general.thumb_dir,
             settings.general.database_dir,
         )

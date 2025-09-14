@@ -1,13 +1,13 @@
 # SHELL := /usr/bin/bash
 # .SHELLFLAGS := -ec
 
-ENV_FILE ?= smol.env
+ENV_FILE ?= omoide.env
 
 DOCKER_TARGETS := docker-start docker-down push
 
 ifneq (,$(filter $(DOCKER_TARGETS),$(MAKECMDGOALS)))
 	ifndef ENV_FILE
-		ENV_FILE := smol.env
+		ENV_FILE := omoide.env
 	endif
 endif
 
@@ -35,18 +35,18 @@ docker-start:
 
 docker-down:
 	@echo "--- Using Docker environment from $(ENV_FILE) ---"
-	@test -n "$(HOST_MEDIA_DIR)" || (echo "HOST_MEDIA_DIR from smol.env is not set"; exit 1)
+	@test -n "$(HOST_MEDIA_DIR)" || (echo "HOST_MEDIA_DIR from omoide.env is not set"; exit 1)
 	PUID=$(shell id -u) PGID=$(shell id -g) docker compose down
 
 backup:
-	sqlite3 ".backup ${HOST_DATA_DIR}/smol.db '${HOST_MEDIA_DIR}/db.backup'"
+	sqlite3 ".backup ${HOST_DATA_DIR}/omoide.db '${HOST_MEDIA_DIR}/db.backup'"
 
 build-image:
-	docker build -t smol .
-	docker tag smol einaeffchen2/smol
+	docker build -t omoide .
+	docker tag omoide einaeffchen2/omoide
 
 push: build-image
-	docker push einaeffchen2/smol
+	docker push einaeffchen2/omoide
 
 alembic-generate:
 	echo ${DATA_DIR}

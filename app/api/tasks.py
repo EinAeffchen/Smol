@@ -330,7 +330,20 @@ def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
                     proc.name,
                     media.path,
                 )
-                return False  # Stop processing this media item on failure
+                # Mark this item as processed to avoid infinite re-queue loops.
+                # We conservatively set the downstream flags so the batch query
+                # won't keep selecting this media again and stall on the last batch.
+                logger.error(
+                    "Marking media %s as processed after '%s' failure to prevent re-queue; please investigate logs above.",
+                    media.id,
+                    proc.name,
+                )
+                media.faces_extracted = True
+                media.ran_auto_tagging = True
+                media.embeddings_created = True
+                session.add(media)
+                safe_commit(session)
+                return True
         except Exception as e:
             logger.exception(
                 "Processor '%s' raised an exception on media %s: %s",
@@ -338,7 +351,18 @@ def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
                 media.path,
                 e,
             )
-            return False
+            # Same protective behavior on unexpected exceptions
+            logger.error(
+                "Marking media %s as processed after exception in '%s' to prevent re-queue; please investigate stack above.",
+                media.id,
+                proc.name,
+            )
+            media.faces_extracted = True
+            media.ran_auto_tagging = True
+            media.embeddings_created = True
+            session.add(media)
+            safe_commit(session)
+            return True
     return True
 
 
@@ -1135,70 +1159,74 @@ def _clean_missing_files(task_id: str):
 
 
 def _run_scan(task_id: str):
+    """Scan media directories and stream inserts to DB in small commits.
+
+    This avoids holding large in-memory lists and keeps progress updates
+    responsive for very large libraries.
+    """
+    # 1) Mark task running
     with Session(db.engine) as sess:
         task = sess.get(ProcessingTask, task_id)
-
         if not task:
             logger.error("Task %s not found.", task_id)
             return
-
         task.status = "running"
         task.started_at = datetime.now()
         safe_commit(sess)
 
-        known_files = set(sess.exec(select(Media.path)).all())
-        logger.debug(list(known_files)[:5])
-    media_paths = []
-    for media_dir in settings.general.media_dirs:
-        for root, dirs, files in tqdm(
-            os.walk(media_dir, topdown=True, followlinks=True)
-        ):
-            if ".smol" in dirs:
-                dirs.remove(".smol")
+    # Helper to iterate all candidate files
+    def walk_candidates():
+        for media_dir in settings.general.media_dirs:
+            for root, dirs, files in os.walk(
+                media_dir, topdown=True, followlinks=True
+            ):
+                if ".omoide" in dirs:
+                    dirs.remove(".omoide")
+                for fname in files:
+                    suffix = Path(fname).suffix.lower()
+                    if (
+                        suffix
+                        not in settings.scan.VIDEO_SUFFIXES
+                        + settings.scan.IMAGE_SUFFIXES
+                    ):
+                        continue
+                    yield (Path(root) / fname).resolve()
 
-            for fname in files:
-                suffix = Path(fname).suffix.lower()
-                full = (Path(root) / fname).resolve()
-                if (
-                    suffix
-                    not in settings.scan.VIDEO_SUFFIXES
-                    + settings.scan.IMAGE_SUFFIXES
-                ):
-                    continue
-                if str(full) not in known_files:
-                    media_paths.append(full)
-                    known_files.add(str(full))
-
-    logger.info("Found %s new files", len(media_paths))
-
+    # 2) Fast pre-count: estimate total new items without storing them all
+    #    Commit/update only every N to reduce DB churn on huge scans.
+    BATCH_COMMIT = 100
+    new_total = 0
+    new_since_update = 0
     with Session(db.engine) as sess:
-        task = sess.merge(task)
-        task.total = len(media_paths)
-        logger.info("Set total to %s", task.total)
+        task = sess.get(ProcessingTask, task_id)
+        for path in walk_candidates():
+            exists = sess.exec(
+                select(Media.id).where(Media.path == str(path)).limit(1)
+            ).first()
+            if exists:
+                continue
+            new_total += 1
+            new_since_update += 1
+            if new_since_update >= BATCH_COMMIT:
+                task.total = new_total
+                sess.add(task)
+                safe_commit(sess)
+                new_since_update = 0
+        # Finalize total
+        task.total = new_total
+        sess.add(task)
         safe_commit(sess)
 
-        if not media_paths:
+    if new_total == 0:
+        with Session(db.engine) as sess:
+            task = sess.get(ProcessingTask, task_id)
             task.status = "completed"
             task.finished_at = datetime.now(timezone.utc)
-            logger.info("No new files to process. Scan finished.")
             safe_commit(sess)
-            return
+        logger.info("No new files to process. Scan finished.")
+        return
 
-    medias_to_add: list[Media] = list()
-    for i, filepath in tqdm(enumerate(media_paths, 1)):
-        if i % 100 == 0:
-            with Session(db.engine) as sess:
-                task = sess.get(ProcessingTask, task_id)
-                task.processed += 100
-                task = sess.merge(task)
-                if task and task.status == "cancelled":
-                    break
-                safe_commit(sess)
-
-        media_obj = process_file(filepath)
-        if media_obj:
-            medias_to_add.append(media_obj)
-
+    # 3) Insert/process in a streaming fashion under heavy-writer lock
     def is_cancelled() -> bool:
         with Session(db.engine) as s:
             t = s.get(ProcessingTask, task_id)
@@ -1206,23 +1234,70 @@ def _run_scan(task_id: str):
 
     with heavy_writer(name="scan", cancelled=is_cancelled):
         with Session(db.engine) as sess:
-            task = sess.merge(task)
-            sess.add_all(medias_to_add)
-            sess.flush(medias_to_add)
-            broken_files = []
-            for media in medias_to_add:
-                thumbnail_path = generate_thumbnail(media)
-                if not thumbnail_path:
-                    broken_files.append(thumbnail_path)
+            task = sess.get(ProcessingTask, task_id)
+            processed = task.processed or 0
+            batch_since_commit = 0
+
+            for filepath in walk_candidates():
+                # Re-check cancellation frequently
+                sess.refresh(task, attribute_names=["status"])  # cheap
+                if task.status == "cancelled":
+                    logger.info("Scan cancelled by user.")
+                    # Commit any pending batch before finalizing status
+                    if batch_since_commit > 0:
+                        task.processed = processed
+                        sess.add(task)
+                        safe_commit(sess)
+                        batch_since_commit = 0
+                    break
+
+                # Skip if already in DB (unique constraint friendly)
+                exists = sess.exec(
+                    select(Media.id).where(Media.path == str(filepath)).limit(1)
+                ).first()
+                if exists:
                     continue
-                media.thumbnail_path = thumbnail_path
-            for broken_media in broken_files:
-                sess.delete(broken_media)
-            task.processed = len(medias_to_add)
+
+                media_obj = process_file(filepath)
+                if not media_obj:
+                    # Could not probe/process – do not count as processed
+                    continue
+
+                # Insert and flush to get an ID for thumbnail filename
+                sess.add(media_obj)
+                sess.flush()  # assigns media_obj.id
+
+                thumb = generate_thumbnail(media_obj)
+                if not thumb:
+                    # Remove the record if we failed to thumbnail
+                    try:
+                        sess.delete(media_obj)
+                    except Exception:
+                        pass
+                    safe_commit(sess)
+                    continue
+
+                media_obj.thumbnail_path = thumb
+                sess.add(media_obj)
+
+                processed += 1
+                batch_since_commit += 1
+                if batch_since_commit >= BATCH_COMMIT:
+                    task.processed = processed
+                    sess.add(task)
+                    safe_commit(sess)
+                    batch_since_commit = 0
+
+            # Finalize
+            sess.refresh(task)
             task.status = (
                 "completed" if task.status != "cancelled" else "cancelled"
             )
             task.finished_at = datetime.now(timezone.utc)
+            sess.add(task)
+            # Final commit with any remaining items in the last partial batch
+            if batch_since_commit > 0:
+                task.processed = processed
             safe_commit(sess)
 
 
