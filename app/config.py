@@ -82,8 +82,38 @@ def get_user_data_path() -> Path:
     active = bootstrap.get("active_profile")
     if active:
         p = Path(active)
-        p.mkdir(parents=True, exist_ok=True)
-        return p
+        try:
+            p.mkdir(parents=True, exist_ok=True)
+            return p
+        except Exception as e:
+            # If the configured profile path is unavailable (e.g., missing drive
+            # or network location), fall back to a safe local profile instead of
+            # crashing on startup. Persist the fallback so the app can run.
+            logger.warning(
+                "Active profile '%s' is not accessible; falling back to default profile. Error: %s",
+                active,
+                e,
+            )
+            try:
+                default_profile = _default_local_profile_dir()
+                default_profile.mkdir(parents=True, exist_ok=True)
+                # Keep the old profile listed for visibility; switch active to fallback
+                bs = bootstrap or {}
+                profiles = bs.get("profiles", [])
+                if not any(
+                    (isinstance(x, dict) and x.get("path") == str(p))
+                    for x in profiles
+                ):
+                    profiles.append({"name": p.name or "Profile", "path": str(p)})
+                bs["profiles"] = profiles
+                bs["active_profile"] = str(default_profile)
+                write_bootstrap(bs)
+                return default_profile
+            except Exception:
+                # As a last resort, use a directory under the user's config dir
+                d = _default_local_profile_dir()
+                d.mkdir(parents=True, exist_ok=True)
+                return d
 
     # Bootstrap missing: create initial profile using legacy location
     default_profile = _default_local_profile_dir()

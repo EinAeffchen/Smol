@@ -259,7 +259,15 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        # Ensure only one Qt binding is collected. We use PySide6.
+        'PyQt5',
+        'PyQt5.QtCore', 'PyQt5.QtGui', 'PyQt5.QtWidgets',
+        'PyQt5.QtWebEngine', 'PyQt5.QtWebEngineCore', 'PyQt5.QtWebEngineWidgets',
+        'PyQt6',
+        'PyQt6.QtCore', 'PyQt6.QtGui', 'PyQt6.QtWidgets',
+        'PyQt6.QtWebEngine', 'PyQt6.QtWebEngineCore', 'PyQt6.QtWebEngineWidgets',
+    ],
     noarchive=False,
     optimize=0,
 )
@@ -272,7 +280,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name=APP_NAME,
-    icon=frontend/public/brand/favicon.ico,
+    icon="frontend/public/brand/favicon.ico",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

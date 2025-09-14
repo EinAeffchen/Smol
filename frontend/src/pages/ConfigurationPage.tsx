@@ -38,6 +38,16 @@ import {
   FormHelperText,
   Radio,
 } from "@mui/material";
+import {
+  Paper,
+  Stack,
+  Divider,
+  List,
+  ListItem,
+  ListItemIcon,
+  ListItemText,
+  ListItemSecondaryAction,
+} from "@mui/material";
 
 const clipModels = [
   {
@@ -400,148 +410,167 @@ export default function ConfigurationPage() {
         <Grid container spacing={2}>
           {profiles && !config.general.is_docker ? (
             <>
+              {/* Active profile card */}
               <Grid size={{ xs: 12 }}>
-                <Typography variant="h6">Active Profile</Typography>
-                <Typography variant="body2" sx={{ color: "text.secondary" }}>
-                  {profiles.active_path}
-                </Typography>
-                {profileHealth &&
-                  (!profileHealth.active_exists || !profileHealth.has_db) && (
-                    <Alert severity="warning" sx={{ mt: 1 }}>
-                      The active profile looks missing or empty. If you moved
-                      it, choose the new location and click Save to relink.
-                      <Button
-                        size="small"
-                        sx={{ ml: 2 }}
-                        variant="outlined"
-                        onClick={pickRelocatePath}
-                      >
-                        Choose directory…
-                      </Button>
-                    </Alert>
-                  )}
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" sx={{ mb: 1 }}>
+                    Active Profile
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: "text.secondary", fontFamily: "monospace" }}
+                  >
+                    {profiles.active_path}
+                  </Typography>
+                  {profileHealth &&
+                    (!profileHealth.active_exists || !profileHealth.has_db) && (
+                      <Alert severity="warning" sx={{ mt: 2 }}>
+                        The active profile looks missing or empty. If you
+                        moved it, choose the new location and click Save to
+                        relink.
+                        <Button
+                          size="small"
+                          sx={{ ml: 2 }}
+                          variant="outlined"
+                          onClick={pickRelocatePath}
+                        >
+                          Choose directory…
+                        </Button>
+                      </Alert>
+                    )}
+                </Paper>
               </Grid>
+
               {hasActiveTasks && (
                 <Grid size={{ xs: 12 }}>
-                  <Alert severity="warning" sx={{ mt: 2 }}>
+                  <Alert severity="warning">
                     Processing is active. Profile actions are disabled until
                     tasks finish.
                   </Alert>
                 </Grid>
               )}
-              <Grid size={{ xs: 12 }}>
-                <Typography variant="h6" sx={{ mt: 2 }}>
-                  All Profiles
-                </Typography>
-                <Box sx={{ mb: 1 }}>
-                  <Button
-                    variant="outlined"
-                    onClick={handleAddExisting}
-                    disabled={hasActiveTasks}
-                  >
-                    Add Existing…
-                  </Button>
-                </Box>
-                {(profiles.profiles ?? []).map((p) => (
+
+              {/* Two-column layout: list on left, create on right */}
+              <Grid size={{ xs: 12, md: 7 }}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
                   <Box
-                    key={p.path}
                     sx={{
                       display: "flex",
                       alignItems: "center",
-                      gap: 1,
-                      mt: 1,
+                      justifyContent: "space-between",
+                      mb: 1,
                     }}
                   >
-                    <IconButton
-                      color="primary"
-                      onClick={() => setSelectedProfilePath(p.path)}
-                      disabled={hasActiveTasks || isSwitchingProfile}
+                    <Typography variant="h6">All Profiles</Typography>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={handleAddExisting}
+                      disabled={hasActiveTasks}
                     >
-                      <Radio checked={selectedProfilePath === p.path} />
-                    </IconButton>
+                      Add Existing…
+                    </Button>
+                  </Box>
+                  <Divider />
+                  <List dense sx={{ mt: 1 }}>
+                    {(profiles.profiles ?? []).map((p) => (
+                      <ListItem key={p.path} disableGutters>
+                        <ListItemIcon>
+                          <Radio
+                            edge="start"
+                            checked={selectedProfilePath === p.path}
+                            onChange={() => setSelectedProfilePath(p.path)}
+                            disabled={hasActiveTasks || isSwitchingProfile}
+                          />
+                        </ListItemIcon>
+                        <ListItemText
+                          primary={p.name}
+                          secondary={p.path}
+                          secondaryTypographyProps={{
+                            sx: { fontFamily: "monospace" },
+                          }}
+                        />
+                        <ListItemSecondaryAction>
+                          <IconButton
+                            edge="end"
+                            aria-label="remove profile"
+                            onClick={() => removeProfile(p.path)}
+                            disabled={
+                              p.path === profiles.active_path ||
+                              hasActiveTasks ||
+                              isSwitchingProfile
+                            }
+                          >
+                            <DeleteIcon />
+                          </IconButton>
+                        </ListItemSecondaryAction>
+                      </ListItem>
+                    ))}
+                  </List>
+                  {profiles &&
+                    selectedProfilePath &&
+                    selectedProfilePath !== profiles.active_path && (
+                      <Typography
+                        variant="caption"
+                        sx={{ mt: 1, display: "block", color: "text.secondary" }}
+                      >
+                        Selected profile will become active when you click Save
+                        below.
+                      </Typography>
+                    )}
+                </Paper>
+              </Grid>
+
+              <Grid size={{ xs: 12, md: 5 }}>
+                <Paper variant="outlined" sx={{ p: 2 }}>
+                  <Typography variant="h6" sx={{ mb: 1 }}>
+                    Create New Profile
+                  </Typography>
+                  <Stack direction="column" spacing={1.5}>
                     <TextField
                       label="Name"
-                      value={p.name}
+                      value={newProfileName}
+                      onChange={(e) => setNewProfileName(e.target.value)}
                       fullWidth
-                      InputProps={{ readOnly: true }}
                     />
-                    <TextField
-                      label="Path"
-                      value={p.path}
-                      fullWidth
-                      InputProps={{ readOnly: true }}
-                    />
-                    <IconButton
-                      aria-label="remove profile"
-                      onClick={() => removeProfile(p.path)}
-                      disabled={
-                        p.path === profiles.active_path ||
-                        hasActiveTasks ||
-                        isSwitchingProfile
-                      }
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </Box>
-                ))}
-                {profiles &&
-                  selectedProfilePath &&
-                  selectedProfilePath !== profiles.active_path && (
-                    <Typography
-                      variant="caption"
-                      sx={{ mt: 1, display: "block", color: "text.secondary" }}
-                    >
-                      Selected profile will become active when you click Save
-                      below.
-                    </Typography>
-                  )}
-              </Grid>
-              <Grid size={{ xs: 12 }}>
-                <Typography variant="h6" sx={{ mt: 2 }}>
-                  Create New Profile
-                </Typography>
-                <Box
-                  sx={{ display: "flex", alignItems: "center", gap: 1, mt: 1 }}
-                >
-                  <TextField
-                    label="Name"
-                    value={newProfileName}
-                    onChange={(e) => setNewProfileName(e.target.value)}
-                    fullWidth
-                  />
-                  <TextField
-                    label="Directory"
-                    value={newProfilePath}
-                    onChange={(e) => setNewProfilePath(e.target.value)}
-                    fullWidth
-                  />
-                  <IconButton
-                    aria-label="browse"
-                    onClick={pickNewProfilePath}
-                    disabled={hasActiveTasks}
-                  >
-                    <FolderOpenIcon />
-                  </IconButton>
-                  <Button
-                    variant="contained"
-                    color="primary"
-                    startIcon={!creatingProfile ? <AddIcon /> : undefined}
-                    onClick={createProfile}
-                    disabled={
-                      !newProfilePath || creatingProfile || hasActiveTasks
-                    }
-                    sx={{ minWidth: 120 }}
-                  >
-                    {creatingProfile ? (
-                      <CircularProgress size={18} color="inherit" />
-                    ) : (
-                      "Create"
-                    )}
-                  </Button>
-                </Box>
-                <FormHelperText>
-                  Destination directory must be empty or non-existent.
-                </FormHelperText>
+                    <Box sx={{ display: "flex", gap: 1 }}>
+                      <TextField
+                        label="Directory"
+                        value={newProfilePath}
+                        onChange={(e) => setNewProfilePath(e.target.value)}
+                        fullWidth
+                      />
+                      <IconButton
+                        aria-label="browse"
+                        onClick={pickNewProfilePath}
+                        disabled={hasActiveTasks}
+                      >
+                        <FolderOpenIcon />
+                      </IconButton>
+                    </Box>
+                    <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={!creatingProfile ? <AddIcon /> : undefined}
+                        onClick={createProfile}
+                        disabled={
+                          !newProfilePath || creatingProfile || hasActiveTasks
+                        }
+                        sx={{ minWidth: 120 }}
+                      >
+                        {creatingProfile ? (
+                          <CircularProgress size={18} color="inherit" />
+                        ) : (
+                          "Create"
+                        )}
+                      </Button>
+                    </Box>
+                    <FormHelperText>
+                      Destination directory must be empty or non-existent.
+                    </FormHelperText>
+                  </Stack>
+                </Paper>
               </Grid>
             </>
           ) : (
