@@ -16,7 +16,6 @@ from sqlalchemy import (
     tuple_,
     union_all,
 )
-from sqlalchemy.orm import defer
 from sqlmodel import Session, delete, distinct, select, text, update
 
 from app.config import settings
@@ -361,7 +360,6 @@ def get_faces(
     q = (
         select(Face)
         .where(Face.person_id == person.id)
-        .options(defer(Face.embedding))
         .order_by(Face.id.desc())
     )
     if before_id:

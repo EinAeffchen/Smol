@@ -7,7 +7,6 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
-from sqlalchemy.orm import defer
 from sqlmodel import Session, delete, select, text
 
 from app.config import settings
@@ -192,7 +191,6 @@ def get_orphans(
     query = (
         select(Face)
         .where(Face.person_id.is_(None))
-        .options(defer(Face.embedding))
         .order_by(Face.id.desc())
     )
     if before_id:

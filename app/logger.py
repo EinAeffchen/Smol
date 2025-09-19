@@ -1,29 +1,35 @@
 import logging
 import os
+import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
-def setup_logger():
+def setup_logger() -> logging.Logger:
+    """Configure the shared application logger.
+
+    - Routes console logs to stdout (handy for systemd / Docker capturing stdout only).
+    - Keeps propagation disabled so FastAPI/uvicorn don't duplicate messages.
+    """
+
     logging.getLogger("PIL.PngImagePlugin").setLevel(logging.CRITICAL + 1)
     logging.getLogger("PIL.TiffImagePlugin").setLevel(logging.CRITICAL + 1)
-    logging.basicConfig(
-        level=logging.DEBUG,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    logger = logging.getLogger(__name__)
+
+    logger = logging.getLogger("app")
     logger.setLevel(logging.DEBUG)
     logger.propagate = False
-    if not logger.handlers:
-        ch = logging.StreamHandler()
-        ch.setLevel(logging.DEBUG)
 
-        # give it a formatter that shows file and line
-        fmt = "%(asctime)s %(name)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s"
-        ch.setFormatter(logging.Formatter(fmt))
+    # Replace any stale handlers (reloads, multiprocessing forks, etc.)
+    for handler in list(logger.handlers):
+        logger.removeHandler(handler)
 
-        logger.addHandler(ch)
-        logger.info("Logger setup!")
+    fmt = "%(asctime)s %(name)s %(levelname)s [%(filename)s:%(lineno)d] %(message)s"
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setLevel(logging.DEBUG)
+    stream_handler.setFormatter(logging.Formatter(fmt))
+    logger.addHandler(stream_handler)
+
+    logger.info("Application logger initialised")
     return logger
 
 
@@ -75,7 +81,6 @@ def configure_file_logging(
             fh.setLevel(logging.DEBUG)
             fh.setFormatter(logging.Formatter(fmt))
             logger.addHandler(fh)
-            # Helpful breadcrumb for new log files
             logger.info("File logging enabled at: %s", log_file)
 
         return os.fspath(log_file)

@@ -1,4 +1,3 @@
-import json
 import os
 import gc
 import time
@@ -17,7 +16,7 @@ from app.database import safe_commit
 from app.logger import logger
 from app.models import ExifData, Face, Media, Scene
 from app.processors.base import MediaProcessor
-from app.utils import get_thumb_folder, to_posix_str
+from app.utils import get_thumb_folder, to_posix_str, vector_to_blob
 
 
 class FaceProcessor(MediaProcessor):
@@ -49,8 +48,8 @@ class FaceProcessor(MediaProcessor):
 
     def _parse_faces(
         self, faces: list, scene: MatLike, media: Media
-    ) -> list[Face]:
-        face_objs = []
+    ) -> list[tuple[Face, np.ndarray]]:
+        face_entries: list[tuple[Face, np.ndarray]] = []
         for i, f in enumerate(faces):
             x1, y1, x2, y2 = map(int, f.bbox)
             crop = self._crop_with_margin(
@@ -86,10 +85,9 @@ class FaceProcessor(MediaProcessor):
                     thumb_file.relative_to(settings.general.thumb_dir)
                 ),
                 bbox=[x1, y1, x2 - x1, y2 - y1],
-                embedding=vec.tolist(),
             )
-            face_objs.append(face)
-        return face_objs
+            face_entries.append((face, vec))
+        return face_entries
 
     def process(
         self,
@@ -147,23 +145,29 @@ class FaceProcessor(MediaProcessor):
                 )
                 continue
 
-            face_objs = self._parse_faces(faces, scene, media)
+            face_entries = self._parse_faces(faces, scene, media)
 
-            if not face_objs:
+            if not face_entries:
                 continue
 
-            session.add_all(face_objs)
+            session.add_all([face for face, _ in face_entries])
             session.flush()
 
-            for face_obj in face_objs:
+            for face_obj, embedding_vec in face_entries:
+                blob = vector_to_blob(embedding_vec)
+                if blob is None:
+                    logger.error(
+                        "FaceProcessor: failed to encode embedding for face %s in media %s",
+                        face_obj.id,
+                        media.path,
+                    )
+                    continue
                 sql = text(
                     """
                         INSERT OR REPLACE INTO face_embeddings(face_id, person_id, embedding)
                         VALUES (:id, -1, :emb)
                         """
-                ).bindparams(
-                    id=face_obj.id, emb=json.dumps(face_obj.embedding)
-                )
+                ).bindparams(id=face_obj.id, emb=blob)
                 session.exec(sql)
         media.faces_extracted = True
         session.add(media)

@@ -148,15 +148,18 @@ export const usePersonDetailPage = () => {
     setPerson(null);
     setLoading(true);
 
-    if (location.state?.forceRefresh && id) {
-      console.log(`Force refreshing data for person ${id}`);
-      const mediaListKey = `person-${id}-media-appearances-`;
+    if (id) {
+      const baseMediaListKey = `person-${id}-media-appearances-`;
       const facesListKey = `/api/person/${id}/faces`;
       const timelineListKey = `person-${id}-timeline`;
 
-      clearList(mediaListKey);
+      clearList(baseMediaListKey);
       clearList(facesListKey);
       clearList(timelineListKey);
+
+      if (location.state?.forceRefresh) {
+        console.log(`Force refreshing data for person ${id}`);
+      }
     }
 
     const controller = new AbortController();
@@ -190,7 +193,7 @@ export const usePersonDetailPage = () => {
     return () => {
       controller.abort();
     };
-  }, [id, loadDetail, loadSuggestedFaces]);
+  }, [id, loadDetail, loadSuggestedFaces, clearList]);
 
   useEffect(() => {
     if (detectedFacesListKey) {

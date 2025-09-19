@@ -1,10 +1,11 @@
 import gc
+import math
 import os
 import sys
 import threading
 from enum import Enum
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 import yaml
 from pydantic import BaseModel, Field, PlainSerializer, computed_field
@@ -14,6 +15,7 @@ from app.logger import logger
 
 E = TypeVar("E", bound=Enum)
 IS_DOCKER = os.getenv("IS_DOCKER", False)
+ENV_PREFIX = "OMOIDE_"
 
 
 # ----- Bootstrap/profile management -----
@@ -104,7 +106,10 @@ def get_user_data_path() -> Path:
                     (isinstance(x, dict) and x.get("path") == str(p))
                     for x in profiles
                 ):
-                    profiles.append({"name": p.name or "Profile", "path": str(p)})
+                    profiles.append({
+                        "name": p.name or "Profile",
+                        "path": str(p),
+                    })
                 bs["profiles"] = profiles
                 bs["active_profile"] = str(default_profile)
                 write_bootstrap(bs)
@@ -236,11 +241,13 @@ class GeneralSettings(BaseModel):
     read_only: bool = False
     # Enable face recognition and other person related features
     enable_people: bool = True
-    is_docker: bool = os.environ.get("IS_DOCKER", False)
+    is_docker: bool = bool(os.environ.get("IS_DOCKER", False))
     # Whether the app is running as a packaged/binary executable (e.g., PyInstaller)
     is_binary: bool = bool(getattr(sys, "frozen", False))
     # Which host the system runs on. Mostly only relevant if hosted online.
     domain: str = f"http://localhost:{port}"
+    # Optional override to point at a specific ffmpeg binary
+    ffmpeg_path: Path | None = None
     # maximum number of thumbnails per folder, adjust according to your systems inodes
     thumb_dir_folder_size: int = 1000
 
@@ -364,16 +371,72 @@ class AISettings(BaseModel):
     # Defines the maximum distance for similarity between two images.
     # Used to reduce/increase number of similar images. Higher -> stronger similarity
     min_similarity_dist: float = 1.2
-    # reduce if ram is an issue, the higher the more accurate the clustering.
-    cluster_batch_size: int = 10000
-    # HDBSCAN tuning to reduce over-merged clusters (e.g., side profiles)
-    hdbscan_min_cluster_size: int = 6
-    hdbscan_min_samples: int = 10
-    hdbscan_cluster_selection_method: str = "leaf"  # "leaf" for finer clusters
-    hdbscan_cluster_selection_epsilon: float = 0.10
+    # (cluster-specific knobs moved to face_recognition)
+
+
+class FaceClusteringPreset(str, Enum):
+    STRICT = "strict"
+    NORMAL = "normal"
+    LOOSE = "loose"
+    CUSTOM = "custom"
+
+
+FACE_RECOGNITION_PRESETS: dict[
+    FaceClusteringPreset, dict[str, float | int | str]
+] = {
+    FaceClusteringPreset.STRICT: {
+        "face_recognition_min_confidence": 0.6,
+        "face_match_cosine_threshold": 0.78,
+        "existing_person_cosine_threshold": 0.86,
+        "existing_person_min_cosine_margin": 0.07,
+        "existing_person_min_appearances": 4,
+        "face_recognition_min_face_pixels": 1600,
+        "person_min_face_count": 3,
+        "person_min_media_count": 2,
+        "person_cluster_max_l2_radius": 0.7,
+        "cluster_batch_size": 15000,
+        "hdbscan_min_cluster_size": 7,
+        "hdbscan_min_samples": 12,
+        "hdbscan_cluster_selection_method": "leaf",
+        "hdbscan_cluster_selection_epsilon": 0.07,
+    },
+    FaceClusteringPreset.NORMAL: {
+        "face_recognition_min_confidence": 0.5,
+        "face_match_cosine_threshold": 0.70,
+        "existing_person_cosine_threshold": 0.80,
+        "existing_person_min_cosine_margin": 0.05,
+        "existing_person_min_appearances": 3,
+        "face_recognition_min_face_pixels": 1600,
+        "person_min_face_count": 2,
+        "person_min_media_count": 2,
+        "person_cluster_max_l2_radius": 0.85,
+        "cluster_batch_size": 15000,
+        "hdbscan_min_cluster_size": 6,
+        "hdbscan_min_samples": 10,
+        "hdbscan_cluster_selection_method": "leaf",
+        "hdbscan_cluster_selection_epsilon": 0.10,
+    },
+    FaceClusteringPreset.LOOSE: {
+        "face_recognition_min_confidence": 0.4,
+        "face_match_cosine_threshold": 0.65,
+        "existing_person_cosine_threshold": 0.75,
+        "existing_person_min_cosine_margin": 0.03,
+        "existing_person_min_appearances": 2,
+        "face_recognition_min_face_pixels": 1200,
+        "person_min_face_count": 2,
+        "person_min_media_count": 2,
+        "person_cluster_max_l2_radius": 1,
+        "cluster_batch_size": 15000,
+        "hdbscan_min_cluster_size": 4,
+        "hdbscan_min_samples": 6,
+        "hdbscan_cluster_selection_method": "leaf",
+        "hdbscan_cluster_selection_epsilon": 0.13,
+    },
+}
 
 
 class FaceRecognitionSettings(BaseModel):
+    preset: FaceClusteringPreset = FaceClusteringPreset.NORMAL
     # minimum confidence needed to extract a face
     face_recognition_min_confidence: float = 0.5
     # minimum threshold for a face needed to be matched to a person
@@ -389,9 +452,55 @@ class FaceRecognitionSettings(BaseModel):
     face_recognition_min_face_pixels: int = 1600
     # number of faces needed to automatically create a person
     person_min_face_count: int = 2
+    # require a person to span at least this many distinct media assets
+    person_min_media_count: int = 2
     # enforce intra-cluster compactness when forming a new person
     # maximum allowed L2 radius around centroid (normalized vectors)
     person_cluster_max_l2_radius: float = 0.65
+    # reduce if ram is an issue, the higher the more accurate the clustering.
+    cluster_batch_size: int = 10000
+    # HDBSCAN tuning to reduce over-merged clusters (e.g., side profiles)
+    hdbscan_min_cluster_size: int = 6
+    hdbscan_min_samples: int = 10
+    hdbscan_cluster_selection_method: str = "leaf"  # "leaf" for finer clusters
+    hdbscan_cluster_selection_epsilon: float = 0.10
+
+    def model_post_init(self, __context: Any) -> None:
+        fields_set = getattr(self, "model_fields_set", set())
+        if "preset" not in fields_set:
+            matched = self._infer_preset()
+            object.__setattr__(self, "preset", matched)
+            return
+
+        if self.preset == FaceClusteringPreset.CUSTOM:
+            return
+
+        preset_values = FACE_RECOGNITION_PRESETS.get(self.preset)
+        if not preset_values:
+            object.__setattr__(self, "preset", FaceClusteringPreset.CUSTOM)
+            return
+
+        for field_name, value in preset_values.items():
+            object.__setattr__(self, field_name, value)
+
+    def _infer_preset(self) -> FaceClusteringPreset:
+        for preset, values in FACE_RECOGNITION_PRESETS.items():
+            if self._matches_values(values):
+                return preset
+        return FaceClusteringPreset.CUSTOM
+
+    def _matches_values(self, expected: dict[str, float | int | str]) -> bool:
+        for field_name, value in expected.items():
+            current = getattr(self, field_name)
+            if isinstance(value, float):
+                if not math.isclose(
+                    float(current), float(value), rel_tol=1e-4, abs_tol=1e-4
+                ):
+                    return False
+            else:
+                if current != value:
+                    return False
+        return True
 
 
 class DuplicateSettings(BaseModel):
@@ -449,6 +558,45 @@ def load_config_from_file() -> dict:
         return yaml.safe_load(f) or {}
 
 
+def _coerce_env_value(value: str) -> Any:
+    lowered = value.lower()
+    if lowered in {"true", "false"}:
+        return lowered == "true"
+    if lowered == "null":
+        return None
+    try:
+        if "_" not in value:
+            return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    if "," in value:
+        return [v.strip() for v in value.split(",") if v.strip()]
+    return value
+
+
+def _apply_env_overrides(config_data: dict) -> None:
+    for key, raw_value in os.environ.items():
+        if not key.startswith(ENV_PREFIX):
+            continue
+        path_segments = key[len(ENV_PREFIX) :].split("__")
+        if not path_segments:
+            continue
+        target = config_data
+        for segment in path_segments[:-1]:
+            segment_lower = segment.lower()
+            current = target.get(segment_lower)
+            if not isinstance(current, dict):
+                current = {}
+                target[segment_lower] = current
+            target = current
+        final_key = path_segments[-1].lower()
+        target[final_key] = _coerce_env_value(raw_value)
+
+
 def load_settings() -> AppSettings:
     """
     Loads settings with a clear priority:
@@ -463,6 +611,8 @@ def load_settings() -> AppSettings:
     file_config = load_config_from_file()
     if file_config:
         config_data.update(file_config)
+
+    _apply_env_overrides(config_data)
 
     # 3. Load into Pydantic model. This applies defaults for any missing values.
     return AppSettings.model_validate(config_data)
@@ -667,6 +817,12 @@ def reload_settings():
 
     # Invalidate CLIP bundle to reflect possible AI model changes; will reload lazily
     _reset_clip_after_settings_change()
+    try:
+        from app.processor_registry import reset_processors
+
+        reset_processors()
+    except Exception as e:
+        logger.warning("Could not reset processors after config reload: %s", e)
     try:
         logger.info(
             "Active profile: data_dir=%s omoide_dir=%s thumb_dir=%s db_dir=%s",

@@ -7,8 +7,14 @@ import MediaCard from "../components/MediaCard";
 import PersonCard from "../components/PersonCard";
 import TagCard from "../components/TagCard";
 import { defaultListState, useListStore } from "../stores/useListStore";
-import { Media, MediaPreview, Person, Tag } from "../types";
-import { searchMedia, searchPeople, searchTags } from "../services/search";
+import { MediaPreview, Person, SceneSearchResult, Tag } from "../types";
+import {
+  searchMedia,
+  searchPeople,
+  searchScenes,
+  searchTags,
+} from "../services/search";
+import SceneResultCard from "../components/SceneResultCard";
 import { API } from "../config";
 
 const ITEMS_PER_PAGE = 30;
@@ -36,7 +42,11 @@ function isTag(item: MediaPreview | Person | Tag): item is Tag {
 export default function SearchResultsPage() {
   const [searchParams] = useSearchParams();
   const category =
-    (searchParams.get("category") as "media" | "person" | "tag") || "media";
+    (searchParams.get("category") as
+      | "media"
+      | "person"
+      | "tag"
+      | "scene") || "media";
   const query = searchParams.get("query") || "";
   const location = useLocation();
 
@@ -60,7 +70,8 @@ export default function SearchResultsPage() {
         person: (cursor?: string) =>
           searchPeople(query, ITEMS_PER_PAGE, cursor),
         tag: (cursor?: string) => searchTags(query, ITEMS_PER_PAGE, cursor),
-      };
+        scene: (cursor?: string) => searchScenes(query, ITEMS_PER_PAGE, cursor),
+      } as const;
       const fetcher = fetcherMap[category];
       if (fetcher) {
         loadMore(listKey, fetcher);
@@ -75,7 +86,8 @@ export default function SearchResultsPage() {
       media: () => searchMedia(query, ITEMS_PER_PAGE),
       person: () => searchPeople(query, ITEMS_PER_PAGE),
       tag: () => searchTags(query, ITEMS_PER_PAGE),
-    };
+      scene: () => searchScenes(query, ITEMS_PER_PAGE),
+    } as const;
 
     const fetcher = fetcherMap[category];
     if (fetcher) {
@@ -87,13 +99,23 @@ export default function SearchResultsPage() {
   }, [listKey, category, query, fetchInitial, location.key]);
 
   const preloadedState = location.state as {
-    items: MediaPreview[] | Person[] | Tag[];
+    items: (MediaPreview | Person | Tag | SceneSearchResult)[];
     searchType: "image";
   } | null;
-  const displayItems = preloadedState?.items || items;
+  const displayItems = (preloadedState?.items || items) as (
+    | MediaPreview
+    | Person
+    | Tag
+    | SceneSearchResult
+  )[];
 
-  const renderItem = (item: Media | Person | Tag) => {
-    const itemKey = `${category}-${item.id}`;
+  const renderItem = (
+    item: MediaPreview | Person | Tag | SceneSearchResult
+  ) => {
+    const itemKey =
+      category === "scene"
+        ? `${category}-${(item as SceneSearchResult).scene_id}`
+        : `${category}-${(item as Media | Person | Tag).id}`;
 
     if (isMedia(item)) {
       return (
@@ -113,6 +135,14 @@ export default function SearchResultsPage() {
       return (
         <div key={itemKey}>
           <TagCard onTagDeleted={handleTagDeleted} tag={item} />
+        </div>
+      );
+    }
+    if (category === "scene") {
+      const sceneItem = item as SceneSearchResult;
+      return (
+        <div key={itemKey}>
+          <SceneResultCard scene={sceneItem} listKey={listKey} />
         </div>
       );
     }

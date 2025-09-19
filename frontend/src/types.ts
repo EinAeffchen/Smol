@@ -59,6 +59,17 @@ export interface FaceRead {
   thumbnail_path: string;
 }
 
+export interface SceneSearchResult {
+  scene_id: number;
+  media_id: number;
+  media_filename: string;
+  media_thumbnail_path?: string | null;
+  scene_thumbnail_path?: string | null;
+  start_time: number;
+  end_time?: number | null;
+  distance: number;
+}
+
 export interface MediaDetail {
   media: Media;
   persons: Person[];
@@ -79,6 +90,8 @@ export interface Task {
   status: TaskStatus;
   total: number;
   processed: number;
+  current_item?: string;
+  current_step?: string;
 }
 
 export interface SimilarPersonWithDetails {
@@ -235,11 +248,6 @@ export interface AppConfig {
     clip_model_pretrained: string;
     min_search_dist: number;
     min_similarity_dist: number;
-    cluster_batch_size: number;
-    hdbscan_min_cluster_size: number;
-    hdbscan_min_samples: number;
-    hdbscan_cluster_selection_method: string;
-    hdbscan_cluster_selection_epsilon: number;
   };
   tagging: {
     auto_tagging: boolean;
@@ -247,6 +255,7 @@ export interface AppConfig {
     custom_tags: string[];
   };
   face_recognition: {
+    preset: "strict" | "normal" | "loose" | "custom";
     face_recognition_min_confidence: number;
     face_match_cosine_threshold: number;
     existing_person_cosine_threshold: number;
@@ -254,7 +263,13 @@ export interface AppConfig {
     existing_person_min_appearances: number;
     face_recognition_min_face_pixels: number;
     person_min_face_count: number;
+    person_min_media_count: number;
     person_cluster_max_l2_radius: number;
+    cluster_batch_size: number;
+    hdbscan_min_cluster_size: number;
+    hdbscan_min_samples: number;
+    hdbscan_cluster_selection_method: string;
+    hdbscan_cluster_selection_epsilon: number;
   };
   duplicates: {
     duplicate_auto_handling: string;

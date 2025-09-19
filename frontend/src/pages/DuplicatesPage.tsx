@@ -1,16 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useInView } from "react-intersection-observer";
 import {
-  Button,
   Typography,
   Box,
   CircularProgress,
   Alert,
 } from "@mui/material";
 import { useListStore, defaultListState } from "../stores/useListStore";
-import { getDuplicates, startDuplicateDetection } from "../services/duplicates";
+import { getDuplicates } from "../services/duplicates";
 import { DuplicateGroup } from "../components/DuplicateGroup"; // Our new smart component
-import config from "../config";
+import { useTaskCompletionVersion, useTaskEvents } from "../TaskEventsContext";
 
 const DuplicatesPage: React.FC = () => {
   const listKey = "duplicate-groups";
@@ -19,15 +18,18 @@ const DuplicatesPage: React.FC = () => {
     hasMore,
     isLoading,
   } = useListStore((state) => state.lists[listKey] || defaultListState);
-  const { fetchInitial, loadMore, removeItem } = useListStore();
+  const { fetchInitial, loadMore, removeItem, clearList } = useListStore();
   const { ref: loaderRef, inView } = useInView({ threshold: 0.5 });
-
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const refreshKey = useTaskCompletionVersion(["find_duplicates"]);
+  const { activeTasks } = useTaskEvents();
+  const duplicateTask = activeTasks.find(
+    (task) => task.task_type === "find_duplicates"
+  );
 
   useEffect(() => {
+    clearList(listKey);
     fetchInitial(listKey, () => getDuplicates(null));
-  }, [fetchInitial, listKey]);
+  }, [fetchInitial, listKey, clearList, refreshKey]);
 
   useEffect(() => {
     if (inView && hasMore && !isLoading) {
@@ -40,51 +42,21 @@ const DuplicatesPage: React.FC = () => {
     removeItem(listKey, groupId);
   };
 
-  const handleStartDetection = async () => {
-    setIsProcessing(true);
-    setError(null);
-    try {
-      await startDuplicateDetection();
-      alert(
-        "Duplicate detection started in the background. Please refresh the page in a few minutes."
-      );
-      // Optionally, you could poll the task status here
-    } catch (err) {
-      setError("Failed to start duplicate detection task.");
-      console.error(err);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   return (
     <Box sx={{ p: 2, maxWidth: "1600px", mx: "auto" }}>
       <Typography variant="h4" gutterBottom>
         Potential Duplicates
       </Typography>
 
-      {!config.READ_ONLY && (
-        <Box sx={{ mb: 3 }}>
-          <Button
-            variant="contained"
-            onClick={handleStartDetection}
-            disabled={isProcessing || isLoading}
-          >
-            {isProcessing ? (
-              <CircularProgress size={24} />
-            ) : (
-              "Start Duplicate Detection"
-            )}
-          </Button>
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
-            This will run a background task to find and group duplicates.
-          </Typography>
-        </Box>
-      )}
+      <Alert severity="info" sx={{ mb: 3 }}>
+        Start duplicate detection from the control panel in the header; progress
+        is tracked there and this list refreshes when a run completes.
+      </Alert>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
+      {duplicateTask && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Duplicate detection running… {duplicateTask.processed}/{duplicateTask.total}
+          {duplicateTask.current_step ? ` (${duplicateTask.current_step})` : ""}
         </Alert>
       )}
 

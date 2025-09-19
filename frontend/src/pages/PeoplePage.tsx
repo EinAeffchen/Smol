@@ -6,6 +6,7 @@ import { Container, Box, Typography, CircularProgress } from "@mui/material";
 import Grid from "@mui/material/Grid";
 import config from "../config";
 import { getPeople } from "../services/person";
+import { useTaskCompletionVersion } from "../TaskEventsContext";
 
 export default function PeoplePage() {
   const fetchPeople = useCallback(
@@ -16,12 +17,17 @@ export default function PeoplePage() {
     []
   );
 
+  const refreshKey = useTaskCompletionVersion([
+    "process_media",
+    "cluster_persons",
+  ]);
+
   const {
     items: people,
     hasMore,
     loading,
     loaderRef,
-  } = useInfinite<PersonReadSimple>(fetchPeople, []);
+  } = useInfinite<PersonReadSimple>(fetchPeople, [refreshKey]);
 
   if (loading && people.length === 0) {
     return (

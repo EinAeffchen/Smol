@@ -68,9 +68,6 @@ class Face(SQLModel, table=True):
     )
     thumbnail_path: str | None = Field(default=None)
     bbox: list[int] = Field(sa_column=Column(JSON))
-    embedding: list[float] | None = Field(
-        sa_column=Column(JSON, nullable=True)
-    )
 
     media: "Media" = Relationship(back_populates="faces")
     person: Optional["Person"] = Relationship(
@@ -133,9 +130,6 @@ class Scene(SQLModel, table=True):
         default=None, nullable=True
     )  # relative path under THUMB_DIR
     description: str | None = Field(default=None)
-    embedding: list[float] | None = Field(
-        sa_column=Column(JSON, nullable=True, index=True), default=None
-    )
 
     media: "Media" = Relationship(back_populates="scenes")
 
@@ -191,6 +185,13 @@ class ProcessingTask(SQLModel, table=True):
 
     class Config:
         from_attributes = True
+
+
+# Read model that augments ProcessingTask with transient fields.
+# These fields are not stored in the DB; we only use them for API responses.
+class ProcessingTaskRead(ProcessingTask, table=False):
+    current_item: str | None = None
+    current_step: str | None = None
 
 
 class PersonSimilarity(SQLModel, table=True):

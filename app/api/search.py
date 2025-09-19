@@ -1,21 +1,19 @@
-import json
-
+import io
 import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from sqlalchemy import desc, func, text, tuple_
 from sqlmodel import Session, select
-import io
 from PIL import Image
+
 from app.config import settings, get_clip_bundle
 from app.database import get_session
 from app.logger import logger
+from app.utils import vector_to_blob
 
-from app.models import Media, Person, Tag
+from app.models import Media, Person, Scene, Tag
 from app.schemas.media import MediaPreview
 from app.schemas.person import PersonReadSimple
-from app.schemas.search import (
-    CursorPage,
-)
+from app.schemas.search import CursorPage, SceneSearchResult
 from app.schemas.tag import TagRead
 
 router = APIRouter()
@@ -72,6 +70,11 @@ def search_by_image(
     query_vector = encode_uploaded_image(image_bytes)
 
     max_dist = 2.0 - settings.ai.min_similarity_dist
+    vec_blob = vector_to_blob(query_vector)
+    if vec_blob is None:
+        logger.warning("Failed to encode query vector for uploaded image search")
+        return []
+
     sql = text(
         """
         SELECT media_id, distance
@@ -81,7 +84,7 @@ def search_by_image(
             AND distance < :max_dist
         ORDER BY distance
         """
-    ).bindparams(vec=json.dumps(query_vector), max_dist=max_dist, k=limit)
+    ).bindparams(vec=vec_blob, max_dist=max_dist, k=limit)
 
     rows = session.exec(sql).all()
     media_ids = [row[0] for row in rows]
@@ -116,6 +119,10 @@ def search_media(
     max_dist = 2.0 - settings.ai.min_search_dist
     max_pages = 3
     vec = encode_text_query(query)
+    vec_blob = vector_to_blob(vec)
+    if vec_blob is None:
+        logger.warning("Failed to encode query vector for text search")
+        return CursorPage(items=[], next_cursor=None)
     min_dist = 0
     if cursor:
         min_dist = float(cursor)
@@ -131,7 +138,7 @@ def search_media(
             ORDER BY distance
         """
     ).bindparams(
-        vec=json.dumps(vec),
+        vec=vec_blob,
         max_dist=max_dist,
         min_dist=min_dist,
         k=limit * max_pages,
@@ -149,6 +156,101 @@ def search_media(
         items=[MediaPreview.model_validate(media) for media in ordered],
         next_cursor=next_cursor,
     )
+
+
+@router.get(
+    "/scenes",
+    summary="Search video scenes by text query",
+    response_model=CursorPage[SceneSearchResult],
+)
+def search_scenes(
+    query: str = Query("", description="Free-text query for scene search"),
+    limit: int = 20,
+    cursor: str | None = Query(
+        None, description="Distance cursor returned from previous request"
+    ),
+    session: Session = Depends(get_session),
+):
+    if not query:
+        return CursorPage(items=[], next_cursor=None)
+
+    max_dist = 2.0 - settings.ai.min_search_dist
+    max_pages = 3
+
+    vec = encode_text_query(query)
+    vec_blob = vector_to_blob(vec)
+    if vec_blob is None:
+        logger.warning("Failed to encode query vector for scene search")
+        return CursorPage(items=[], next_cursor=None)
+
+    try:
+        min_dist = float(cursor) if cursor else 0.0
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid cursor format")
+
+    sql = text(
+        """
+        SELECT scene_id, media_id, distance
+          FROM scene_embeddings
+         WHERE embedding MATCH :vec
+           AND k = :k
+           AND distance < :max_dist
+           AND distance > :min_dist
+         ORDER BY distance
+        """
+    ).bindparams(
+        vec=vec_blob,
+        max_dist=max_dist,
+        min_dist=min_dist,
+        k=limit * max_pages,
+    )
+
+    rows = session.exec(sql).all()
+    if not rows:
+        return CursorPage(items=[], next_cursor=None)
+
+    scene_ids = [row[0] for row in rows]
+    distance_map = {row[0]: float(row[2]) for row in rows}
+
+    scene_data = session.exec(
+        select(Scene, Media)
+        .join(Media, Scene.media_id == Media.id)
+        .where(Scene.id.in_(scene_ids))
+    ).all()
+
+    if not scene_data:
+        return CursorPage(items=[], next_cursor=None)
+
+    scene_map = {scene.id: (scene, media) for scene, media in scene_data}
+
+    ordered_results: list[SceneSearchResult] = []
+    for scene_id in scene_ids:
+        if scene_id not in scene_map:
+            continue
+        scene, media = scene_map[scene_id]
+        ordered_results.append(
+            SceneSearchResult(
+                scene_id=scene.id,
+                media_id=media.id,
+                media_filename=media.filename,
+                media_thumbnail_path=media.thumbnail_path,
+                scene_thumbnail_path=scene.thumbnail_path,
+                start_time=float(scene.start_time),
+                end_time=float(scene.end_time) if scene.end_time is not None else None,
+                distance=distance_map.get(scene.id, 0.0),
+            )
+        )
+
+    if not ordered_results:
+        return CursorPage(items=[], next_cursor=None)
+
+    limited_results = ordered_results[:limit]
+
+    next_cursor = None
+    if limited_results and len(rows) > len(limited_results):
+        next_cursor = str(limited_results[-1].distance)
+
+    return CursorPage(items=limited_results, next_cursor=next_cursor)
 
 
 @router.get(

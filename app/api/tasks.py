@@ -1,4 +1,3 @@
-import json
 import os
 import time
 from collections import defaultdict
@@ -11,8 +10,8 @@ import hdbscan
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import func, or_
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import bindparam, func, or_
+from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
 
@@ -29,6 +28,7 @@ from app.models import (
     Person,
     PersonSimilarity,
     ProcessingTask,
+    ProcessingTaskRead,
 )
 from app.processor_registry import load_processors, processors
 from app.processors.duplicates import DuplicateProcessor
@@ -39,9 +39,35 @@ from app.utils import (
     get_image_taken_date,
     process_file,
     split_video,
+    vector_from_stored,
+    vector_to_blob,
 )
 
 router = APIRouter()
+
+# In-memory progress map for transient, richer status (not persisted)
+# Maps task_id -> {"current_item": str|None, "current_step": str|None}
+_task_progress: dict[str, dict[str, str | None]] = {}
+
+
+def _set_task_progress(
+    task_id: str,
+    *,
+    current_item: str | None = None,
+    current_step: str | None = None,
+) -> None:
+    entry = _task_progress.setdefault(
+        task_id, {"current_item": None, "current_step": None}
+    )
+    if current_item is not None:
+        entry["current_item"] = current_item
+    if current_step is not None:
+        entry["current_step"] = current_step
+
+
+def _clear_task_progress(task_id: str) -> None:
+    _task_progress.pop(task_id, None)
+
 
 # ─── 1) PROCESS MEDIA ─────────────────────────────────────────────────────────
 
@@ -381,6 +407,11 @@ def _run_media_processing(task_id: str):
         session.add(task)
         safe_commit(session)
 
+        # Initial transient status
+        _set_task_progress(
+            task_id, current_step="preparing", current_item=None
+        )
+
         def is_cancelled() -> bool:
             try:
                 session.refresh(task, attribute_names=["status"])  # cheap
@@ -391,6 +422,7 @@ def _run_media_processing(task_id: str):
         # Ensure processors are loaded (in case lifespan didn't run yet)
         if not processors:
             logger.debug("Processor registry empty; loading processors now.")
+            _set_task_progress(task_id, current_step="loading_models")
             load_processors()
 
         # Acquire a process-local heavy write slot to reduce lock thrashing
@@ -404,6 +436,7 @@ def _run_media_processing(task_id: str):
                 task.finished_at = datetime.now(timezone.utc)
                 session.add(task)
                 safe_commit(session)
+                _clear_task_progress(task_id)
                 return
 
             for proc in processors:
@@ -441,7 +474,11 @@ def _run_media_processing(task_id: str):
                         break
 
                     logger.info("Processing: %s", media.filename)
-
+                    _set_task_progress(
+                        task_id,
+                        current_item=os.fspath(media.path),
+                        current_step="extracting_scenes",
+                    )
                     scenes = _get_or_extract_scenes(media, session)
                     logger.debug(
                         "Scenes for %s: %s",
@@ -453,9 +490,36 @@ def _run_media_processing(task_id: str):
                         safe_commit(session)
                         continue
 
-                    all_processors_succeeded = _apply_processors(
-                        media, scenes, session
-                    )
+                    # Execute each processor while updating transient step
+                    all_processors_succeeded = True
+                    for proc in processors:
+                        if not proc.active:
+                            continue
+                        try:
+                            _set_task_progress(
+                                task_id,
+                                current_item=os.fspath(media.path),
+                                current_step=proc.name,
+                            )
+                            ok = proc.process(media, session, scenes=scenes)
+                            if ok is False:
+                                all_processors_succeeded = False
+                                break
+                        except Exception:
+                            # Let existing helper handle marking as processed + logging
+                            logger.exception(
+                                "Processor '%s' failed for %s",
+                                proc.name,
+                                media.filename,
+                            )
+                            all_processors_succeeded = False
+                            # Fallback to previous behavior to avoid re-try loops
+                            media.faces_extracted = True
+                            media.ran_auto_tagging = True
+                            media.embeddings_created = True
+                            session.add(media)
+                            safe_commit(session)
+                            break
 
                     if all_processors_succeeded:
                         session.add(media)  # Add the updated media object
@@ -464,6 +528,8 @@ def _run_media_processing(task_id: str):
                     session.add(task)
                     # Commit after each media item is fully processed
                     safe_commit(session)
+                    # Reset per-item step to a neutral state between items
+                    _set_task_progress(task_id, current_step="idle")
 
                 # end for media in batch
 
@@ -482,6 +548,7 @@ def _run_media_processing(task_id: str):
             task.finished_at = datetime.now(timezone.utc)
             session.add(task)
             safe_commit(session)
+            _clear_task_progress(task_id)
 
 
 # ─── 2) CLUSTER PERSONS ────────────────────────────────────────────────────────
@@ -508,52 +575,152 @@ def start_person_clustering(
 def _fetch_faces_and_embeddings(
     session: Session, limit: int = 10000, last_id: int = 0
 ) -> tuple[list[int], np.ndarray]:
-    results = session.exec(
-        select(Face.id, Face.embedding)
-        .where(
-            Face.embedding.is_not(None),
-            Face.person_id.is_(None),
-            Face.id > last_id,
-        )
-        .order_by(Face.id.asc())
-        .limit(limit)
-    ).all()
+    sql = text(
+        """
+        SELECT f.id, fe.embedding
+          FROM face            AS f
+          JOIN face_embeddings AS fe
+               ON fe.face_id = f.id
+         WHERE f.person_id IS NULL
+           AND f.id > :last_id
+         ORDER BY f.id
+         LIMIT :limit
+        """
+    ).bindparams(last_id=last_id, limit=limit)
 
-    if not results:
+    rows = session.exec(sql).all()
+    if not rows:
         return [], np.array([])
 
-    face_ids, embeddings_list = zip(*results)
+    face_ids: list[int] = []
+    vectors: list[np.ndarray] = []
+    for face_id, raw_embedding in rows:
+        vec = vector_from_stored(raw_embedding)
+        if vec is None or vec.size == 0:
+            logger.debug(
+                "Skipping face %s for clustering due to missing embedding",
+                face_id,
+            )
+            continue
+        norm = float(np.linalg.norm(vec))
+        if not np.isfinite(norm) or norm == 0.0:
+            logger.debug(
+                "Skipping face %s for clustering due to zero-norm embedding",
+                face_id,
+            )
+            continue
+        face_ids.append(int(face_id))
+        vectors.append((vec / norm).astype(np.float32, copy=False))
 
-    embeddings = np.array(embeddings_list, dtype=np.float32)
+    if not face_ids:
+        return [], np.array([])
 
-    return list(face_ids), embeddings
+    embeddings = np.vstack(vectors).astype(np.float32, copy=False)
+    return face_ids, embeddings
 
 
 def _cluster_embeddings(
     embeddings: np.ndarray, min_cluster_size=None, min_samples=None
 ):
-    embeddings_64 = embeddings.astype(np.float64)
-    # Pull defaults from settings if not provided
-    min_cluster_size = (
+    if embeddings.size == 0:
+        return np.array([], dtype=int)
+
+    embeddings_64 = embeddings.astype(np.float64, copy=False)
+
+    min_faces_required = max(
+        2, int(settings.face_recognition.person_min_face_count)
+    )
+    sample_count = embeddings_64.shape[0]
+
+    base_min_cluster_size = int(
         min_cluster_size
         if min_cluster_size is not None
-        else settings.ai.hdbscan_min_cluster_size
+        else settings.face_recognition.hdbscan_min_cluster_size
     )
-    min_samples = (
+    base_min_samples = int(
         min_samples
         if min_samples is not None
-        else settings.ai.hdbscan_min_samples
+        else settings.face_recognition.hdbscan_min_samples
     )
-    clusterer = hdbscan.HDBSCAN(
-        metric="cosine",
-        min_cluster_size=min_cluster_size,
-        min_samples=min_samples,
-        cluster_selection_method=settings.ai.hdbscan_cluster_selection_method,
-        cluster_selection_epsilon=settings.ai.hdbscan_cluster_selection_epsilon,
-        algorithm="generic",
+
+    base_min_cluster_size = int(
+        np.clip(base_min_cluster_size, min_faces_required, sample_count)
     )
-    labels = clusterer.fit_predict(embeddings_64)
-    return labels
+    base_min_samples = int(np.clip(base_min_samples, 1, sample_count))
+    base_min_samples = min(base_min_samples, base_min_cluster_size)
+
+    attempted: set[tuple[int, int]] = set()
+    best_labels: np.ndarray | None = None
+    best_score: tuple[int, float] | None = None
+
+    current_min_cluster_size = base_min_cluster_size
+    current_min_samples = base_min_samples
+
+    for _ in range(3):
+        params = (current_min_cluster_size, current_min_samples)
+        if params in attempted:
+            break
+        attempted.add(params)
+
+        clusterer = hdbscan.HDBSCAN(
+            metric="cosine",
+            min_cluster_size=current_min_cluster_size,
+            min_samples=current_min_samples,
+            cluster_selection_method=settings.face_recognition.hdbscan_cluster_selection_method,
+            cluster_selection_epsilon=settings.face_recognition.hdbscan_cluster_selection_epsilon,
+            algorithm="generic",
+        )
+        labels = clusterer.fit_predict(embeddings_64)
+
+        non_noise = labels[labels >= 0]
+        cluster_count = int(np.unique(non_noise).size)
+        noise_ratio = float(np.mean(labels == -1)) if labels.size else 1.0
+
+        logger.debug(
+            "HDBSCAN attempt clusters=%d noise=%.2f min_cluster_size=%d min_samples=%d",
+            cluster_count,
+            noise_ratio,
+            current_min_cluster_size,
+            current_min_samples,
+        )
+
+        score = (cluster_count, -noise_ratio)
+        if best_score is None or score > best_score:
+            best_score = score
+            best_labels = labels
+
+        should_relax = current_min_cluster_size > min_faces_required and (
+            cluster_count == 0
+            or (
+                cluster_count <= 1
+                and noise_ratio > 0.85
+                and sample_count >= min_faces_required * 3
+            )
+            or noise_ratio >= 0.95
+        )
+
+        if not should_relax:
+            break
+
+        next_min_cluster_size = max(
+            min_faces_required,
+            int(np.ceil(current_min_cluster_size * 0.6)),
+        )
+        if next_min_cluster_size == current_min_cluster_size:
+            break
+
+        current_min_cluster_size = next_min_cluster_size
+        current_min_samples = max(
+            1,
+            min(
+                current_min_cluster_size,
+                int(np.ceil(current_min_samples * 0.6)),
+            ),
+        )
+
+    if best_labels is None:
+        return np.array([], dtype=int)
+    return best_labels
 
 
 def _group_faces_by_cluster(
@@ -579,9 +746,15 @@ def _filter_embeddings_by_id(
 
 def _assign_faces_to_clusters(
     clusters: dict[int, tuple[list[int], list[np.ndarray]]], task_id: str
-):
+) -> int:
+    created = 0
     for face_ids, embeddings in tqdm(clusters.values()):
         if len(face_ids) < settings.face_recognition.person_min_face_count:
+            logger.debug(
+                "Skipping cluster with %d faces (< person_min_face_count %d)",
+                len(face_ids),
+                settings.face_recognition.person_min_face_count,
+            )
             continue
 
         embeddings_arr = np.array(embeddings)
@@ -614,7 +787,16 @@ def _assign_faces_to_clusters(
                 select(func.count(func.distinct(Face.media_id))).where(
                     Face.id.in_(face_ids)
                 )
-            ).one()
+            ).first()
+            media_count = int(media_count or 0)
+
+            if media_count < settings.face_recognition.person_min_media_count:
+                logger.debug(
+                    "Skipping cluster with %d media (< person_min_media_count %d)",
+                    media_count,
+                    settings.face_recognition.person_min_media_count,
+                )
+                continue
             new_person = Person(
                 name=None,
                 profile_face_id=best_face_id,
@@ -622,6 +804,8 @@ def _assign_faces_to_clusters(
             )
             session.add(new_person)
             session.flush()  # Get new_person.id
+
+            created += 1
 
             for face_id in face_ids:
                 face = session.get(Face, face_id)
@@ -642,17 +826,25 @@ def _assign_faces_to_clusters(
                 """
             ).bindparams(p_id=new_person.id)
             session.exec(person_del)
-            sql_person_emb = text(
-                """
-                INSERT INTO person_embeddings(person_id, embedding)
-                VALUES (:p_id, :emb)
-                """
-            ).bindparams(p_id=new_person.id, emb=json.dumps(centroid.tolist()))
-            session.exec(sql_person_emb)
+            centroid_blob = vector_to_blob(centroid)
+            if centroid_blob is None:
+                logger.warning(
+                    "Unable to serialize centroid for new person %s; skipping embedding write",
+                    new_person.id,
+                )
+            else:
+                sql_person_emb = text(
+                    """
+                    INSERT INTO person_embeddings(person_id, embedding)
+                    VALUES (:p_id, :emb)
+                    """
+                ).bindparams(p_id=new_person.id, emb=centroid_blob)
+                session.exec(sql_person_emb)
 
             task.processed += len(face_ids)
             session.add(task)
             safe_commit(session)
+    return created
 
 
 def assign_to_existing_persons(
@@ -686,7 +878,17 @@ def assign_to_existing_persons(
             if task.status == "cancelled":
                 break
 
-            vec_param = json.dumps(emb.tolist())
+            vec_param = vector_to_blob(emb)
+            if vec_param is None:
+                logger.warning(
+                    "Skipping face %s due to invalid embedding payload",
+                    face_id,
+                )
+                task.processed += 1
+                if task.processed % 100 == 0:
+                    session.add(task)
+                    safe_commit(session)
+                continue
             sql = text(
                 """
                     SELECT person_id, distance
@@ -813,20 +1015,17 @@ def assign_to_existing_persons(
     return unassigned
 
 
-def unzip_faces_embeddings(faces: list[Face]):
-    new_faces, embs = [], []
-    for face in faces:
-        new_faces.append(face)
-        embs.append(face.embedding)
-    return new_faces, embs
-
-
 def _get_face_total(session: Session):
-    return session.exec(
-        select(func.count(Face.id)).where(
-            Face.embedding != None, Face.person_id == None
-        )
-    ).first()
+    sql = text(
+        """
+        SELECT COUNT(*)
+          FROM face            AS f
+          JOIN face_embeddings AS fe ON fe.face_id = f.id
+         WHERE f.person_id IS NULL
+        """
+    )
+    row = session.exec(sql).first()
+    return int(row[0]) if row else 0
 
 
 def run_person_clustering(task_id: str):
@@ -856,7 +1055,7 @@ def run_person_clustering(task_id: str):
                 batch_face_ids, batch_embeddings = _fetch_faces_and_embeddings(
                     session,
                     last_id=last_id,
-                    limit=settings.ai.cluster_batch_size,
+                    limit=settings.face_recognition.cluster_batch_size,
                 )
                 if batch_face_ids:
                     last_id = batch_face_ids[-1]
@@ -906,9 +1105,16 @@ def run_person_clustering(task_id: str):
                 clusters = _group_faces_by_cluster(
                     labels, new_faces_ids, new_embs
                 )
-                logger.debug("Created %s Persons!", len(clusters))
-                _assign_faces_to_clusters(clusters, task_id)
-            if len(batch_face_ids) < settings.ai.cluster_batch_size:
+                created_count = _assign_faces_to_clusters(clusters, task_id)
+                logger.info(
+                    "Cluster batch produced %d new persons out of %d candidate clusters",
+                    created_count,
+                    len(clusters),
+                )
+            if (
+                len(batch_face_ids)
+                < settings.face_recognition.cluster_batch_size
+            ):
                 break
 
         with Session(db.engine) as session:
@@ -952,14 +1158,21 @@ def list_tasks(session: Session = Depends(get_session)):
 
 @router.get(
     "/active",
-    response_model=list[ProcessingTask],
-    summary="List all active tasks",
+    response_model=list[ProcessingTaskRead],
+    summary="List all active tasks with transient details",
 )
 def list_active_tasks(session: Session = Depends(get_session)):
     try:
-        return session.exec(
+        active = session.exec(
             select(ProcessingTask).where(ProcessingTask.status == "running")
         ).all()
+        result: list[ProcessingTaskRead] = []
+        for t in active:
+            base = t.model_dump()
+            extra = _task_progress.get(t.id, {})
+            base.update(extra)
+            result.append(ProcessingTaskRead(**base))
+        return result
     except OperationalError:
         time.sleep(10)
         return list_active_tasks(session)
@@ -1190,34 +1403,65 @@ def _run_scan(task_id: str):
                         + settings.scan.IMAGE_SUFFIXES
                     ):
                         continue
+                    # Keep using resolved absolute paths for consistency with DB
                     yield (Path(root) / fname).resolve()
 
-    # 2) Fast pre-count: estimate total new items without storing them all
-    #    Commit/update only every N to reduce DB churn on huge scans.
-    BATCH_COMMIT = 100
-    new_total = 0
-    new_since_update = 0
+    # 2) Fast pre-count with minimal DB round-trips.
+    #    - Preload existing paths per media_dir using LIKE prefix
+    #    - Build a list of new files in one pass over the filesystem
+    #    - Update task.total periodically for responsiveness
+    BATCH_COMMIT = 150
+    new_files: list[Path] = []
+    existing_paths: set[str] = set()
+
     with Session(db.engine) as sess:
+        # Preload existing paths for each configured media directory
+        try:
+            for d in settings.general.media_dirs:
+                # Use an index-friendly prefix range instead of LIKE.
+                # This allows SQLite to leverage the (unique) index on media.path.
+                try:
+                    prefix = os.fspath(Path(d).resolve())
+                except Exception:
+                    prefix = os.fspath(Path(d))
+                lo = prefix
+                hi = (
+                    prefix + "\uffff"
+                )  # upper bound for all strings with prefix
+                try:
+                    rows = sess.exec(
+                        select(Media.path).where(
+                            Media.path >= lo, Media.path < hi
+                        )
+                    ).all()
+                    for (p,) in rows:
+                        existing_paths.add(p)
+                except Exception:
+                    # If range scan fails, skip preload for this dir
+                    pass
+        except Exception:
+            pass
+
         task = sess.get(ProcessingTask, task_id)
+        since_update = 0
         for path in walk_candidates():
-            exists = sess.exec(
-                select(Media.id).where(Media.path == str(path)).limit(1)
-            ).first()
-            if exists:
+            spath = str(path)
+            if spath in existing_paths:
                 continue
-            new_total += 1
-            new_since_update += 1
-            if new_since_update >= BATCH_COMMIT:
-                task.total = new_total
+            new_files.append(path)
+            existing_paths.add(spath)  # avoid duplicates from symlinks
+            since_update += 1
+            if since_update >= BATCH_COMMIT:
+                task.total = len(new_files)
                 sess.add(task)
                 safe_commit(sess)
-                new_since_update = 0
+                since_update = 0
         # Finalize total
-        task.total = new_total
+        task.total = len(new_files)
         sess.add(task)
         safe_commit(sess)
 
-    if new_total == 0:
+    if not new_files:
         with Session(db.engine) as sess:
             task = sess.get(ProcessingTask, task_id)
             task.status = "completed"
@@ -1237,23 +1481,30 @@ def _run_scan(task_id: str):
             task = sess.get(ProcessingTask, task_id)
             processed = task.processed or 0
             batch_since_commit = 0
+            CANCEL_CHECK_EVERY = 20
+            checked = 0
 
-            for filepath in walk_candidates():
-                # Re-check cancellation frequently
-                sess.refresh(task, attribute_names=["status"])  # cheap
-                if task.status == "cancelled":
-                    logger.info("Scan cancelled by user.")
-                    # Commit any pending batch before finalizing status
-                    if batch_since_commit > 0:
-                        task.processed = processed
-                        sess.add(task)
-                        safe_commit(sess)
-                        batch_since_commit = 0
-                    break
+            for filepath in new_files:
+                # Re-check cancellation periodically, not on every iteration
+                checked += 1
+                if checked >= CANCEL_CHECK_EVERY:
+                    sess.refresh(task, attribute_names=["status"])  # cheap
+                    checked = 0
+                    if task.status == "cancelled":
+                        logger.info("Scan cancelled by user.")
+                        # Commit any pending batch before finalizing status
+                        if batch_since_commit > 0:
+                            task.processed = processed
+                            sess.add(task)
+                            safe_commit(sess)
+                            batch_since_commit = 0
+                        break
 
-                # Skip if already in DB (unique constraint friendly)
+                # Defensive check in case DB changed between pre-count and now
                 exists = sess.exec(
-                    select(Media.id).where(Media.path == str(filepath)).limit(1)
+                    select(Media.id)
+                    .where(Media.path == str(filepath))
+                    .limit(1)
                 ).first()
                 if exists:
                     continue
@@ -1265,7 +1516,13 @@ def _run_scan(task_id: str):
 
                 # Insert and flush to get an ID for thumbnail filename
                 sess.add(media_obj)
-                sess.flush()  # assigns media_obj.id
+                try:
+                    sess.flush()  # assigns media_obj.id
+                except IntegrityError:
+                    # Another process may have inserted this path between
+                    # pre-count and now. Roll back this object and skip.
+                    sess.rollback()
+                    continue
 
                 thumb = generate_thumbnail(media_obj)
                 if not thumb:
@@ -1304,17 +1561,20 @@ def _run_scan(task_id: str):
 def generate_hashes(task_id: int | None = None):
     """A task to find all media without a pHash and generate one."""
     BATCH_SIZE = 10
+    FAILURE_MARKER = ""
     with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id) if task_id else None
         logger.info("Got task!")
         # If there's a task, get the initial total count
         if task:
             count_stmt = select(func.count(Media.id)).where(
-                Media.phash.is_(None)
+                Media.phash.is_(None),
+                Media.duration.is_(None),
             )
-            total_count = session.exec(count_stmt).first()
+            total_count = session.exec(count_stmt).first() or 0
             logger.info("SET count to %s", total_count)
             task.total = total_count
+            task.processed = 0
             session.commit()  # Commit the initial total count
 
         def is_cancelled() -> bool:
@@ -1323,12 +1583,17 @@ def generate_hashes(task_id: int | None = None):
             session.refresh(task, attribute_names=["status"])  # cheap
             return task.status == "cancelled"
 
+        processed_so_far = task.processed if task else 0
+
         with heavy_writer(name="generate_hashes", cancelled=is_cancelled):
             while True:
                 # Fetch a batch of media objects that need a hash
                 media_batch_stmt = (
                     select(Media)
-                    .where(Media.phash.is_(None))
+                    .where(
+                        Media.phash.is_(None),
+                        Media.duration.is_(None),
+                    )
                     .limit(BATCH_SIZE)
                 )
                 media_to_hash = session.exec(media_batch_stmt).all()
@@ -1338,6 +1603,7 @@ def generate_hashes(task_id: int | None = None):
                     logger.info("No more media to hash. Task complete.")
                     break
 
+                successful_hashes = 0
                 for media in tqdm(media_to_hash, desc="Generating Hashes"):
                     # If a task is running, check for cancellation periodically
                     if task:
@@ -1353,27 +1619,42 @@ def generate_hashes(task_id: int | None = None):
 
                     try:
                         # Generate the appropriate hash based on media type
-                        if media.duration is None:
-                            media.phash = generate_perceptual_hash(
-                                media, type="image"
-                            )
+                        hash_value = generate_perceptual_hash(
+                            media, type="image"
+                        )
+                        if hash_value:
+                            media.phash = hash_value
+                            successful_hashes += 1
                         else:
-                            media.phash = generate_perceptual_hash(
-                                media, type="video"
+                            media.phash = FAILURE_MARKER
+                            logger.debug(
+                                "No perceptual hash generated for media %s; marking as skipped",
+                                media.id,
                             )
                         session.add(media)
                     except Exception as e:
                         logger.error(
                             f"Could not generate hash for media {media.id}: {e}"
                         )
+                        media.phash = FAILURE_MARKER
+                        session.add(media)
 
                 # Update the task progress after processing each batch
-                if task:
-                    task.processed += len(media_to_hash)
-
                 # Commit the changes for the current batch (media phashes and task progress)
                 session.commit()
                 logger.info(f"Committed batch of {len(media_to_hash)} hashes.")
+
+                if task:
+                    processed_so_far += successful_hashes
+                    remaining_stmt = select(func.count(Media.id)).where(
+                        Media.phash.is_(None),
+                        Media.duration.is_(None),
+                    )
+                    remaining = session.exec(remaining_stmt).first() or 0
+                    task.total = processed_so_far + remaining
+                    task.processed = processed_so_far
+                    session.add(task)
+                    session.commit()
 
 
 @router.post(

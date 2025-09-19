@@ -14,6 +14,7 @@ import ImportExportIcon from "@mui/icons-material/ImportExport";
 import { useListStore, defaultListState } from "../stores/useListStore";
 import MediaCard from "../components/MediaCard";
 import { getMediaList } from "../services/media";
+import { useTaskCompletionVersion } from "../TaskEventsContext";
 
 const breakpointColumnsObj = {
   default: 5,
@@ -40,13 +41,15 @@ export default function IndexPage() {
   const items = listState?.items || [];
   const hasMore = listState?.hasMore || defaultListState.hasMore;
   const isLoading = listState?.isLoading || defaultListState.isLoading;
-  const { fetchInitial, loadMore } = useListStore();
+  const { fetchInitial, loadMore, clearList } = useListStore();
+  const refreshKey = useTaskCompletionVersion(["scan", "process_media"]);
 
   useEffect(() => {
     const controller = new AbortController();
+    clearList(mediaListKey);
     fetchInitial(mediaListKey, () => getMediaList(null, sortOrder, tags));
     return () => controller.abort();
-  }, [mediaListKey, fetchInitial, sortOrder, tags]);
+  }, [mediaListKey, fetchInitial, sortOrder, tags, clearList, refreshKey]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -102,12 +105,9 @@ export default function IndexPage() {
         className="my-masonry-grid"
         columnClassName="my-masonry-grid_column"
       >
-        {items.map((media) => (
-          <div key={media.id}>
-            <MediaCard
-              media={media}
-              mediaListKey={mediaListKey}
-            />
+        {items.map((mediaItem) => (
+          <div key={mediaItem.id}>
+            <MediaCard media={mediaItem} mediaListKey={mediaListKey} />
           </div>
         ))}
       </Masonry>

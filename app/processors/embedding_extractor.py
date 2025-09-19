@@ -1,5 +1,3 @@
-import json
-
 import cv2
 import numpy as np
 import torch
@@ -15,7 +13,7 @@ from app.config import settings, get_clip_bundle
 from app.logger import logger
 from app.models import Media, Scene, Tag
 from app.processors.base import MediaProcessor
-from app.utils import safe_commit
+from app.utils import safe_commit, vector_to_blob, vector_from_stored
 
 
 class EmbeddingExtractor(MediaProcessor):
@@ -45,7 +43,7 @@ class EmbeddingExtractor(MediaProcessor):
         with torch.no_grad():
             img_features = self._clip_model.encode_image(img_tensor)
         img_features /= img_features.norm(dim=-1, keepdim=True)
-        return img_features.squeeze(0).tolist()
+        return img_features.squeeze(0).cpu().numpy().astype(np.float32)
 
     def process(
         self,
@@ -60,23 +58,63 @@ class EmbeddingExtractor(MediaProcessor):
             )
         ).first():
             return True
-        embeddings = list()
+        embeddings: list[np.ndarray] = []
         for scene in tqdm(scenes):
             if isinstance(scene, ImageFile):
                 embedding = self._get_embedding(scene)
-                if not embedding:
+                if embedding is None:
                     logger.error("EmbeddingExtractor: model returned empty embedding for %s", media.path)
                     delete_media_record(media.id, session)
                     safe_commit(session)
                     return False
                 embeddings.append(embedding)
             elif isinstance(scene, tuple):
-                embedding = self._get_embedding(scene[1])
+                scene_obj, frame = scene
+                embedding = self._get_embedding(frame)
+                if embedding is None:
+                    logger.error("EmbeddingExtractor: model returned empty embedding for %s", media.path)
+                    delete_media_record(media.id, session)
+                    safe_commit(session)
+                    return False
                 embeddings.append(embedding)
-                scene[0].embedding = embedding
-                session.add(scene[0])
+                session.add(scene_obj)
+                session.flush()
+                blob = vector_to_blob(embedding)
+                if blob is None:
+                    logger.error(
+                        "EmbeddingExtractor: failed to encode scene embedding for scene %s in media %s",
+                        scene_obj.id,
+                        media.path,
+                    )
+                else:
+                    session.exec(
+                        text(
+                            """
+                            INSERT OR REPLACE INTO scene_embeddings(scene_id, media_id, embedding)
+                            VALUES (:sid, :mid, :emb)
+                            """
+                        ).bindparams(sid=scene_obj.id, mid=media.id, emb=blob)
+                    )
             elif isinstance(scene, Scene):
-                embeddings.append(scene.embedding)
+                row = session.exec(
+                    text(
+                        "SELECT embedding FROM scene_embeddings WHERE scene_id = :sid"
+                    ).bindparams(sid=scene.id)
+                ).first()
+                if not row:
+                    logger.debug(
+                        "EmbeddingExtractor: no stored embedding for scene %s; skipping",
+                        scene.id,
+                    )
+                    continue
+                vec = vector_from_stored(row[0])
+                if vec is None or vec.size == 0:
+                    logger.debug(
+                        "EmbeddingExtractor: invalid stored embedding for scene %s; skipping",
+                        scene.id,
+                    )
+                    continue
+                embeddings.append(vec.astype(np.float32, copy=False))
             else:
                 logger.warning("Got instance: %s", type(scene))
 
@@ -88,15 +126,19 @@ class EmbeddingExtractor(MediaProcessor):
             norm = np.linalg.norm(avg)
             if norm > 0:
                 avg /= norm
-            vec_embedding = avg.tolist()
+            vec_embedding = avg
         media.embeddings_created = True
         session.add(media)
+        blob = vector_to_blob(vec_embedding)
+        if blob is None:
+            logger.error("EmbeddingExtractor: failed to convert embedding for %s", media.path)
+            return False
         sql = text(
             """
             INSERT OR REPLACE INTO media_embeddings(media_id, embedding)
             VALUES (:id, :emb)
             """
-        ).bindparams(id=media.id, emb=json.dumps(vec_embedding))
+        ).bindparams(id=media.id, emb=blob)
         session.exec(sql)
         safe_commit(session)
         return True

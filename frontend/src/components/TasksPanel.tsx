@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Box,
   Typography,
@@ -14,13 +14,15 @@ import {
   Snackbar,
   Alert,
 } from "@mui/material";
-import { Task, TaskType } from "../types";
-import { getActiveTasks, startTask as startTaskService, cancelTask as cancelTaskService } from "../services/taskActions";
+import { TaskType } from "../types";
+import { startTask as startTaskService, cancelTask as cancelTaskService } from "../services/taskActions";
+import { useTaskEvents } from "../TaskEventsContext";
 
 import SyncIcon from "@mui/icons-material/Sync";
 import MovieIcon from "@mui/icons-material/Movie";
 import Diversity3Icon from "@mui/icons-material/Diversity3";
 import CleaningServicesIcon from '@mui/icons-material/CleaningServices';
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 
 type TaskLabels = Record<TaskType, string>;
 const TASK_LABELS: TaskLabels = {
@@ -28,26 +30,42 @@ const TASK_LABELS: TaskLabels = {
   process_media: "Process Media",
   clean_missing_files: "Cleanup missing files",
   cluster_persons: "Cluster Persons",
-  find_duplicates: "find_duplicates",
+  find_duplicates: "Find duplicates",
 };
 
 export default function TaskManager() {
-  const [tasks, setTasks] = useState<Task[]>([]);
+  const { activeTasks, forceRefresh } = useTaskEvents();
   const [snack, setSnack] = useState<{ open: boolean; msg: string; sev: "success" | "error" }>({ open: false, msg: "", sev: "success" });
+  // Track when each task last made progress to enable an indeterminate fallback
+  const lastProgressRef = useRef<Record<string, { processed: number; changedAt: number }>>({});
 
-  const fetchTasks = async () => {
-    try {
-      const data = await getActiveTasks();
-      setTasks(data);
-    } catch (err) {
-      console.error("Could not load tasks:", err);
-    }
-  };
+  useEffect(() => {
+    const now = Date.now();
+    const nextMap: Record<string, { processed: number; changedAt: number }> = {
+      ...lastProgressRef.current,
+    };
+
+    activeTasks.forEach((t) => {
+      const prev = nextMap[t.id];
+      if (!prev || prev.processed !== t.processed) {
+        nextMap[t.id] = { processed: t.processed, changedAt: now };
+      }
+    });
+
+    const activeIds = new Set(activeTasks.map((t) => t.id));
+    Object.keys(nextMap).forEach((id) => {
+      if (!activeIds.has(id)) {
+        delete nextMap[id];
+      }
+    });
+
+    lastProgressRef.current = nextMap;
+  }, [activeTasks]);
 
   const startTask = async (type: TaskType) => {
     try {
       await startTaskService(type);
-      await fetchTasks();
+      await forceRefresh();
       setSnack({ open: true, msg: `${TASK_LABELS[type]} started`, sev: "success" });
     } catch (err: any) {
       console.error("Error starting task", type, err);
@@ -59,20 +77,14 @@ export default function TaskManager() {
   const cancelTask = async (id: string) => {
     try {
       await cancelTaskService(id);
-      fetchTasks();
+      await forceRefresh();
     } catch (err) {
       console.error("Error cancelling task", id, err);
     }
   };
 
-  useEffect(() => {
-    fetchTasks();
-    const iv = setInterval(fetchTasks, 2000);
-    return () => clearInterval(iv);
-  }, []);
-
   const isTaskRunning = (type: TaskType) =>
-    tasks.some((t) => t.task_type === type && (t.status === "running" || t.status === "pending"));
+    activeTasks.some((t) => t.task_type === type && (t.status === "running" || t.status === "pending"));
 
   return (
     <Box>
@@ -87,18 +99,24 @@ export default function TaskManager() {
         </Alert>
       </Snackbar>
       {/* Active Tasks Section */}
-      {tasks.length > 0 && (
+      {activeTasks.length > 0 && (
         <Stack spacing={2} mb={2}>
           <Typography variant="overline" color="text.secondary">
             Active Tasks
           </Typography>
-          {tasks.map((t) => {
+          {activeTasks.map((t) => {
             const pct =
               t.total > 0
                 ? Math.round((t.processed / t.total) * 100)
                 : t.status === "completed"
                 ? 100
                 : 0;
+            const lp = lastProgressRef.current[t.id];
+            const staleForMs = lp ? Date.now() - lp.changedAt : Number.POSITIVE_INFINITY;
+            // If we haven't seen progress in a bit (e.g., long video/scenes/model load),
+            // switch to an indeterminate bar to show activity.
+            const showIndeterminate =
+              t.status === "running" && (t.total === 0 || staleForMs > 8000);
             return (
               <Box key={t.id}>
                 <Box
@@ -115,8 +133,8 @@ export default function TaskManager() {
                   </Typography>
                 </Box>
                 <LinearProgress
-                  variant="determinate"
-                  value={pct}
+                  variant={showIndeterminate ? "indeterminate" : "determinate"}
+                  value={showIndeterminate ? undefined : pct}
                   sx={{
                     height: 6,
                     borderRadius: 3,
@@ -125,6 +143,12 @@ export default function TaskManager() {
                     "& .MuiLinearProgress-bar": { bgcolor: "primary.main" },
                   }}
                 />
+                {t.status === "running" && (
+                  <Typography variant="caption" color="text.secondary">
+                    {t.current_step ? `Step: ${t.current_step}` : showIndeterminate ? "Working…" : ""}
+                    {t.current_item ? `  —  ${t.current_item}` : ""}
+                  </Typography>
+                )}
                 {t.status === "running" && (
                   <Button
                     size="small"
@@ -185,6 +209,17 @@ export default function TaskManager() {
               <Diversity3Icon />
             </ListItemIcon>
             <ListItemText primary="Cluster All Persons" />
+          </ListItemButton>
+        </ListItem>
+        <ListItem disablePadding>
+          <ListItemButton
+            onClick={() => startTask("find_duplicates")}
+            disabled={isTaskRunning("find_duplicates")}
+          >
+            <ListItemIcon>
+              <ContentCopyIcon />
+            </ListItemIcon>
+            <ListItemText primary="Find Duplicates" />
           </ListItemButton>
         </ListItem>
       </List>

@@ -40,6 +40,7 @@ from app.api.tasks import _run_cleanup_and_chain
 from app.config import settings
 from app.database import ensure_vec_tables
 from app.logger import configure_file_logging, logger
+from app.ffmpeg import ensure_ffmpeg_available
 from app.models import ProcessingTask
 from app.processor_registry import load_processors
 
@@ -136,6 +137,11 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("Could not ensure vec0 tables: %s", e)
 
+    try:
+        ensure_ffmpeg_available()
+    except Exception as e:
+        logger.warning("ffmpeg availability check failed: %s", e)
+
     # Clean up stale tasks from previous runs to avoid blocking actions
     _cleanup_tasks_on_startup()
     if settings.scan.auto_scan:
@@ -166,7 +172,6 @@ except Exception:
 
 app = FastAPI(lifespan=lifespan, redoc_url=None)
 origins = [os.environ.get("DOMAIN", ""), "http://localhost:5173"]
-logger.info("ORIGINS: %s", origins)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,

@@ -14,6 +14,7 @@ import {
 } from "@mui/material";
 import { useListStore, defaultListState } from "../stores/useListStore";
 import { getVideos } from "../services/media";
+import { useTaskCompletionVersion } from "../TaskEventsContext";
 
 const breakpointColumnsObj = {
   default: 5,
@@ -34,11 +35,13 @@ export default function VideosPage() {
   const { items, hasMore, isLoading } = useListStore(
     (state) => state.lists[listKey] || defaultListState
   );
-  const { fetchInitial, loadMore } = useListStore();
+  const { fetchInitial, loadMore, clearList } = useListStore();
+  const refreshKey = useTaskCompletionVersion(["scan", "process_media"]);
 
   useEffect(() => {
+    clearList(listKey);
     fetchInitial(listKey, () => getVideos(null, sortOrder));
-  }, [listKey, fetchInitial, sortOrder]);
+  }, [listKey, fetchInitial, sortOrder, clearList, refreshKey]);
 
   useEffect(() => {
     if (inView && hasMore && !isLoading) {

@@ -68,7 +68,10 @@ class DuplicateProcessor:
                 # Find all hashes that appear more than once
                 stmt = (
                     select(Media.phash, func.count(Media.id).label("count"))
-                    .where(Media.phash.is_not(None))
+                    .where(
+                        Media.phash.is_not(None),
+                        func.length(Media.phash) > 0,
+                    )
                     .group_by(Media.phash)
                     .having(func.count(Media.id) > 1)
                 )

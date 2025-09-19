@@ -44,3 +44,15 @@ def load_processors() -> list[MediaProcessor]:
     processors.extend(loaded)
     logger.info("Processors loaded in order: %s", [p.name for p in processors])
     return processors
+
+
+def reset_processors() -> None:
+    """Unload and clear all registered processors so they reload next use."""
+    if not processors:
+        return
+    for proc in processors:
+        try:
+            proc.unload()
+        except Exception as exc:
+            logger.debug("Processor %s unload failed: %s", proc.name, exc)
+    processors.clear()

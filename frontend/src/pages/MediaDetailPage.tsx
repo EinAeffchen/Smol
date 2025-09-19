@@ -41,6 +41,17 @@ export default function MediaDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const backgroundLocation = location.state?.backgroundLocation;
+  const sceneStartTime: number | null = location.state?.sceneStart ?? null;
+  const buildNavigationState = useCallback(
+    (extra: Record<string, unknown> = {}) => {
+      const baseState = location.state ? { ...location.state } : {};
+      if (baseState && "sceneStart" in baseState) {
+        delete (baseState as Record<string, unknown>).sceneStart;
+      }
+      return { ...baseState, ...extra };
+    },
+    [location.state]
+  );
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
@@ -150,7 +161,7 @@ export default function MediaDetailPage() {
           : null;
       if (newNextId) {
         navigate(`/medium/${newNextId}`, {
-          state: { ...location.state, media: null },
+          state: buildNavigationState({ media: null }),
         });
       }
     }
@@ -160,7 +171,7 @@ export default function MediaDetailPage() {
     allMediaIdsInView,
     id,
     navigate,
-    location.state,
+    buildNavigationState,
   ]);
 
   const handleNavigate = useCallback(
@@ -169,7 +180,7 @@ export default function MediaDetailPage() {
         direction === "prev" ? neighbors.previousId : neighbors.nextId;
       if (targetId) {
         navigate(`/medium/${targetId}`, {
-          state: { ...location.state, media: null },
+          state: buildNavigationState({ media: null }),
         });
       } else if (direction === "next" && hasMore && !isListLoading) {
         if (mediaListKey) {
@@ -191,7 +202,7 @@ export default function MediaDetailPage() {
     [
       navigate,
       neighbors,
-      location.state,
+      buildNavigationState,
       hasMore,
       isListLoading,
       loadMore,
@@ -440,7 +451,10 @@ export default function MediaDetailPage() {
                       }
                     }}
                   />
-                  <MediaDisplay media={detail.media} />
+                  <MediaDisplay
+                    media={detail.media}
+                    initialTime={sceneStartTime ?? undefined}
+                  />
                 </Box>
                 <Fade in={showSwipeHint}>
                   <Box

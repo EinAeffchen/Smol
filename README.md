@@ -4,85 +4,149 @@
 
 # Smart Media Organizing Library
 
-This project is a powerful, self-contained media management system designed to run as a standalone service. It brings advanced, AI-powered features like face recognition, multi-lingual full-text search, and similarity tracking directly to your personal photo and video collection, all without relying on external databases or APIs.
+Self‑hosted, offline‑capable photo & video library with AI features. No cloud services required. Everything runs locally after an initial one‑time model setup.
 
-<a href="https://photos.dummer.dev">Read only Demo</a>
+<a href="https://photos.dummer.dev">Read‑only Demo</a>
 
-<img src="app/screenshots/Front.PNG">
-
----
-
-## Key Features
-
--   **Face Recognition & Person Tracking**
-    -   Automatically detects faces in photos and videos.
-    -   Groups faces belonging to the same person, allowing you to name and organize them.
-    -   Tracks people across your entire media library to find all content they appear in.
-
-    <br>
-    <img src="app/screenshots/Person_Tracking.PNG">
-    <img src="app/screenshots/Person_suggestions.PNG">
-    <br>
-
--   **Multi-Lingual Full-Text Search**
-    -   Supports multiple languages, allowing you to find media by what they depict, moods, etc
-
-    <br>
-    <img src="app/screenshots/search_en.PNG">
-    <img src="app/screenshots/search_jp.PNG">
-    <br>
-
--   **Content-Based Similarity Search**
-    -   Finds visually similar photos and videos, making it easy to discover related content or duplicates.
-
-    <br>
-    <img src="app/screenshots/similar.PNG">
-    <br>
-
--   **Interactive Map & Geotagging**
-    -   Displays all geotagged photos on an interactive world map.
-    -   Includes a dedicated API endpoint to add or update GPS coordinates for your media.
-
-    <br>
-    <img src="app/screenshots/map.PNG">
-    <br>
-
--   **Advanced Media Processing**
-    -   **Built-in Video Converter:** Convert videos into a web-compatible format for seamless playback with one click.
-    -   **EXIF Processor:** Reads and displays detailed metadata (camera model, shutter speed, ISO, etc.) from your photos.
-
--   **Flexible Organization**
-    -   **Free Tagging System:** Add any number of custom tags to your photos and videos for flexible organization.
-    -   **Infinite Scroll:** A modern, infinite-scrolling library view for effortlessly browsing thousands of media files.
-    -   **Read-Only Mode:** A special mode for secure, online presentation of your library without allowing changes.
-    -   **Enable/Disable people** Only want to present your photos and videos without focusing on the people? No problem simply deactivate the recognition via env (ENABLE_PEOPLE=false)
+![Screenshot: Library Grid](docs/screenshots/library-grid.png)
 
 ---
 
-## Getting Started
+## Highlights
 
-This application can be run directly on your machine or as a Docker container.
+- **Offline by design:**
+  - Uses SQLite + sqlite‑vec for metadata and vector search. No external DB.
+  - Runs face detection, clustering, tagging, and semantic search locally.
+  - After first‑run model downloads, the app works fully offline.
 
-> For arm64 support, update the sqlite-vec version in the requirements.txt to 0.1.7a2 and build with `docker buildx build --platform linux/arm64 <name>`
+- **Face recognition & people:**
+  - Detects faces (InsightFace), stores thumbnails and embeddings.
+  - Clusters faces into people using HDBSCAN; assign names; browse appearances.
 
-1. **Create .env for docker-compose**
-    Copy the .env.template file and rename it `.env`.
-    ```bash
-    cp .env.template .env
-    ```
-    Set the variables as described within the <> in your new .env file
-    Make sure you create the folder your HOST_DATA_DIR shows to, otherwise docker will create it as root!
+- **Semantic search & auto‑tagging:**
+  - OpenCLIP embeddings enable multi‑lingual text → image search and “search by image”.
+  - Optional auto‑tagging suggests broad scene/subject tags; add your custom tags.
 
-3.  **Start the Container:**
-    This command will build the Docker image (if it doesn't exist) and start the container.
+- **Duplicates & similarity:**
+  - Perceptual hash (pHash) to find exact/near‑exact image duplicates.
+  - Vector similarity for “more like this”.
 
-    ```bash
-    docker compose up -d
-    ```
+- **Maps & EXIF:**
+  - Extracts EXIF; shows media on a world map; edit/add GPS in the UI.
 
-4.  **Access the Application:**
-Your media manager will be available in your browser at Your media manager should now be running and be accssible at **[http://localhost:8123](http://localhost:8123)**
+- **Profiles:**
+  - Switch between libraries (“profiles”). Safe fallback if a profile path is missing.
 
+- **Desktop or Docker:**
+  - Packaged desktop app (PyInstaller + PySide6/WebView) or Docker container.
+
+---
+
+## Features
+
+- **Library**: Infinite‑scroll grid for photos and videos; per‑item detail with faces, tags, EXIF, scenes.
+- **Face pipeline**: Detect → embed → cluster persons; assign names; view person pages and appearances.
+- **Search**:
+  - Text search (multi‑lingual via CLIP) over your media embeddings.
+  - “Search by image” uploads a reference picture and finds similar content.
+- **Auto‑tagging**: Optional CLIP‑based category tags + custom tag support.
+- **Duplicates**: pHash duplicate groups with select/cleanup actions.
+- **Video scenes**: Scene thumbnails and representative frames.
+- **EXIF & GPS**: Read EXIF; add/update GPS; map view of media locations.
+- **Tasks**: Background tasks for scan, process media, cluster persons, find duplicates, clean missing files. Safe cancel and progress reporting.
+- **Profiles**: Multiple library roots; add/switch/remove profiles from Settings.
+- **Read‑only mode**: Serve an immutable library safely.
+
+---
+
+## Offline Operation
+
+- After first run, all processing happens locally. What is needed initially:
+  - CLIP model weights (OpenCLIP) for embeddings/search/auto‑tagging.
+  - InsightFace ONNX models for detection/recognition.
+  - FFmpeg binaries available in PATH (desktop). Docker image includes FFmpeg.
+- Models are cached under your profile’s `.omoide/models` directory. You can pre‑place models there to avoid any network access.
+- Vector search uses the bundled `sqlite‑vec` extension; no external services.
+
+---
+
+## Quick Start (Docker)
+
+> For arm64, ensure `sqlite‑vec` matches your platform (e.g. 0.1.7a2) and build with `docker buildx build --platform linux/arm64 …`.
+
+1) Copy env file:
+
+```bash
+cp .env.template .env
+```
+
+2) Adjust variables in `.env` (host media/data dirs, ports).
+
+3) Start:
+
+```bash
+docker compose up -d
+```
+
+4) Open: http://localhost:8123
+
+---
+
+## Quick Start (Desktop)
+
+- Requirements: Python 3.12+, FFmpeg in PATH, Node 18+ (to build the UI), platform toolchain.
+- Build frontend then run locally or build a binary:
+
+```bash
+# Build frontend
+cd frontend && npm ci && npm run build && cd ..
+
+# Run from source
+uvicorn app.main:app --host 127.0.0.1 --port 8123
+
+# Or build a binary (PyInstaller)
+pyinstaller main.spec
+dist/omoide-*/omoide-*.exe
+```
+
+On first start, open Settings → Profiles and set your media folder(s). Click Scan, then Process Media, then Cluster Persons.
+
+---
+
+## Screenshots
+
+> Placeholder images — replace with real screenshots before release.
+
+- Library grid: `docs/screenshots/library-grid.png`
+- Media detail (faces, tags, EXIF): `docs/screenshots/media-detail.png`
+- Search by text: `docs/screenshots/search-text.png`
+- Search by image: `docs/screenshots/search-image.png`
+- People overview: `docs/screenshots/people-list.png`
+- Person detail: `docs/screenshots/person-detail.png`
+- Duplicates: `docs/screenshots/duplicates.png`
+- Map view: `docs/screenshots/map.png`
+- Orphan faces review: `docs/screenshots/orphan-faces.png`
+- Configuration / Profiles: `docs/screenshots/settings-profiles.png`
+
+---
+
+## How It Works (Tech Overview)
+
+- Backend: FastAPI + SQLModel (SQLite/WAL), `sqlite‑vec` for vector search.
+- Embeddings: OpenCLIP (CPU by default) via `open‑clip‑torch`.
+- Faces: InsightFace with ONNXRuntime (CPU), stored as normalized vectors.
+- Clustering: HDBSCAN groups faces into people.
+- Similarity: cosine distances in `media_embeddings` and `face_embeddings` virtual tables.
+- Thumbnails/Scenes: FFmpeg extracts frames for images/videos.
+- UI: React + MUI; desktop uses PySide6 + pywebview to embed the UI.
+
+---
+
+## Tips & Troubleshooting
+
+- FFmpeg must be available to generate thumbnails and probe media (Docker image includes it).
+- Profiles: if a previously selected profile path is missing, the app falls back to a safe local profile instead of crashing; relink from Settings.
+- Large scans: scanning is batched and uses path range preloads for speed; model downloads can take time on first run.
 
 ---
 

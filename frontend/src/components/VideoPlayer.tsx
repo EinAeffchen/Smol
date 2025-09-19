@@ -4,7 +4,12 @@ import ReactPlayer from "react-player";
 import { Media } from "../types";
 import { API } from "../config";
 
-export function VideoWithPreview({ media }: { media: Media }) {
+interface VideoWithPreviewProps {
+  media: Media;
+  initialTime?: number;
+}
+
+export function VideoWithPreview({ media, initialTime = 0 }: VideoWithPreviewProps) {
   const [isLoading, setIsLoading] = useState(false);
   const mediaUrl = `${API}/originals/${media.path}`;
   const scenesUrl = `${API}/api/media/${media.id}/scenes.vtt`;
@@ -21,8 +26,9 @@ export function VideoWithPreview({ media }: { media: Media }) {
     x: 0,
   });
 
-  const playerWrapperRef = useRef(null);
-  const playerRef = useRef(null);
+  const playerWrapperRef = useRef<any>(null);
+  const playerRef = useRef<any>(null);
+  const [isReady, setIsReady] = useState(false);
 
   const PROGRESS_BAR_LEFT_OFFSET = 48;
   const PROGRESS_BAR_RIGHT_OFFSET = 225;
@@ -115,7 +121,17 @@ export function VideoWithPreview({ media }: { media: Media }) {
     if (internalPlayer) {
       setHasAudio(internalPlayer.mozHasAudio);
     }
+    setIsReady(true);
   };
+
+  useEffect(() => {
+    if (!isReady || !playerRef.current) return;
+    if (initialTime && initialTime > 0) {
+      playerRef.current.seekTo(initialTime, "seconds");
+    } else {
+      playerRef.current.seekTo(0, "seconds");
+    }
+  }, [isReady, initialTime, media.id]);
 
   if (!media.path) {
     return <Typography color="text.secondary">No video available</Typography>;
@@ -189,3 +205,6 @@ export function VideoWithPreview({ media }: { media: Media }) {
     </Box>
   );
 }
+  // useEffect(() => {
+  //   setIsReady(false);
+  // }, [media.id]);

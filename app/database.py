@@ -192,6 +192,16 @@ def ensure_vec_tables():
                );
             """
         )
+        conn.exec_driver_sql(
+            f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS scene_embeddings
+            USING vec0(
+                scene_id integer primary key,
+                media_id integer,
+                embedding float[{dim_media}]
+            );
+            """
+        )
 
 
 def safe_commit(session, retries=5, delay=0.5):

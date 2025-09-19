@@ -1,16 +1,18 @@
-from sqlmodel import Session
-from app.models import Media, Scene
-from cv2.typing import MatLike
-from PIL.ImageFile import ImageFile
-from app.processors.base import MediaProcessor
-from sqlmodel import select, text, or_
-from app.config import settings, get_clip_bundle
-from app.api.tags import get_or_create_tag, attach_tag_to_media
-from app.database import safe_commit
-from app.logger import logger
 import os
+
 import numpy as np
 import torch
+from cv2.typing import MatLike
+from PIL.ImageFile import ImageFile
+from sqlmodel import Session, select, text
+
+from app.api.tags import attach_tag_to_media, get_or_create_tag
+from app.config import get_clip_bundle, settings
+from app.database import safe_commit
+from app.logger import logger
+from app.models import Media, Scene
+from app.processors.base import MediaProcessor
+from app.utils import vector_from_stored
 
 
 class AutoTagger(MediaProcessor):
@@ -132,16 +134,8 @@ class AutoTagger(MediaProcessor):
         media: Media,
         session: Session,
         scenes: list[tuple[Scene, MatLike]] | list[ImageFile] | list[Scene],
-    ) -> bool|None:
-        if session.exec(
-            select(Media).where(
-                or_(
-                    Media.ran_auto_tagging.is_(True),
-                    Media.embeddings_created.is_(False),
-                ),
-                Media.id == media.id,
-            )
-        ).first():
+    ) -> bool | None:
+        if media.ran_auto_tagging is True or media.embeddings_created is False:
             return True
 
         sql = text(
@@ -156,12 +150,22 @@ class AutoTagger(MediaProcessor):
         raw_media_embedding_bytes = session.exec(sql).first()
         if not raw_media_embedding_bytes:
             logger.warning(
-                "AutoTagger: No embedding found for %s, skipping auto-tagging for this item",
+                "AutoTagger: No embedding found for %s: %s, skipping auto-tagging for this item and resetting embedding created flag",
+                media.id,
+                media.path,
+            )
+
+            media.embeddings_created = False
+            session.add(media)
+            session.commit()
+            return True
+        media_embedding = vector_from_stored(raw_media_embedding_bytes[0])
+        if media_embedding is None or media_embedding.size == 0:
+            logger.warning(
+                "AutoTagger: Failed to decode embedding for %s; skipping",
                 media.path,
             )
             return True
-        
-        media_embedding = np.frombuffer(raw_media_embedding_bytes[0], dtype=np.float32)
         for tag, tag_vector in self.tag_map.items():
             similarity_score = np.dot(media_embedding, tag_vector)
             if similarity_score > 0.2:

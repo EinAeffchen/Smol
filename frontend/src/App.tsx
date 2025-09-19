@@ -5,6 +5,7 @@ import { useThemeContext } from "./ThemeContext";
 import { getTheme } from "./theme";
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { TaskEventsProvider } from "./TaskEventsContext";
 import { AppRoutes } from "./routes";
 
 export default function App() {
@@ -13,12 +14,14 @@ export default function App() {
 
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
-      <MuiThemeProvider theme={theme}>
-        <CssBaseline />
-        <Router>
-          <AppRoutes />
-        </Router>
-      </MuiThemeProvider>
+      <TaskEventsProvider>
+        <MuiThemeProvider theme={theme}>
+          <CssBaseline />
+          <Router>
+            <AppRoutes />
+          </Router>
+        </MuiThemeProvider>
+      </TaskEventsProvider>
     </LocalizationProvider>
   );
 }

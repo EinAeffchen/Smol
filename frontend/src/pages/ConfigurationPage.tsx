@@ -37,6 +37,8 @@ import {
   Alert,
   FormHelperText,
   Radio,
+  ToggleButton,
+  ToggleButtonGroup,
 } from "@mui/material";
 import {
   Paper,
@@ -49,38 +51,70 @@ import {
   ListItemSecondaryAction,
 } from "@mui/material";
 
-const clipModels = [
-  {
-    name: "xlm-roberta-large-ViT-H-14",
-    value: "('xlm-roberta-large-ViT-H-14', 1024, 'frozen_laion5b_s13b_b90k')",
-    embeddingSize: 1024,
-    pretrained: "frozen_laion5b_s13b_b90k",
+type FacePresetKey = "strict" | "normal" | "loose";
+
+const facePresets: Record<
+  FacePresetKey,
+  Omit<AppConfig["face_recognition"], "preset">
+> = {
+  strict: {
+    face_recognition_min_confidence: 0.6,
+    face_match_cosine_threshold: 0.78,
+    existing_person_cosine_threshold: 0.86,
+    existing_person_min_cosine_margin: 0.07,
+    existing_person_min_appearances: 4,
+    face_recognition_min_face_pixels: 2000,
+    person_min_face_count: 3,
+    person_min_media_count: 2,
+    person_cluster_max_l2_radius: 0.55,
+    cluster_batch_size: 8000,
+    hdbscan_min_cluster_size: 7,
+    hdbscan_min_samples: 12,
+    hdbscan_cluster_selection_method: "leaf",
+    hdbscan_cluster_selection_epsilon: 0.07,
   },
-  {
-    name: "xlm-roberta-base-ViT-B-32",
-    value: "('xlm-roberta-base-ViT-B-32', 512, 'laion5b_s13b_b90k')",
-    embeddingSize: 512,
-    pretrained: "laion5b_s13b_b90k",
+  normal: {
+    face_recognition_min_confidence: 0.5,
+    face_match_cosine_threshold: 0.7,
+    existing_person_cosine_threshold: 0.8,
+    existing_person_min_cosine_margin: 0.05,
+    existing_person_min_appearances: 3,
+    face_recognition_min_face_pixels: 1600,
+    person_min_face_count: 2,
+    person_min_media_count: 2,
+    person_cluster_max_l2_radius: 0.65,
+    cluster_batch_size: 10000,
+    hdbscan_min_cluster_size: 6,
+    hdbscan_min_samples: 10,
+    hdbscan_cluster_selection_method: "leaf",
+    hdbscan_cluster_selection_epsilon: 0.1,
   },
-  {
-    name: "ViT-L-14",
-    value: "('ViT-L-14', 768, 'laion2b_s32b_b82k')",
-    embeddingSize: 768,
-    pretrained: "laion2b_s32b_b82k",
+  loose: {
+    face_recognition_min_confidence: 0.4,
+    face_match_cosine_threshold: 0.65,
+    existing_person_cosine_threshold: 0.75,
+    existing_person_min_cosine_margin: 0.03,
+    existing_person_min_appearances: 2,
+    face_recognition_min_face_pixels: 1200,
+    person_min_face_count: 2,
+    person_min_media_count: 2,
+    person_cluster_max_l2_radius: 0.7,
+    cluster_batch_size: 12000,
+    hdbscan_min_cluster_size: 4,
+    hdbscan_min_samples: 6,
+    hdbscan_cluster_selection_method: "leaf",
+    hdbscan_cluster_selection_epsilon: 0.13,
   },
-  {
-    name: "ViT-B-32",
-    value: "('ViT-B-32', 512, 'laion2b_s34b_b79k')",
-    embeddingSize: 512,
-    pretrained: "laion2b_s34b_b79k",
-  },
-  {
-    name: "convnext_base_w",
-    value: "('convnext_base_w', 640, 'laion2b_s13b_b82k_augreg')",
-    embeddingSize: 640,
-    pretrained: "laion2b_s13b_b82k_augreg",
-  },
-];
+};
+
+const facePresetDescriptions: Record<FacePresetKey, string> = {
+  strict:
+    "Highest precision. Requires sharp faces and strong matches before auto-grouping.",
+  normal:
+    "Balanced defaults. Works well for most libraries without over or under clustering.",
+  loose:
+    "Captures more borderline matches. Useful for sparse datasets at the cost of more review.",
+};
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -128,6 +162,9 @@ export default function ConfigurationPage() {
     import("../types").ProfileHealth | null
   >(null);
   const [hasActiveTasks, setHasActiveTasks] = useState(false);
+  const [faceSettingsMode, setFaceSettingsMode] = useState<
+    "presets" | "manual"
+  >("presets");
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -162,6 +199,13 @@ export default function ConfigurationPage() {
     };
     fetchConfig();
   }, []);
+
+  useEffect(() => {
+    if (!config) return;
+    if (config.face_recognition.preset === "custom") {
+      setFaceSettingsMode("manual");
+    }
+  }, [config]);
 
   const handleSave = async () => {
     if (!config) return;
@@ -271,20 +315,45 @@ export default function ConfigurationPage() {
       setConfig({ ...config, [section]: { ...config[section], [key]: value } });
     }
   };
-  const handleClipModelChange = (
-    event: React.ChangeEvent<{ value: unknown }>
-  ) => {
-    const selectedName = event.target.value as string;
-    const selectedModel = clipModels.find((m) => m.name === selectedName);
-    if (selectedModel && config) {
-      const newAiConfig = {
-        ...config.ai,
-        clip_model_enum: selectedModel.name as any, // Send just the name
-        clip_model: selectedModel.name,
-        clip_model_embedding_size: selectedModel.embeddingSize,
-        clip_model_pretrained: selectedModel.pretrained,
+  const applyFacePreset = (preset: FacePresetKey) => {
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const presetValues = facePresets[preset];
+      const nextFace = {
+        ...prev.face_recognition,
+        ...presetValues,
+        preset,
       };
-      setConfig({ ...config, ai: newAiConfig });
+      return { ...prev, face_recognition: nextFace };
+    });
+    setFaceSettingsMode("presets");
+  };
+
+  const setFaceValue = <
+    K extends keyof AppConfig["face_recognition"]
+  >(
+    key: K,
+    value: AppConfig["face_recognition"][K]
+  ) => {
+    setConfig((prev) => {
+      if (!prev) return prev;
+      if (
+        typeof value === "number" &&
+        (Number.isNaN(value) || value === Infinity || value === -Infinity)
+      ) {
+        return prev;
+      }
+      const nextFace = {
+        ...prev.face_recognition,
+        [key]: value,
+      };
+      if (key !== "preset") {
+        nextFace.preset = "custom";
+      }
+      return { ...prev, face_recognition: nextFace };
+    });
+    if (key !== "preset") {
+      setFaceSettingsMode("manual");
     }
   };
 
@@ -403,6 +472,10 @@ export default function ConfigurationPage() {
   }
 
   const isBinary = !!config.general.is_binary;
+  const activeFacePreset =
+    config.face_recognition.preset === "custom"
+      ? null
+      : (config.face_recognition.preset as FacePresetKey);
   let sections: { label: string; content: React.ReactNode }[] = [
     {
       label: "Profiles",
@@ -843,24 +916,14 @@ export default function ConfigurationPage() {
       content: (
         <Grid container spacing={2}>
           <Grid size={{ xs: 12, sm: 6 }}>
-            <FormControl fullWidth margin="normal">
-              <InputLabel id="clip-model-select-label">Clip Model</InputLabel>
-              <Select
-                labelId="clip-model-select-label"
-                value={config.ai.clip_model} // Bind to the model name
-                label="Clip Model"
-                onChange={handleClipModelChange as any}
-              >
-                {clipModels.map((model) => (
-                  <MenuItem key={model.name} value={model.name}>
-                    {model.name}
-                  </MenuItem>
-                ))}
-              </Select>
-              <FormHelperText>
-                Larger models improve accuracy but require more memory/CPU.
-              </FormHelperText>
-            </FormControl>
+            <TextField
+              label="Clip Model"
+              value={`${config.ai.clip_model} (${config.ai.clip_model_embedding_size}-d)`}
+              fullWidth
+              margin="normal"
+              InputProps={{ readOnly: true }}
+              helperText="Clip model is locked. Set OMOIDE_AI__CLIP_MODEL in the environment to change it."
+            />
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>
             <TextField
@@ -896,104 +959,11 @@ export default function ConfigurationPage() {
               helperText="Higher = stronger match needed to count media as similar"
             />
           </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Cluster Batch Size"
-              value={config.ai.cluster_batch_size}
-              onChange={(e) =>
-                handleValueChange(
-                  "ai",
-                  "cluster_batch_size",
-                  parseInt(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Faces processed per clustering batch (memory vs. speed)"
-            />
-          </Grid>
-
-          {/* HDBSCAN advanced clustering parameters */}
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="HDBSCAN Min Cluster Size"
-              value={config.ai.hdbscan_min_cluster_size}
-              onChange={(e) =>
-                handleValueChange(
-                  "ai",
-                  "hdbscan_min_cluster_size",
-                  parseInt(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Minimum faces to form a cluster; larger merges clusters (fewer small identities)."
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="HDBSCAN Min Samples"
-              value={config.ai.hdbscan_min_samples}
-              onChange={(e) =>
-                handleValueChange(
-                  "ai",
-                  "hdbscan_min_samples",
-                  parseInt(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Higher = more conservative (more points marked as noise/outliers)."
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <FormControl fullWidth margin="normal">
-              <InputLabel id="hdbscan-cluster-selection-method-label">
-                HDBSCAN Cluster Selection Method
-              </InputLabel>
-              <Select
-                labelId="hdbscan-cluster-selection-method-label"
-                value={config.ai.hdbscan_cluster_selection_method}
-                label="HDBSCAN Cluster Selection Method"
-                onChange={(e) =>
-                  handleValueChange(
-                    "ai",
-                    "hdbscan_cluster_selection_method",
-                    e.target.value as any
-                  )
-                }
-              >
-                <MenuItem value="leaf">
-                  leaf (finer, more granular clusters)
-                </MenuItem>
-                <MenuItem value="eom">eom (more stable, fewer splits)</MenuItem>
-              </Select>
-              <FormHelperText>
-                Controls granularity of clusters; "leaf" yields finer
-                segmentation.
-              </FormHelperText>
-            </FormControl>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="HDBSCAN Cluster Selection Epsilon"
-              value={config.ai.hdbscan_cluster_selection_epsilon}
-              onChange={(e) =>
-                handleValueChange(
-                  "ai",
-                  "hdbscan_cluster_selection_epsilon",
-                  parseFloat(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              inputProps={{ step: 0.01 }}
-              helperText="Extra split sensitivity; larger values produce more, smaller clusters."
-            />
+          <Grid size={{ xs: 12 }}>
+            <Alert severity="info" sx={{ mt: 1 }}>
+              People clustering controls now live under Face Recognition presets
+              and manual tuning.
+            </Alert>
           </Grid>
         </Grid>
       ),
@@ -1071,146 +1041,320 @@ export default function ConfigurationPage() {
     {
       label: "Face Recognition",
       content: (
-        <Grid container spacing={2}>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Min Confidence"
-              value={config.face_recognition.face_recognition_min_confidence}
-              onChange={(e) =>
-                handleValueChange(
-                  "face_recognition",
-                  "face_recognition_min_confidence",
-                  parseFloat(e.target.value)
-                )
+        <Box>
+          <Box sx={{ borderBottom: 1, borderColor: "divider", mb: 3 }}>
+            <Tabs
+              value={faceSettingsMode}
+              onChange={(_, value: "presets" | "manual") =>
+                setFaceSettingsMode(value)
               }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Lower = detect more faces (including low-quality), higher = stricter"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Match Cosine Threshold"
-              value={config.face_recognition.face_match_cosine_threshold}
-              onChange={(e) =>
-                handleValueChange(
-                  "face_recognition",
-                  "face_match_cosine_threshold",
-                  parseFloat(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Similarity threshold for attaching a face to a known person"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Existing Person Cosine Threshold"
-              value={config.face_recognition.existing_person_cosine_threshold}
-              onChange={(e) =>
-                handleValueChange(
-                  "face_recognition",
-                  "existing_person_cosine_threshold",
-                  parseFloat(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Stricter threshold when attaching to already-established persons"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Existing Person Min Cosine Margin"
-              value={config.face_recognition.existing_person_min_cosine_margin}
-              onChange={(e) =>
-                handleValueChange(
-                  "face_recognition",
-                  "existing_person_min_cosine_margin",
-                  parseFloat(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              inputProps={{ step: 0.01 }}
-              helperText="Require a gap between best and 2nd-best match to avoid ambiguity"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Existing Person Min Appearances"
-              value={config.face_recognition.existing_person_min_appearances}
-              onChange={(e) =>
-                handleValueChange(
-                  "face_recognition",
-                  "existing_person_min_appearances",
-                  parseInt(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Do not attach to very small/immature persons (reduces noise)"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Min Face Pixels"
-              value={config.face_recognition.face_recognition_min_face_pixels}
-              onChange={(e) =>
-                handleValueChange(
-                  "face_recognition",
-                  "face_recognition_min_face_pixels",
-                  parseInt(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Minimum face area (in pixels) to be considered detectible"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Min Face Count per Person"
-              value={config.face_recognition.person_min_face_count}
-              onChange={(e) =>
-                handleValueChange(
-                  "face_recognition",
-                  "person_min_face_count",
-                  parseInt(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              helperText="Faces required to automatically create a new person"
-            />
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6 }}>
-            <TextField
-              label="Person Cluster Max L2 Radius"
-              value={config.face_recognition.person_cluster_max_l2_radius}
-              onChange={(e) =>
-                handleValueChange(
-                  "face_recognition",
-                  "person_cluster_max_l2_radius",
-                  parseFloat(e.target.value)
-                )
-              }
-              fullWidth
-              margin="normal"
-              type="number"
-              inputProps={{ step: 0.01 }}
-              helperText="Max allowed L2 distance around centroid when forming a new person"
-            />
-          </Grid>
-        </Grid>
+              aria-label="Face recognition configuration mode"
+            >
+              <Tab label="Presets" value="presets" />
+              <Tab label="Manual" value="manual" />
+            </Tabs>
+          </Box>
+          {faceSettingsMode === "presets" ? (
+            <Box>
+              <ToggleButtonGroup
+                exclusive
+                color="primary"
+                value={activeFacePreset}
+                onChange={(_, next: FacePresetKey | null) => {
+                  if (next) {
+                    applyFacePreset(next);
+                  }
+                }}
+                sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}
+              >
+                <ToggleButton value="strict">Strict</ToggleButton>
+                <ToggleButton value="normal">Normal</ToggleButton>
+                <ToggleButton value="loose">Loose</ToggleButton>
+              </ToggleButtonGroup>
+              {config.face_recognition.preset === "custom" && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  You are currently using custom values. Switch to Manual to
+                  review them or pick a preset above to restore defaults.
+                </Alert>
+              )}
+              {activeFacePreset && (
+                <Typography variant="body2" sx={{ mt: 2 }}>
+                  {facePresetDescriptions[activeFacePreset]}
+                </Typography>
+              )}
+              <Typography variant="caption" sx={{ mt: 2, display: "block" }}>
+                Presets adjust detection strictness, person assignment, and
+                clustering thresholds together.
+              </Typography>
+            </Box>
+          ) : (
+            <Box>
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                Changing any field switches the preset to Custom.
+              </Alert>
+              <Grid container spacing={2}>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Min Confidence"
+                    value={
+                      config.face_recognition.face_recognition_min_confidence
+                    }
+                    onChange={(e) =>
+                      setFaceValue(
+                        "face_recognition_min_confidence",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Lower = detect more faces (including low-quality), higher = stricter"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Match Cosine Threshold"
+                    value={config.face_recognition.face_match_cosine_threshold}
+                    onChange={(e) =>
+                      setFaceValue(
+                        "face_match_cosine_threshold",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Similarity threshold for attaching a face to a known person"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Existing Person Cosine Threshold"
+                    value={
+                      config.face_recognition.existing_person_cosine_threshold
+                    }
+                    onChange={(e) =>
+                      setFaceValue(
+                        "existing_person_cosine_threshold",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Stricter threshold when attaching to already-established persons"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Existing Person Min Cosine Margin"
+                    value={
+                      config.face_recognition.existing_person_min_cosine_margin
+                    }
+                    onChange={(e) =>
+                      setFaceValue(
+                        "existing_person_min_cosine_margin",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    inputProps={{ step: 0.01 }}
+                    helperText="Require a gap between best and 2nd-best match to avoid ambiguity"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Existing Person Min Appearances"
+                    value={
+                      config.face_recognition.existing_person_min_appearances
+                    }
+                    onChange={(e) =>
+                      setFaceValue(
+                        "existing_person_min_appearances",
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Do not attach to very small/immature persons (reduces noise)"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Min Face Pixels"
+                    value={
+                      config.face_recognition.face_recognition_min_face_pixels
+                    }
+                    onChange={(e) =>
+                      setFaceValue(
+                        "face_recognition_min_face_pixels",
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Minimum face area (in pixels) to be considered detectible"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Min Face Count per Person"
+                    value={config.face_recognition.person_min_face_count}
+                    onChange={(e) =>
+                      setFaceValue(
+                        "person_min_face_count",
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Faces required to automatically create a new person"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Min Media Count per Person"
+                    value={config.face_recognition.person_min_media_count}
+                    onChange={(e) =>
+                      setFaceValue(
+                        "person_min_media_count",
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Distinct media items required before a cluster becomes a person"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Person Cluster Max L2 Radius"
+                    value={
+                      config.face_recognition.person_cluster_max_l2_radius
+                    }
+                    onChange={(e) =>
+                      setFaceValue(
+                        "person_cluster_max_l2_radius",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    inputProps={{ step: 0.01 }}
+                    helperText="Max allowed L2 distance around centroid when forming a new person"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Cluster Batch Size"
+                    value={config.face_recognition.cluster_batch_size}
+                    onChange={(e) =>
+                      setFaceValue(
+                        "cluster_batch_size",
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Faces processed per clustering batch (memory vs. speed)"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="HDBSCAN Min Cluster Size"
+                    value={config.face_recognition.hdbscan_min_cluster_size}
+                    onChange={(e) =>
+                      setFaceValue(
+                        "hdbscan_min_cluster_size",
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Minimum faces to form a cluster; larger merges clusters (fewer small identities)"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="HDBSCAN Min Samples"
+                    value={config.face_recognition.hdbscan_min_samples}
+                    onChange={(e) =>
+                      setFaceValue(
+                        "hdbscan_min_samples",
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="Higher = more conservative (more points marked as noise/outliers)"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <FormControl fullWidth margin="normal">
+                    <InputLabel id="hdbscan-method-manual-label">
+                      HDBSCAN Cluster Selection Method
+                    </InputLabel>
+                    <Select
+                      labelId="hdbscan-method-manual-label"
+                      value={
+                        config.face_recognition
+                          .hdbscan_cluster_selection_method
+                      }
+                      label="HDBSCAN Cluster Selection Method"
+                      onChange={(e) =>
+                        setFaceValue(
+                          "hdbscan_cluster_selection_method",
+                          e.target.value as string
+                        )
+                      }
+                    >
+                      <MenuItem value="leaf">
+                        leaf (finer, more granular clusters)
+                      </MenuItem>
+                      <MenuItem value="eom">
+                        eom (more stable, fewer splits)
+                      </MenuItem>
+                    </Select>
+                    <FormHelperText>
+                      Controls granularity of clusters; "leaf" yields finer
+                      segmentation.
+                    </FormHelperText>
+                  </FormControl>
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="HDBSCAN Selection Epsilon"
+                    value={
+                      config.face_recognition
+                        .hdbscan_cluster_selection_epsilon
+                    }
+                    onChange={(e) =>
+                      setFaceValue(
+                        "hdbscan_cluster_selection_epsilon",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    inputProps={{ step: 0.01 }}
+                    helperText="Extra split sensitivity; larger values produce more, smaller clusters"
+                  />
+                </Grid>
+              </Grid>
+            </Box>
+          )}
+        </Box>
       ),
     },
     {

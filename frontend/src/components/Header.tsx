@@ -115,7 +115,9 @@ export function Header() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState<"media" | "person" | "tag">("media");
+  const [category, setCategory] = useState<
+    "media" | "person" | "tag" | "scene"
+  >("media");
   // Force a re-render when runtime config updates (e.g., read-only flag changes)
   const [configTick, setConfigTick] = useState(0);
   const navigate = useNavigate();
@@ -237,13 +239,14 @@ export function Header() {
         size="small"
         value={category}
         onChange={(e) =>
-          setCategory(e.target.value as "media" | "person" | "tag")
+          setCategory(e.target.value as "media" | "person" | "tag" | "scene")
         }
         sx={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
       >
         <MenuItem value="media">Media</MenuItem>
         <MenuItem value="person">People</MenuItem>
         <MenuItem value="tag">Tags</MenuItem>
+        <MenuItem value="scene">Scenes</MenuItem>
       </Select>
       <TextField
         variant="outlined"

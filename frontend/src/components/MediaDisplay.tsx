@@ -5,9 +5,10 @@ import { Media } from "../types";
 import { API } from "../config";
 interface MediaDisplayProps {
   media: Media;
+  initialTime?: number | null;
 }
 
-export function MediaDisplay({ media }: MediaDisplayProps) {
+export function MediaDisplay({ media, initialTime }: MediaDisplayProps) {
   return (
     <Box display="flex" justifyContent="center" mb={2}>
       <Paper
@@ -21,7 +22,11 @@ export function MediaDisplay({ media }: MediaDisplayProps) {
         }}
       >
         {media.duration ? (
-          <VideoWithPreview key={media.id} media={media} />
+          <VideoWithPreview
+            key={media.id}
+            media={media}
+            initialTime={initialTime ?? undefined}
+          />
         ) : (
           <Box
             component="img"

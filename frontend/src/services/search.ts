@@ -1,5 +1,11 @@
 import { API } from "../config";
-import { CursorPage, MediaPreview, PersonReadSimple, Tag } from "../types";
+import {
+  CursorPage,
+  MediaPreview,
+  PersonReadSimple,
+  SceneSearchResult,
+  Tag,
+} from "../types";
 
 export const searchMedia = async (
   query: string,
@@ -30,6 +36,17 @@ export const searchTags = async (
 ): Promise<CursorPage<Tag>> => {
   const response = await fetch(
     `${API}/api/search/tags?query=${query}&limit=${limit}${cursor ? `&cursor=${cursor}` : ""}`
+  );
+  return response.json();
+};
+
+export const searchScenes = async (
+  query: string,
+  limit: number,
+  cursor?: string
+): Promise<CursorPage<SceneSearchResult>> => {
+  const response = await fetch(
+    `${API}/api/search/scenes?query=${query}&limit=${limit}${cursor ? `&cursor=${cursor}` : ""}`
   );
   return response.json();
 };

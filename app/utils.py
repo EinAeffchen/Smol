@@ -1,10 +1,10 @@
 import json
 import os
-from collections.abc import Iterable
 import subprocess
+from collections.abc import Iterable
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath, PureWindowsPath
-from typing import Literal
+from typing import Any, Literal
 
 import cv2
 import ffmpeg
@@ -13,14 +13,15 @@ import numpy as np
 import piexif
 from fastapi import HTTPException
 from PIL import Image, ImageOps, UnidentifiedImageError
-from scenedetect import AdaptiveDetector, detect
+from scenedetect import HistogramDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlalchemy import delete, text
 from sqlmodel import Session, select
 from tqdm import tqdm
 
-from app.config import settings
 import app.database as db
+from app.config import settings
+from app.ffmpeg import ensure_ffmpeg_available
 from app.database import safe_commit
 from app.logger import logger
 from app.models import (
@@ -34,6 +35,55 @@ from app.models import (
     ProcessingTask,
     Scene,
 )
+
+
+def _coerce_vector_array(value: Any) -> np.ndarray | None:
+    """Normalize assorted embedding representations into a 1D float32 array."""
+    if value is None:
+        return None
+
+    if isinstance(value, np.ndarray):
+        arr = value.astype(np.float32, copy=False)
+    elif isinstance(value, memoryview):
+        arr = np.frombuffer(value, dtype=np.float32)
+    elif isinstance(value, (bytes, bytearray)):
+        arr = np.frombuffer(value, dtype=np.float32)
+    elif isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            logger.debug(
+                "Failed to decode embedding JSON; value=%s", value[:32]
+            )
+            return None
+        return _coerce_vector_array(parsed)
+    else:
+        try:
+            arr = np.asarray(value, dtype=np.float32)
+        except (TypeError, ValueError):
+            return None
+
+    if arr.ndim == 0:
+        return None
+    if arr.ndim > 1:
+        arr = arr.reshape(-1)
+    return arr.astype(np.float32, copy=False)
+
+
+def vector_to_blob(value: Any) -> bytes | None:
+    """Convert a sequence/JSON/blob embedding to the raw bytes sqlite-vec expects."""
+    arr = _coerce_vector_array(value)
+    if arr is None:
+        return None
+    return arr.tobytes()
+
+
+def vector_from_stored(value: Any) -> np.ndarray | None:
+    """Decode a stored sqlite-vec embedding (bytes/JSON/list) into a numpy vector."""
+    arr = _coerce_vector_array(value)
+    if arr is None:
+        return None
+    return arr
 
 
 def get_image_taken_date(img_path: Path | None = None) -> datetime:
@@ -119,7 +169,9 @@ def process_file(filepath: Path) -> Media | None:
                 duration = 0.0
             try:
                 vs = [
-                    s for s in probe.get("streams", []) if s.get("codec_type") == "video"
+                    s
+                    for s in probe.get("streams", [])
+                    if s.get("codec_type") == "video"
                 ]
                 if vs:
                     width = int(vs[0].get("width") or 0) or None
@@ -291,7 +343,7 @@ def get_person_embedding(
     person_id: int,
     face_embeddings: list | None = None,
     new: bool = False,
-) -> str | bytes | None:
+) -> bytes | None:
     if not face_embeddings:
         if not new:
             person_embedding = session.exec(
@@ -300,29 +352,48 @@ def get_person_embedding(
                 ).bindparams(p_id=person_id)
             ).first()
             if person_embedding:
-                # returns bytes
-                return person_embedding[0]
+                blob = vector_to_blob(person_embedding[0])
+                if blob:
+                    return blob
 
-        face_embeddings = session.exec(
-            select(Face.embedding).where(
-                Face.person_id == person_id, Face.embedding != None
-            )
-        ).all()
+        face_embeddings = [
+            row[0]
+            for row in session.exec(
+                text(
+                    "SELECT embedding FROM face_embeddings WHERE person_id = :p_id"
+                ).bindparams(p_id=person_id)
+            ).all()
+        ]
 
     if not face_embeddings:
-        logger.warning(f"No embeddings found for person {person_id}")
-        return
+        logger.warning("No embeddings found for person %s", person_id)
+        return None
 
-    embeddings_array = np.stack([
-        np.array(e, dtype=np.float32) for e in face_embeddings
-    ])
+    vectors: list[np.ndarray] = []
+    for emb in face_embeddings:
+        vec = vector_from_stored(emb)
+        if vec is None:
+            continue
+        vectors.append(vec.astype(np.float32, copy=False))
+
+    if not vectors:
+        logger.warning("All embeddings were invalid for person %s", person_id)
+        return None
+
+    embeddings_array = np.stack(vectors)
     centroid = embeddings_array.mean(axis=0)
-    centroid /= np.linalg.norm(centroid)
-    return json.dumps(centroid.tolist())
+    norm = float(np.linalg.norm(centroid))
+    if np.isfinite(norm) and norm > 0.0:
+        centroid /= norm
+
+    blob = vector_to_blob(centroid)
+    return blob
 
 
 def update_person_embedding(session: Session, person_id: int):
     centroid = get_person_embedding(session, person_id, new=True)
+    if centroid is None:
+        return
     logger.info("Updating person_embedding!")
     del_sql = text(
         """
@@ -387,64 +458,120 @@ def _split_by_scenes(
 
 
 def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
-    scene_objs = []
-    video_path = media.path
-    # Prefer native Windows backend to avoid needing FFmpeg plugin in headless builds.
-    cap = (
-        cv2.VideoCapture(str(video_path), cv2.CAP_MSMF)
-        if os.name == "nt"
-        else cv2.VideoCapture(str(video_path))
-    )
-    if not cap.isOpened():
-        # Fallback to default backend selection.
-        cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        logger.error("Failed to open video with OpenCV: %s", video_path)
+    logger.info("Splitting based on frames via ffmpeg")
+    scene_entries: list[tuple[Scene, cv2.typing.MatLike]] = []
+    video_path = Path(media.path)
+    if not video_path.exists():
+        logger.warning("Video file missing: %s", video_path)
         return []
 
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
-    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
-    duration = total / fps
-    min_frame_step = int(fps * 10)  # Max one screenshot every 20 seconds
+    ffmpeg_binary = ensure_ffmpeg_available()
+    if not ffmpeg_binary:
+        logger.error(
+            "ffmpeg is required to extract scenes but could not be provisioned."
+        )
+        return []
 
-    step = max(total // (settings.video.max_frames_per_video), min_frame_step)
-    frame_indices = list(range(0, total, step))
+    duration = media.duration or 0.0
+    if not duration:
+        probe = _ffprobe_json(video_path)
+        if probe:
+            try:
+                duration = float(probe.get("format", {}).get("duration", 0.0))
+            except Exception:
+                duration = 0.0
 
-    for i, idx in enumerate(frame_indices):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-        ret, frame = cap.read()
-        if not ret:
+    max_frames = max(1, int(settings.video.max_frames_per_video))
+    timestamps: list[float] = []
+    if duration and duration > 0:
+        step = duration / max_frames
+        timestamps = [max(0.0, i * step) for i in range(max_frames)]
+        if timestamps and timestamps[-1] + 1.0 < duration:
+            timestamps.append(duration)
+    else:
+        timestamps = [float(i) for i in range(max_frames)]
+
+    thumb_dir = get_thumb_folder(settings.general.thumb_dir / "scenes")
+
+    for idx, ts in enumerate(tqdm(timestamps)):
+        try:
+            cmd = [
+                str(ffmpeg_binary),
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-ss",
+                f"{ts}",
+                "-i",
+                os.fspath(video_path),
+                "-frames:v",
+                "1",
+                "-f",
+                "image2pipe",
+                "-vcodec",
+                "mjpeg",
+                "-",
+            ]
+            result = subprocess.run(
+                cmd,
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+            )
+        except Exception as exc:
+            logger.warning("ffmpeg frame extraction failed at %.2fs: %s", ts, exc)
             continue
 
-        # 1) convert to timestamps
-        start_sec = idx / fps
-        if i + 1 < len(frame_indices):
-            end_sec = frame_indices[i + 1] / fps
-        else:
-            end_sec = duration
+        if result.returncode != 0 or not result.stdout:
+            logger.debug(
+                "ffmpeg returned no data for %.2fs (code=%s, stderr=%s)",
+                ts,
+                result.returncode,
+                result.stderr.decode(errors="ignore"),
+            )
+            continue
 
-        # 2) save a thumbnail
-        thumb_name = f"{media.id}_frame_{i}.jpg"
-        thumb_dir = get_thumb_folder(settings.general.thumb_dir / "scenes")
-        thumb_file = thumb_dir / thumb_name
-        (
-            ffmpeg.input(str(video_path), ss=start_sec)
-            .filter("scale", 360, -1)
-            .output(str(thumb_file), vframes=1)
-            .run(quiet=True, overwrite_output=True)
+        frame_buf = np.frombuffer(result.stdout, np.uint8)
+        frame_bgr = cv2.imdecode(frame_buf, cv2.IMREAD_COLOR)
+        if frame_bgr is None:
+            continue
+
+        height, width = frame_bgr.shape[:2]
+        if width <= 0 or height <= 0:
+            continue
+
+        target_width = 360
+        if width > target_width:
+            scale = target_width / float(width)
+            new_size = (target_width, max(1, int(height * scale)))
+            thumb_bgr = cv2.resize(
+                frame_bgr, new_size, interpolation=cv2.INTER_AREA
+            )
+        else:
+            thumb_bgr = frame_bgr
+
+        thumb_file = thumb_dir / f"{media.id}_frame_{idx}.jpg"
+        cv2.imwrite(str(thumb_file), thumb_bgr)
+
+        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+
+        next_ts = (
+            timestamps[idx + 1]
+            if idx + 1 < len(timestamps)
+            else max(ts, duration)
         )
-        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
         scene = Scene(
             media_id=media.id,
-            start_time=start_sec,
-            end_time=end_sec,
+            start_time=float(ts),
+            end_time=float(max(ts, next_ts)),
             thumbnail_path=to_posix_str(
                 thumb_file.relative_to(settings.general.thumb_dir)
             ),
         )
-        scene_objs.append((scene, frame_rgb))
-    cap.release()
-    return scene_objs
+        scene_entries.append((scene, frame_rgb))
+
+    return scene_entries
 
 
 def _decimal_to_dms(value: float):
@@ -502,8 +629,10 @@ def split_video(
 
     scenes = detect(
         str(path),
-        AdaptiveDetector(
-            adaptive_threshold=3, window_width=5, min_scene_len=500
+        HistogramDetector(
+            threshold=0.2,
+            min_scene_len=500,
+            # adaptive_threshold=3, window_width=5, min_scene_len=500
         ),
         show_progress=True,
     )
@@ -516,8 +645,11 @@ def split_video(
 
 def refresh_similarities_for_person(person_id: int) -> None:
     with Session(db.engine) as session:
-        target = get_person_embedding(session, person_id)
-        if target is None:
+        target_blob = get_person_embedding(session, person_id)
+        if target_blob is None:
+            return
+        target_vec = vector_from_stored(target_blob)
+        if target_vec is None:
             return
 
         # load all other person ids
@@ -525,11 +657,15 @@ def refresh_similarities_for_person(person_id: int) -> None:
         for oid in other_ids:
             if oid == person_id:
                 continue
-            emb = get_person_embedding(session, oid)
-            if emb is None:
+            emb_blob = get_person_embedding(session, oid)
+            if emb_blob is None:
+                continue
+            emb_vec = vector_from_stored(emb_blob)
+            if emb_vec is None:
                 continue
             sim = cosine_similarity(
-                np.ndarray(json.loads(target)), np.ndarray(json.loads(emb))
+                target_vec,
+                emb_vec,
             )
             # upsert into PersonSimilarity
             existing = session.get(PersonSimilarity, (person_id, oid))
@@ -577,6 +713,15 @@ def delete_record(media_id, session):
         """
     ).bindparams(m_id=media.id)
     session.exec(sql)
+
+    session.exec(
+        text(
+            """
+            DELETE FROM scene_embeddings
+            WHERE media_id = :m_id
+            """
+        ).bindparams(m_id=media.id)
+    )
 
     session.exec(delete(Face).where(Face.media_id == media_id))
     session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
