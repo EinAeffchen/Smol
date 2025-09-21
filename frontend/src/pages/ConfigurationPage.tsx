@@ -866,8 +866,47 @@ export default function ConfigurationPage() {
                 variant="caption"
                 sx={{ ml: 6, mt: -1, display: "block" }}
               >
-                Removes database records for files that no longer exist on disk.
+                Flags missing files after each scan so you can review or auto-remove them later.
               </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={config.scan.auto_cleanup_without_review}
+                    onChange={(e) =>
+                      handleValueChange(
+                        "scan",
+                        "auto_cleanup_without_review",
+                        e.target.checked
+                      )
+                    }
+                  />
+                }
+                label="Auto Cleanup Without Review"
+              />
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
+                When enabled, missing files are deleted automatically after the grace period below.
+              </Typography>
+              <TextField
+                label="Cleanup Grace Period (hours)"
+                type="number"
+                value={config.scan.auto_cleanup_grace_hours}
+                onChange={(e) =>
+                  handleValueChange(
+                    "scan",
+                    "auto_cleanup_grace_hours",
+                    e.target.value === ""
+                      ? 0
+                      : Math.max(0, Number(e.target.value))
+                  )
+                }
+                inputProps={{ min: 0 }}
+                margin="normal"
+                sx={{ ml: 6, maxWidth: 240 }}
+                helperText="Hours a file can remain missing before auto cleanup removes it."
+              />
               <FormControlLabel
                 control={
                   <Switch

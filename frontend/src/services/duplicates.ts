@@ -1,5 +1,5 @@
 import { API } from "../config";
-import { DuplicatePage, Task } from "../types";
+import { DuplicatePage, Task, DuplicateStats } from "../types";
 
 export const getDuplicates = async (
   cursor: number | null = null,
@@ -14,6 +14,14 @@ export const getDuplicates = async (
   const response = await fetch(`${API}/api/duplicates?${params.toString()}`);
   if (!response.ok) {
     throw new Error("Failed to fetch duplicates");
+  }
+  return response.json();
+};
+
+export const getDuplicateStats = async (): Promise<DuplicateStats> => {
+  const response = await fetch(API + "/api/duplicates/stats");
+  if (!response.ok) {
+    throw new Error("Failed to fetch duplicate statistics");
   }
   return response.json();
 };

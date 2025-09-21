@@ -311,6 +311,10 @@ class ScanSettings(BaseModel):
     scan_interval_minutes: int = 15
     # If autoscan should also automatically clean the database from missing files
     auto_clean_on_scan: bool = False
+    # Automatically delete records for files that remain missing without manual review
+    auto_cleanup_without_review: bool = False
+    # Grace period in hours before auto cleanup removes a missing record
+    auto_cleanup_grace_hours: int = 72
     # If autoscan should also automatically cluster all faces.
     # Not recommended if you manually adjusted people
     auto_cluster_on_scan: bool = False

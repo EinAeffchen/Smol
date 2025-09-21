@@ -1,12 +1,10 @@
-import json
+import subprocess
+import sys
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-import os
-import sys
-import subprocess
-from pathlib import Path
 from fastapi.responses import PlainTextResponse
 from sqlalchemy import and_, or_, text, tuple_
 from sqlalchemy.orm import aliased, selectinload
@@ -525,7 +523,9 @@ def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
     if not media_ids:
         return []
 
-    media_objs = session.exec(select(Media).where(Media.id.in_(media_ids))).all()
+    media_objs = session.exec(
+        select(Media).where(Media.id.in_(media_ids))
+    ).all()
     id_to_obj = {m.id: m for m in media_objs}
     ordered = [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
     return [MediaPreview.model_validate(m) for m in ordered]

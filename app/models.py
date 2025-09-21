@@ -97,6 +97,9 @@ class Media(SQLModel, table=True):
     ran_auto_tagging: bool = Field(default=False)
     extracted_scenes: bool = Field(default=False)
 
+    missing_since: datetime | None = Field(default=None, index=True)
+    missing_confirmed: bool = Field(default=False, index=True)
+
     is_favorite: bool = Field(default=False)
     phash: str | None = Field(index=True)
     faces: list["Face"] = Relationship(back_populates="media")

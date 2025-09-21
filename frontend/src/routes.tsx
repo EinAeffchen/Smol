@@ -15,6 +15,8 @@ import OrphanFacesPage from "./pages/OrphanFaces";
 import MapEditorPage from "./pages/MapEditorPage";
 import DuplicatesPage from "./pages/DuplicatesPage";
 import ConfigurationPage from "./pages/ConfigurationPage";
+import MissingPage from "./pages/MissingFilesPage";
+import MissingFilesPage from "./pages/MissingFilesPage";
 
 export const AppRoutes = () => {
   const location = useLocation();
@@ -38,6 +40,7 @@ export const AppRoutes = () => {
           <Route path="/tag/:id" element={<TagDetailPage />} />
           <Route path="/duplicates" element={<DuplicatesPage />} />
           <Route path="/configuration" element={<ConfigurationPage />} />
+          <Route path="/missing" element={<MissingFilesPage />} />
         </Route>
       </Routes>
       {backgroundLocation && (

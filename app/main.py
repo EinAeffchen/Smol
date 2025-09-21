@@ -30,6 +30,7 @@ from app.api import (
     duplicates,
     face,
     media,
+    missing,
     person,
     search,
     tags,
@@ -203,6 +204,7 @@ app.include_router(tags, prefix="/api/tags", tags=["tags"])
 app.include_router(search, prefix="/api/search", tags=["search"])
 app.include_router(duplicates, prefix="/api/duplicates", tags=["duplicates"])
 app.include_router(config, prefix="/api/config", tags=["config"])
+app.include_router(missing, prefix="/api/missing", tags=["missing"])
 
 
 @app.get("/thumbnails/{file_path:path}", include_in_schema=False)

@@ -1,3 +1,6 @@
+from collections import defaultdict
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlmodel import Session, select, delete
 from app.database import get_session
@@ -5,6 +8,9 @@ from app.models import Media, DuplicateGroup, DuplicateMedia
 from app.schemas.duplicates import (
     DuplicatePage,
     ResolveDuplicatesRequest,
+    DuplicateStats,
+    DuplicateTypeSummary,
+    DuplicateFolderStat,
     DuplicateGroup as DuplicateGroupSchema,
 )
 from sqlalchemy.orm import selectinload
@@ -66,6 +72,119 @@ def get_duplicates(
 
     # 4. Return the final, correctly shaped page object
     return DuplicatePage(items=response_items, next_cursor=next_cursor)
+
+
+@router.get("/stats", response_model=DuplicateStats)
+def get_duplicate_stats(session: Session = Depends(get_session)) -> DuplicateStats:
+    data_stmt = (
+        select(
+            DuplicateMedia.group_id,
+            Media.path,
+            Media.size,
+            Media.duration,
+        )
+        .join(Media, Media.id == DuplicateMedia.media_id)
+    )
+
+    rows = session.exec(data_stmt).all()
+    if not rows:
+        return DuplicateStats(
+            total_groups=0,
+            total_items=0,
+            total_size_bytes=0,
+            total_reclaimable_bytes=0,
+            type_breakdown=[],
+            top_folders=[],
+        )
+
+    group_counts: dict[int, int] = defaultdict(int)
+    for group_id, *_ in rows:
+        group_counts[group_id] += 1
+
+    active_group_ids = {gid for gid, count in group_counts.items() if count > 1}
+    if not active_group_ids:
+        return DuplicateStats(
+            total_groups=0,
+            total_items=0,
+            total_size_bytes=0,
+            total_reclaimable_bytes=0,
+            type_breakdown=[],
+            top_folders=[],
+        )
+
+    total_items = 0
+    total_size = 0
+    group_sizes: dict[int, list[int]] = defaultdict(list)
+    folder_totals: dict[str, dict[str, int]] = defaultdict(lambda: {"items": 0, "size": 0})
+    folder_groups: dict[str, set[int]] = defaultdict(set)
+    type_items = {"image": 0, "video": 0}
+    type_sizes = {"image": 0, "video": 0}
+    type_groups: dict[str, set[int]] = {"image": set(), "video": set()}
+
+    def folder_from_path(path_value: str | None) -> str:
+        if not path_value:
+            return "Unknown"
+        try:
+            return Path(path_value).parent.as_posix()
+        except Exception:
+            return str(path_value)
+
+    for group_id, media_path, media_size, media_duration in rows:
+        if group_id not in active_group_ids:
+            continue
+        size_value = int(media_size or 0)
+        total_items += 1
+        total_size += size_value
+        group_sizes[group_id].append(size_value)
+
+        media_type = "video" if media_duration is not None else "image"
+        type_items[media_type] += 1
+        type_sizes[media_type] += size_value
+        type_groups[media_type].add(group_id)
+
+        folder_key = folder_from_path(media_path)
+        totals = folder_totals[folder_key]
+        totals["items"] += 1
+        totals["size"] += size_value
+        folder_groups[folder_key].add(group_id)
+
+    total_groups = len(active_group_ids)
+    total_reclaimable = sum(
+        max(sum(sizes) - max(sizes), 0) for sizes in group_sizes.values() if sizes
+    )
+
+    type_breakdown = [
+        DuplicateTypeSummary(
+            type=type_name,
+            items=type_items[type_name],
+            groups=len(type_groups[type_name]),
+            size_bytes=type_sizes[type_name],
+        )
+        for type_name in ("image", "video")
+        if type_items[type_name] > 0
+    ]
+
+    folder_entries = [
+        DuplicateFolderStat(
+            folder=folder_name,
+            items=totals["items"],
+            groups=len(folder_groups[folder_name]),
+            size_bytes=totals["size"],
+        )
+        for folder_name, totals in folder_totals.items()
+    ]
+    folder_entries.sort(key=lambda entry: (entry.items, entry.size_bytes), reverse=True)
+
+    return DuplicateStats(
+        total_groups=total_groups,
+        total_items=total_items,
+        total_size_bytes=total_size,
+        total_reclaimable_bytes=total_reclaimable,
+        type_breakdown=type_breakdown,
+        top_folders=folder_entries[:5],
+    )
+
+
 
 
 @router.post("/resolve")

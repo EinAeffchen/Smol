@@ -18,6 +18,29 @@ class DuplicatePage(BaseModel):
     next_cursor: int | None
 
 
+class DuplicateTypeSummary(BaseModel):
+    type: Literal["image", "video"]
+    items: int
+    groups: int
+    size_bytes: int
+
+
+class DuplicateFolderStat(BaseModel):
+    folder: str
+    items: int
+    groups: int
+    size_bytes: int
+
+
+class DuplicateStats(BaseModel):
+    total_groups: int
+    total_items: int
+    total_size_bytes: int
+    total_reclaimable_bytes: int
+    type_breakdown: list[DuplicateTypeSummary]
+    top_folders: list[DuplicateFolderStat]
+
+
 class ResolveDuplicatesRequest(BaseModel):
     group_id: int
     master_media_id: int

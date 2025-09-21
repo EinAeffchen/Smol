@@ -2,7 +2,7 @@ import os
 import time
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -10,7 +10,7 @@ import hdbscan
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from PIL import Image, UnidentifiedImageError
-from sqlalchemy import bindparam, func, or_
+from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
@@ -207,6 +207,26 @@ def _run_scan_and_chain(task_id: str):
         _run_media_processing_and_chain(next_task.id)
 
 
+def _media_processing_conditions() -> list:
+    """Return filter clauses for media rows needing processing."""
+    conditions: list = []
+    active_processors = {
+        proc.name for proc in processors if getattr(proc, "active", False)
+    }
+    # Scene extraction is required whenever any downstream processor needs scenes.
+    if active_processors & {"faces", "embedding_extractor", "auto_tagger"}:
+        conditions.append(Media.extracted_scenes.is_(False))
+    flag_columns = {
+        "faces": Media.faces_extracted,
+        "auto_tagger": Media.ran_auto_tagging,
+        "embedding_extractor": Media.embeddings_created,
+    }
+    for name, column in flag_columns.items():
+        if name in active_processors:
+            conditions.append(column.is_(False))
+    return conditions
+
+
 def _run_media_processing_and_chain(task_id: str):
     _run_media_processing(task_id)
 
@@ -225,39 +245,14 @@ def _run_media_processing_and_chain(task_id: str):
     logger.info("Task chain completed")
 
 
-def _get_media_to_process(session: Session) -> list[Media]:
-    """
-    Fetches all media records that require processing.
-
-    Deprecated for large runs: prefer batched helpers below to
-    avoid loading all rows at once.
-    """
-    return session.exec(
-        select(Media)
-        .where(
-            or_(
-                Media.faces_extracted.is_(False),
-                Media.ran_auto_tagging.is_(False),
-                Media.embeddings_created.is_(False),
-                Media.extracted_scenes.is_(False),
-            )
-        )
-        .order_by(Media.duration.asc())
-    ).all()
-
-
 def _count_media_to_process(session: Session) -> int:
     """Returns a count of media rows that still need processing."""
+    conditions = _media_processing_conditions()
+    if not conditions:
+        return 0
     return (
         session.exec(
-            select(func.count(Media.id)).where(
-                or_(
-                    Media.faces_extracted.is_(False),
-                    Media.ran_auto_tagging.is_(False),
-                    Media.embeddings_created.is_(False),
-                    Media.extracted_scenes.is_(False),
-                )
-            )
+            select(func.count(Media.id)).where(or_(*conditions))
         ).first()
         or 0
     )
@@ -270,16 +265,12 @@ def _fetch_media_batch_to_process(session: Session, limit: int) -> list[Media]:
     Uses LIMIT without OFFSET so subsequent calls naturally move
     through the remaining set as flags are updated.
     """
+    conditions = _media_processing_conditions()
+    if not conditions:
+        return []
     return session.exec(
         select(Media)
-        .where(
-            or_(
-                Media.faces_extracted.is_(False),
-                Media.ran_auto_tagging.is_(False),
-                Media.embeddings_created.is_(False),
-                Media.extracted_scenes.is_(False),
-            )
-        )
+        .where(or_(*conditions))
         .order_by(Media.duration.asc())
         .limit(limit)
     ).all()
@@ -403,7 +394,6 @@ def _run_media_processing(task_id: str):
         # Initialize task metadata
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
-        task.total = _count_media_to_process(session)
         session.add(task)
         safe_commit(session)
 
@@ -440,7 +430,13 @@ def _run_media_processing(task_id: str):
                 return
 
             for proc in processors:
+                proc.active = False
                 proc.load_model()
+
+            # Update totals now that processor activation is known
+            task.total = _count_media_to_process(session)
+            session.add(task)
+            safe_commit(session)
 
             # Process in batches to avoid loading everything at once
             while True:
@@ -473,6 +469,18 @@ def _run_media_processing(task_id: str):
                         logger.info("Task cancelled mid-batch. Stopping.")
                         break
 
+                    if not Path(media.path).exists():
+                        if not media.missing_since:
+                            media.missing_since = datetime.now(timezone.utc)
+                            session.add(media)
+                            safe_commit(session)
+                            continue
+                    else:
+                        if media.missing_since:
+                            media.missing_since = None
+                            media.missing_confirmed = False
+                            session.add(media)
+                            safe_commit(session)
                     logger.info("Processing: %s", media.filename)
                     _set_task_progress(
                         task_id,
@@ -1322,7 +1330,7 @@ def reset_clustering(session: Session = Depends(get_session)):
 
 
 def _clean_missing_files(task_id: str):
-    """Background task to scan for and delete records of missing files"""
+    """Background task to scan for and handle missing files."""
     with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id)
         if not task:
@@ -1331,44 +1339,83 @@ def _clean_missing_files(task_id: str):
 
         task.status = "running"
         task.started_at = datetime.now(timezone.utc)
-        task.total = session.exec(
-            select(func.count()).select_from(Media)
-        ).first()
+        task.total = session.exec(select(func.count(Media.id))).first()
         session.commit()
 
-        deleted_count = 0
-        batch_size = 100
-        offset = 0
+        processed = 0
+        flagged = 0
+        recovered = 0
+        auto_deleted = 0
+        batch_size = 200
+        last_id = 0
 
         def is_cancelled() -> bool:
-            session.refresh(task, attribute_names=["status"])  # cheap
-            return task.status == "cancelled"
+            try:
+                session.refresh(task, attribute_names=["status"])
+                return task.status == "cancelled"
+            except Exception:
+                return False
+
+        grace_hours = max(0, settings.scan.auto_cleanup_grace_hours)
+        grace_delta = timedelta(hours=grace_hours)
+        auto_cleanup_enabled = settings.scan.auto_cleanup_without_review
 
         with heavy_writer(name="clean_missing_files", cancelled=is_cancelled):
             while True:
                 media_batch = session.exec(
-                    select(Media).offset(offset).limit(batch_size)
+                    select(Media)
+                    .where(Media.id > last_id)
+                    .order_by(Media.id)
+                    .limit(batch_size)
                 ).all()
 
                 if not media_batch:
                     break
 
                 for media in media_batch:
-                    if not Path(media.path).exists():
-                        delete_record(media.id, session)
-                        deleted_count += 1
-                        logger.info(
-                            "Deleted record for missing file: %s", media.path
-                        )
+                    last_id = media.id
+                    processed += 1
+                    media_path = Path(media.path)
+                    current_time = datetime.now(timezone.utc)
 
-                offset += batch_size
-                task.processed = offset
+                    if not media_path.exists():
+                        if media.missing_since is None:
+                            media.missing_since = current_time
+                        if auto_cleanup_enabled:
+                            cutoff = current_time - grace_delta
+                            if grace_delta == timedelta(0) or (
+                                media.missing_since
+                                and media.missing_since <= cutoff
+                            ):
+                                delete_record(media.id, session)
+                                auto_deleted += 1
+                                continue
+                        media.missing_confirmed = False
+                        session.add(media)
+                        flagged += 1
+                    else:
+                        if (
+                            media.missing_since is not None
+                            or media.missing_confirmed
+                        ):
+                            media.missing_since = None
+                            media.missing_confirmed = False
+                            session.add(media)
+                            recovered += 1
+
+                task.processed = processed
                 session.commit()
 
-            task.status = "completed"
-            task.finished_at = datetime.now(timezone.utc)
-            session.commit()
-            logger.info("Cleaned %d missing file records", deleted_count)
+        task.status = "completed"
+        task.finished_at = datetime.now(timezone.utc)
+        session.commit()
+        logger.info(
+            "Missing files cleanup processed=%d flagged=%d recovered=%d auto_deleted=%d",
+            processed,
+            flagged,
+            recovered,
+            auto_deleted,
+        )
 
 
 def _run_scan(task_id: str):
@@ -1501,12 +1548,17 @@ def _run_scan(task_id: str):
                         break
 
                 # Defensive check in case DB changed between pre-count and now
-                exists = sess.exec(
-                    select(Media.id)
-                    .where(Media.path == str(filepath))
-                    .limit(1)
+                existing_media = sess.exec(
+                    select(Media).where(Media.path == str(filepath)).limit(1)
                 ).first()
-                if exists:
+                if existing_media:
+                    if (
+                        existing_media.missing_since is not None
+                        or existing_media.missing_confirmed
+                    ):
+                        existing_media.missing_since = None
+                        existing_media.missing_confirmed = False
+                        sess.add(existing_media)
                     continue
 
                 media_obj = process_file(filepath)
@@ -1569,7 +1621,6 @@ def generate_hashes(task_id: int | None = None):
         if task:
             count_stmt = select(func.count(Media.id)).where(
                 Media.phash.is_(None),
-                Media.duration.is_(None),
             )
             total_count = session.exec(count_stmt).first() or 0
             logger.info("SET count to %s", total_count)
@@ -1592,7 +1643,6 @@ def generate_hashes(task_id: int | None = None):
                     select(Media)
                     .where(
                         Media.phash.is_(None),
-                        Media.duration.is_(None),
                     )
                     .limit(BATCH_SIZE)
                 )
@@ -1619,8 +1669,18 @@ def generate_hashes(task_id: int | None = None):
 
                     try:
                         # Generate the appropriate hash based on media type
+                        suffix = (
+                            Path(media.path).suffix.lower()
+                            if media.path
+                            else ""
+                        )
+                        media_type: Literal["image", "video"] = (
+                            "video"
+                            if suffix in settings.scan.VIDEO_SUFFIXES
+                            else "image"
+                        )
                         hash_value = generate_perceptual_hash(
-                            media, type="image"
+                            media, type=media_type
                         )
                         if hash_value:
                             media.phash = hash_value
@@ -1648,7 +1708,6 @@ def generate_hashes(task_id: int | None = None):
                     processed_so_far += successful_hashes
                     remaining_stmt = select(func.count(Media.id)).where(
                         Media.phash.is_(None),
-                        Media.duration.is_(None),
                     )
                     remaining = session.exec(remaining_stmt).first() or 0
                     task.total = processed_so_far + remaining

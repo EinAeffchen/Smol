@@ -1,11 +1,18 @@
 import React, { useEffect, useState } from "react";
-import { NavLink as RouterNavLink, useNavigate, Link } from "react-router-dom";
+import {
+  NavLink as RouterNavLink,
+  useNavigate,
+  useLocation,
+  Link,
+} from "react-router-dom";
 import {
   AppBar,
   Box,
   Toolbar,
+  Button,
   TextField,
   Select,
+  Menu,
   MenuItem,
   IconButton,
   Drawer,
@@ -13,6 +20,7 @@ import {
   ListItem,
   ListItemButton,
   ListItemText,
+  ListSubheader,
   Divider,
   Typography,
   styled,
@@ -27,6 +35,9 @@ import { searchByImage } from "../services/searchActions";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import config from "../config";
 import { useTheme } from "@mui/material/styles";
+
+type NavItem = { label: string; to: string };
+type NavSection = { label: string; items: NavItem[] };
 
 const StyledNavLink = styled(RouterNavLink)(({ theme }) => ({
   color: theme.palette.text.primary,
@@ -47,11 +58,11 @@ const StyledNavLink = styled(RouterNavLink)(({ theme }) => ({
 function MobileDrawer({
   open,
   onClose,
-  navItems,
+  navSections,
 }: {
   open: boolean;
   onClose: () => void;
-  navItems: [string, string][];
+  navSections: NavSection[];
 }) {
   const theme = useTheme();
   const base = import.meta.env.BASE_URL || "/";
@@ -73,18 +84,41 @@ function MobileDrawer({
     >
       <Box sx={{ p: 1, display: "flex", alignItems: "center" }}>
         <Link to="/" onClick={onClose}>
-          <Box component="img" src={wordmarkSrc} alt="omoide" sx={{ width: 160, height: "auto" }} />
+          <Box
+            component="img"
+            src={wordmarkSrc}
+            alt="omoide"
+            sx={{ width: 160, height: "auto" }}
+          />
         </Link>
       </Box>
       <Divider />
 
       <List>
-        {navItems.map(([label, to]) => (
-          <ListItem key={to} disablePadding>
-            <ListItemButton component={RouterNavLink} to={to} onClick={onClose}>
-              <ListItemText primary={label} />
-            </ListItemButton>
-          </ListItem>
+        {navSections.map((section) => (
+          <React.Fragment key={section.label}>
+            <ListSubheader
+              disableSticky
+              sx={{
+                backgroundColor: "background.default",
+                color: "text.secondary",
+                fontWeight: 600,
+              }}
+            >
+              {section.label}
+            </ListSubheader>
+            {section.items.map(({ label, to }) => (
+              <ListItem key={to} disablePadding>
+                <ListItemButton
+                  component={RouterNavLink}
+                  to={to}
+                  onClick={onClose}
+                >
+                  <ListItemText primary={label} />
+                </ListItemButton>
+              </ListItem>
+            ))}
+          </React.Fragment>
         ))}
       </List>
 
@@ -115,6 +149,8 @@ export function Header() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [q, setQ] = useState("");
+  const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
+  const [openSectionLabel, setOpenSectionLabel] = useState<string | null>(null);
   const [category, setCategory] = useState<
     "media" | "person" | "tag" | "scene"
   >("media");
@@ -122,6 +158,7 @@ export function Header() {
   const [configTick, setConfigTick] = useState(0);
   const navigate = useNavigate();
   const fileInputRef = React.useRef<HTMLInputElement>(null); // Ref for the hidden file input
+  const location = useLocation();
 
   useEffect(() => {
     const handler = () => setConfigTick((v) => v + 1);
@@ -133,16 +170,38 @@ export function Header() {
       );
   }, []);
 
-  const allNavItems: [string, string][] = [
-    ["Images", "/images"],
-    ["Videos", "/videos"],
-    ["Tags", "/tags"],
-    ["People", "/people"],
-    ["Faces", "/orphanfaces"],
-    ["Map", "/map"],
-    ["Geotagger", "/maptagger"],
-    ["Duplicates", "/duplicates"],
-    ["Configuration", "/configuration"],
+  const RAW_SECTIONS: NavSection[] = [
+    {
+      label: "Library",
+      items: [
+        { label: "Images", to: "/images" },
+        { label: "Videos", to: "/videos" },
+        { label: "Tags", to: "/tags" },
+      ],
+    },
+    {
+      label: "People",
+      items: [
+        { label: "People", to: "/people" },
+        { label: "Faces", to: "/orphanfaces" },
+      ],
+    },
+    {
+      label: "Map",
+      items: [
+        { label: "Map", to: "/map" },
+        { label: "Geotagger", to: "/maptagger" },
+      ],
+    },
+    {
+      label: "Maintenance",
+      items: [
+        { label: "Duplicates", to: "/duplicates" },
+        { label: "Configuration", to: "/configuration" },
+        { label: "Review Missing", to: "/missing" },
+
+      ],
+    },
   ];
 
   const pathsToExcludeInReadOnly: string[] = [
@@ -151,11 +210,34 @@ export function Header() {
     "/duplicates",
   ];
   const pathsToExcludeInPeopleDisabled: string[] = ["/people"];
-  const visibleNavItems = allNavItems.filter(
-    ([, path]) =>
-      !(config.READ_ONLY && pathsToExcludeInReadOnly.includes(path)) &&
-      !(!config.ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path))
-  );
+  const shouldHidePath = (path: string) =>
+    (config.READ_ONLY && pathsToExcludeInReadOnly.includes(path)) ||
+    (!config.ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path));
+
+  const navSections: NavSection[] = RAW_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((it) => !shouldHidePath(it.to)),
+  })).filter((section) => section.items.length > 0);
+
+  const flatVisibleNavItems: NavItem[] = navSections.flatMap((s) => s.items);
+
+  const openSection = (label: string) => (e: React.MouseEvent<HTMLElement>) => {
+    setMenuAnchorEl(e.currentTarget);
+    setOpenSectionLabel(label);
+  };
+
+  const closeMenu = () => {
+    setMenuAnchorEl(null);
+    setOpenSectionLabel(null);
+  };
+
+  const isSectionOpen = (label: string) => openSectionLabel === label;
+
+  const isSectionActive = (section: NavSection) =>
+    section.items.some((it) => location.pathname.startsWith(it.to));
+
+  const sectionMenuId = (label: string) =>
+    `section-menu-${label.toLowerCase().replace(/\s+/g, "-")}`;
 
   function onSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -176,13 +258,22 @@ export function Header() {
           component="img"
           src={wordmarkSrc}
           alt="omoide logo"
-          sx={{ width: 180, height: "auto", display: { xs: "none", sm: "block" }, mr: 2 }}
+          sx={{
+            width: 180,
+            height: "auto",
+            display: { xs: "none", sm: "block" },
+            mr: 2,
+          }}
         />
         <Box
           component="img"
           src={wordmarkSrc}
           alt="omoide logo"
-          sx={{ width: 150, height: "auto", display: { xs: "block", sm: "none" } }}
+          sx={{
+            width: 150,
+            height: "auto",
+            display: { xs: "block", sm: "none" },
+          }}
         />
       </Link>
 
@@ -191,7 +282,6 @@ export function Header() {
       </Box>
 
       <Box sx={{ flexGrow: 1 }} />
-
       <Box
         sx={{
           display: { xs: "none", lg: "flex" },
@@ -199,12 +289,62 @@ export function Header() {
           gap: 0.5,
         }}
       >
-        {visibleNavItems.map(([label, to]) => (
-          <StyledNavLink key={to} to={to} state={{}} replace>
-            {label}
-          </StyledNavLink>
-        ))}
+        {navSections.map((section) => {
+          const active = isSectionActive(section);
+          const menuId = sectionMenuId(section.label);
+          return (
+            <React.Fragment key={section.label}>
+              <Button
+                onClick={openSection(section.label)}
+                aria-controls={
+                  isSectionOpen(section.label) ? menuId : undefined
+                }
+                aria-haspopup="true"
+                aria-expanded={
+                  isSectionOpen(section.label) ? "true" : undefined
+                }
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 600,
+                  borderRadius: 1,
+                  "&:hover": { backgroundColor: "action.hover" },
+                  color: active ? "accent.main" : "text.primary",
+                }}
+              >
+                {section.label}
+              </Button>
+
+              <Menu
+                id={menuId}
+                anchorEl={menuAnchorEl}
+                open={isSectionOpen(section.label)}
+                onClose={closeMenu}
+                keepMounted
+                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+                transformOrigin={{ vertical: "top", horizontal: "left" }}
+                MenuListProps={{ "aria-labelledby": menuId }}
+              >
+                {section.items.map((item) => (
+                  <MenuItem
+                    key={item.to}
+                    component={RouterNavLink}
+                    to={item.to}
+                    // keep your navigation behavior consistent
+                    replace
+                    state={{}}
+                    onClick={closeMenu}
+                    sx={{ minWidth: 200 }}
+                  >
+                    {item.label}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </React.Fragment>
+          );
+        })}
+
         <ThemeToggleButton />
+
         {!config.READ_ONLY && (
           <IconButton
             onClick={() => setIsControlPanelOpen(true)}
@@ -329,7 +469,7 @@ export function Header() {
       <MobileDrawer
         open={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        navItems={visibleNavItems}
+        navSections={navSections}
       />
 
       <Drawer

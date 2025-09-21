@@ -83,17 +83,20 @@ class DuplicateProcessor:
                         Media.phash == phash
                     )
                     media_items = session.exec(media_with_same_hash_stmt).all()
-                    media_ids = [m.id for m in media_items]
+                    image_ids = [m.id for m in media_items if m.duration is None]
+                    video_ids = [m.id for m in media_items if m.duration is not None]
 
                     if settings.duplicates.duplicate_auto_handling is DuplicateHandlingRule.KEEP:
-                        # This function will handle creating/merging groups and committing
-                        self._create_or_update_group(session, media_ids)
+                        if len(image_ids) > 1:
+                            self._create_or_update_group(session, image_ids)
+                        if len(video_ids) > 1:
+                            self._create_or_update_group(session, video_ids)
                     else:
                         pass#TODO
 
 
                 logger.info(
-                    f"Completed grouping {len(duplicate_hashes)} sets of identical images."
+                    f"Completed grouping {len(duplicate_hashes)} sets of identical media hashes."
                 )
                 self._update_task_progress_and_check_status(
                     session, 1, 2

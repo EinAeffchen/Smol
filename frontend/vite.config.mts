@@ -29,7 +29,7 @@ export default defineConfig(({ mode, command }) => {
       },
     },
     build: {
-      minify: true,
+      minify: false,
     },
     resolve: {
       alias: {

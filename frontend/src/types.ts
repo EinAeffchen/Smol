@@ -132,6 +132,29 @@ export interface DuplicateGroup {
   group_id: number;
 }
 
+export interface DuplicateTypeSummary {
+  type: "image" | "video";
+  items: number;
+  groups: number;
+  size_bytes: number;
+}
+
+export interface DuplicateFolderStat {
+  folder: string;
+  items: number;
+  groups: number;
+  size_bytes: number;
+}
+
+export interface DuplicateStats {
+  total_groups: number;
+  total_items: number;
+  total_size_bytes: number;
+  total_reclaimable_bytes: number;
+  type_breakdown: DuplicateTypeSummary[];
+  top_folders: DuplicateFolderStat[];
+}
+
 export interface SceneRead {
   id: number;
   start_time: number;
@@ -168,6 +191,42 @@ export interface MediaIndex {
 export interface CursorPage<T> {
   items: T[];
   next_cursor: string | null;
+}
+
+export interface MissingMediaItem {
+  id: number;
+  path: string;
+  filename: string;
+  size: number;
+  missing_since: string | null;
+  missing_confirmed: boolean;
+  parent_directory: string;
+}
+
+export interface MissingSummaryEntry {
+  folder: string;
+  count: number;
+}
+
+export interface MissingMediaPage extends CursorPage<MissingMediaItem> {
+  total: number;
+  summary: MissingSummaryEntry[];
+}
+
+export interface MissingBulkActionPayload {
+  media_ids?: number[];
+  select_all?: boolean;
+  exclude_ids?: number[];
+  path_prefix?: string | null;
+  include_confirmed?: boolean;
+}
+
+export interface MissingConfirmResponse {
+  deleted: number;
+}
+
+export interface MissingResetResponse {
+  cleared: number;
 }
 
 export interface DuplicatePage {
@@ -236,6 +295,8 @@ export interface AppConfig {
     auto_scan: boolean;
     scan_interval_minutes: number;
     auto_clean_on_scan: boolean;
+    auto_cleanup_without_review: boolean;
+    auto_cleanup_grace_hours: number;
     auto_cluster_on_scan: boolean;
     auto_rotate: boolean;
     VIDEO_SUFFIXES: string[];
