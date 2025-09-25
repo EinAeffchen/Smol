@@ -192,7 +192,7 @@ def list_locations(
     results = []
     for row in rows:
         thumbnail_path = (
-            f"/{row.id}.jpg" if not row.thumbnail_path else row.thumbnail_path
+            f"{row.id}.jpg" if not row.thumbnail_path else row.thumbnail_path
         )
         results.append(
             MediaLocation(

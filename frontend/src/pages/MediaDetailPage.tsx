@@ -18,7 +18,7 @@ import {
 import { ArrowBackIosNew, ArrowForwardIos } from "@mui/icons-material";
 import CloseIcon from "@mui/icons-material/Close";
 
-import { useListStore, defaultListState } from "../stores/useListStore";
+import { useListStore } from "../stores/useListStore";
 
 import { ActionDialogs } from "../components/ActionDialogs";
 import { MediaDisplay } from "../components/MediaDisplay";
@@ -61,13 +61,9 @@ export default function MediaDetailPage() {
     mediaListKey ? state.lists[mediaListKey] : undefined
   );
   // A. Global state from Zustand for the list context
-  const {
-    items,
-    hasMore,
-    isLoading: isListLoading,
-  } = listFromStore || (mediaListKey ? defaultListState : defaultListState);
+  const items: unknown[] = listFromStore?.items ?? [];
 
-  const { loadMore, removeItem } = useListStore();
+  const { removeItem } = useListStore();
 
   // B. Local state for this specific modal's content
   const preloadedMedia = location.state?.media as Media | null;
@@ -75,7 +71,6 @@ export default function MediaDetailPage() {
     preloadedMedia ? { media: preloadedMedia, persons: [], orphans: [] } : null
   );
   const [isDetailLoading, setIsDetailLoading] = useState(!preloadedMedia);
-  const [isWaitingForMore, setIsWaitingForMore] = useState(false);
 
   // C. Local state for all other UI and features
   const [task, setTask] = useState<Task | null>(null);
@@ -94,12 +89,60 @@ export default function MediaDetailPage() {
 
   // --- 2. DERIVED DATA & CONTEXT ---
 
-  const allMediaIdsInView = useMemo(() => items.map((m) => m.id), [items]);
-  const viewContext = useMemo(
-    () => location.state?.viewContext || { sort: "newest" },
-    [location.state]
-  );
+  const navigationIdsFromState = useMemo(() => {
+    const ids = location.state?.navigationContext?.ids;
+    if (!Array.isArray(ids)) return [];
+    return ids.filter((value): value is number => typeof value === "number");
+  }, [location.state]);
 
+  const allMediaIdsInView = useMemo(() => {
+    const extractItemId = (item: unknown): number | null => {
+      if (typeof item === "number") return item;
+      if (item && typeof item === "object") {
+        const candidate = item as {
+          id?: unknown;
+          media?: unknown;
+          data?: unknown;
+        };
+
+        if (typeof candidate.id === "number") return candidate.id;
+
+        const mediaCandidate = candidate.media as { id?: unknown } | undefined;
+        if (mediaCandidate && typeof mediaCandidate.id === "number") {
+          return mediaCandidate.id;
+        }
+
+        const dataCandidate = candidate.data as { id?: unknown } | undefined;
+        if (dataCandidate && typeof dataCandidate.id === "number") {
+          return dataCandidate.id;
+        }
+      }
+      return null;
+    };
+
+    const idsFromList = items
+      .map(extractItemId)
+      .filter((value): value is number => value !== null);
+
+    if (idsFromList.length > 0) {
+      return Array.from(new Set(idsFromList));
+    }
+
+    if (navigationIdsFromState.length > 0) {
+      const numericId = id ? Number(id) : NaN;
+      if (!Number.isNaN(numericId) && !navigationIdsFromState.includes(numericId)) {
+        return [...navigationIdsFromState, numericId];
+      }
+      return navigationIdsFromState;
+    }
+
+    if (id) {
+      const numericId = Number(id);
+      return Number.isNaN(numericId) ? [] : [numericId];
+    }
+
+    return [];
+  }, [items, navigationIdsFromState, id]);
   const neighbors = useMemo(() => {
     if (!id || !allMediaIdsInView) return { previousId: null, nextId: null };
     const currentIndex = allMediaIdsInView.findIndex(
@@ -149,66 +192,17 @@ export default function MediaDetailPage() {
     return () => controller.abort();
   }, [id, location.key, fetchDetail]);
 
-  useEffect(() => {
-    if (isWaitingForMore && !isListLoading) {
-      setIsWaitingForMore(false);
-      const newCurrentIndex = allMediaIdsInView.findIndex(
-        (mediaId) => mediaId === Number(id)
-      );
-      const newNextId =
-        newCurrentIndex < allMediaIdsInView.length - 1
-          ? allMediaIdsInView[newCurrentIndex + 1]
-          : null;
-      if (newNextId) {
-        navigate(`/medium/${newNextId}`, {
-          state: buildNavigationState({ media: null }),
-        });
-      }
-    }
-  }, [
-    isWaitingForMore,
-    isListLoading,
-    allMediaIdsInView,
-    id,
-    navigate,
-    buildNavigationState,
-  ]);
-
   const handleNavigate = useCallback(
-    async (direction: "prev" | "next") => {
+    (direction: "prev" | "next") => {
       const targetId =
         direction === "prev" ? neighbors.previousId : neighbors.nextId;
-      if (targetId) {
-        navigate(`/medium/${targetId}`, {
-          state: buildNavigationState({ media: null }),
-        });
-      } else if (direction === "next" && hasMore && !isListLoading) {
-        if (mediaListKey) {
-          setIsWaitingForMore(true);
-          // Assuming loadMore now takes a fetcher function for the next page
-          // You'll need to adjust this based on how your loadMore is implemented
-          // For example, if mediaListKey is "images", you might call loadMore("images", (page) => getImages(page))
-          // Since the current loadMore in useListStore doesn't take a fetcher, this part needs careful consideration.
-          // For now, I'll leave it as is, but this is a potential area for further refactoring.
-          await loadMore(mediaListKey, (page) => {
-            // This part needs to be dynamic based on mediaListKey
-            // For simplicity, assuming a generic fetcher for now.
-            // In a real app, you'd have a map of fetchers or a more complex loadMore logic.
-            return Promise.resolve([]); // Placeholder
-          });
-        }
-      }
+      if (!targetId) return;
+
+      navigate(`/medium/${targetId}`, {
+        state: buildNavigationState({ media: null }),
+      });
     },
-    [
-      navigate,
-      neighbors,
-      buildNavigationState,
-      hasMore,
-      isListLoading,
-      loadMore,
-      viewContext,
-      mediaListKey,
-    ]
+    [navigate, neighbors, buildNavigationState]
   );
 
   useEffect(() => {
@@ -414,10 +408,10 @@ export default function MediaDetailPage() {
                   justifyContent: "center",
                 }}
               >
-                {!isMobile && (
+                {!isMobile && neighbors.previousId && (
                   <IconButton
                     onClick={() => handleNavigate("prev")}
-                    disabled={isDetailLoading || !neighbors.previousId}
+                    disabled={isDetailLoading}
                     sx={{
                       position: "absolute",
                       left: -40,
@@ -442,10 +436,14 @@ export default function MediaDetailPage() {
                     onOpenFolder={async (mediaId) => {
                       try {
                         await openMediaFolder(mediaId);
-                      } catch (e: any) {
+                      } catch (error: unknown) {
+                        const message =
+                          error instanceof Error && error.message
+                            ? error.message
+                            : "Failed to open folder";
                         setSnackbar({
                           open: true,
-                          message: e?.message || "Failed to open folder",
+                          message,
                           severity: "error",
                         });
                       }
@@ -492,12 +490,10 @@ export default function MediaDetailPage() {
                     />
                   </Box>
                 </Fade>
-                {!isMobile && (
+                {!isMobile && neighbors.nextId && (
                   <IconButton
                     onClick={() => handleNavigate("next")}
-                    disabled={
-                      isDetailLoading || (!neighbors.nextId && !hasMore)
-                    }
+                    disabled={isDetailLoading}
                     sx={{
                       position: "absolute",
                       right: -40,
@@ -505,11 +501,7 @@ export default function MediaDetailPage() {
                       "&.Mui-disabled": { opacity: 0.2 },
                     }}
                   >
-                    {isWaitingForMore ? (
-                      <CircularProgress size={24} />
-                    ) : (
-                      <ArrowForwardIos fontSize="large" />
-                    )}
+                    <ArrowForwardIos fontSize="large" />
                   </IconButton>
                 )}
               </Box>

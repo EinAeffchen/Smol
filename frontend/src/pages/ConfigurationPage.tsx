@@ -146,7 +146,7 @@ export default function ConfigurationPage() {
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
-    severity: "success" as "success" | "error",
+    severity: "success" as "success" | "error" | "info",
   });
   const [tabValue, setTabValue] = useState(0);
   const [profiles, setProfiles] = useState<ProfileListResponse | null>(null);
@@ -176,7 +176,7 @@ export default function ConfigurationPage() {
           const p = await listProfiles();
           setProfiles(p);
           setSelectedProfilePath(p.active_path);
-        } catch (e) {
+        } catch {
           setProfiles(null);
         }
         // Fetch profile health to detect moved/missing profiles
@@ -274,26 +274,41 @@ export default function ConfigurationPage() {
   };
 
   const addMediaDir = async () => {
-    if (!config) return;
     const chosen = await pickDirectory();
     const value = chosen || "";
-    handleValueChange("general", "media_dirs", [
-      ...config.general.media_dirs,
-      value,
-    ] as any);
+    setConfig((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        general: {
+          ...prev.general,
+          media_dirs: [...prev.general.media_dirs, value],
+        },
+      };
+    });
   };
 
   const updateMediaDir = (index: number, value: string) => {
-    if (!config) return;
-    const next = [...config.general.media_dirs];
-    next[index] = value;
-    handleValueChange("general", "media_dirs", next as any);
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next = [...prev.general.media_dirs];
+      next[index] = value;
+      return {
+        ...prev,
+        general: { ...prev.general, media_dirs: next },
+      };
+    });
   };
 
   const removeMediaDir = (index: number) => {
-    if (!config) return;
-    const next = config.general.media_dirs.filter((_, i) => i !== index);
-    handleValueChange("general", "media_dirs", next as any);
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const next = prev.general.media_dirs.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        general: { ...prev.general, media_dirs: next },
+      };
+    });
   };
 
   const browseMediaDir = async (index: number) => {
@@ -311,10 +326,112 @@ export default function ConfigurationPage() {
     key: K,
     value: AppConfig[T][K]
   ) => {
-    if (config) {
-      setConfig({ ...config, [section]: { ...config[section], [key]: value } });
+    setConfig((prev) => {
+      if (!prev) return prev;
+      const nextSection = {
+        ...(prev[section] as AppConfig[T]),
+        [key]: value,
+      } as AppConfig[T];
+      return {
+        ...prev,
+        [section]: nextSection,
+      };
+    });
+  };
+
+  const handleProcessorToggle = (
+    key: keyof AppConfig["processors"],
+    value: boolean
+  ) => {
+    let infoMessage: string | null = null;
+    setConfig((prev) => {
+      if (!prev) return prev;
+      let next = {
+        ...prev,
+        processors: { ...prev.processors, [key]: value },
+      };
+      if (key === "image_embedding_processor_active" && !value) {
+        const disabled: string[] = [];
+        if (prev.tagging.auto_tagging) {
+          disabled.push("Auto Tagger");
+          next = {
+            ...next,
+            tagging: { ...prev.tagging, auto_tagging: false },
+          };
+        }
+        if (disabled.length > 0) {
+          infoMessage = `Disabled ${disabled.join(", ")} because image embeddings are turned off.`;
+        }
+      }
+      return next;
+    });
+    if (infoMessage) {
+      setSnackbar({ open: true, message: infoMessage, severity: "info" });
     }
   };
+
+  const handleAutoTaggingToggle = (value: boolean) => {
+    if (!config?.processors.image_embedding_processor_active && value) {
+      setSnackbar({
+        open: true,
+        message: "Enable the image embeddings processor before turning on Auto Tagger.",
+        severity: "info",
+      });
+      return;
+    }
+    setConfig((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tagging: { ...prev.tagging, auto_tagging: value },
+      };
+    });
+  };
+
+  const handleEnablePeopleToggle = (value: boolean) => {
+    let infoMessage: string | null = null;
+    setConfig((prev) => {
+      if (!prev) return prev;
+      let next = {
+        ...prev,
+        general: { ...prev.general, enable_people: value },
+      };
+      if (!value && prev.processors.face_processor_active) {
+        infoMessage =
+          "Face processor disabled because people features were turned off.";
+        next = {
+          ...next,
+          processors: { ...prev.processors, face_processor_active: false },
+        };
+      }
+      return next;
+    });
+    if (infoMessage) {
+      setSnackbar({ open: true, message: infoMessage, severity: "info" });
+    }
+  };
+
+  const handleFaceProcessorToggle = (value: boolean) => {
+    if (value && !config?.general.enable_people) {
+      setSnackbar({
+        open: true,
+        message: "Enable people features before turning on the face processor.",
+        severity: "info",
+      });
+      return;
+    }
+    handleProcessorToggle("face_processor_active", value);
+  };
+  const getErrorMessage = (error: unknown, fallback: string): string => {
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    if (typeof error === "string" && error.trim().length > 0) {
+      return error.trim();
+    }
+    return fallback;
+  };
+
   const applyFacePreset = (preset: FacePresetKey) => {
     setConfig((prev) => {
       if (!prev) return prev;
@@ -366,8 +483,8 @@ export default function ConfigurationPage() {
       const p = await listProfiles();
       setProfiles(p);
       setProfileError(null);
-    } catch (e: any) {
-      setProfileError(e?.message || "Failed to load profiles");
+    } catch (error: unknown) {
+      setProfileError(getErrorMessage(error, "Failed to load profiles"));
     }
   };
 
@@ -387,10 +504,10 @@ export default function ConfigurationPage() {
         severity: "success",
       });
       setNewProfilePath("");
-    } catch (e: any) {
+    } catch (error: unknown) {
       setSnackbar({
         open: true,
-        message: e?.message || "Failed to create profile",
+        message: getErrorMessage(error, "Failed to create profile"),
         severity: "error",
       });
     } finally {
@@ -409,10 +526,10 @@ export default function ConfigurationPage() {
         message: "Removed profile",
         severity: "success",
       });
-    } catch (e: any) {
+    } catch (error: unknown) {
       setSnackbar({
         open: true,
-        message: e?.message || "Failed to remove profile",
+        message: getErrorMessage(error, "Failed to remove profile"),
         severity: "error",
       });
     }
@@ -441,10 +558,10 @@ export default function ConfigurationPage() {
         message: "Profile added",
         severity: "success",
       });
-    } catch (e: any) {
+    } catch (error: unknown) {
       setSnackbar({
         open: true,
-        message: e?.message || "Failed to add profile",
+        message: getErrorMessage(error, "Failed to add profile"),
         severity: "error",
       });
     }
@@ -472,6 +589,7 @@ export default function ConfigurationPage() {
   }
 
   const isBinary = !!config.general.is_binary;
+  const canEditMediaDirs = !config.general.is_docker;
   const activeFacePreset =
     config.face_recognition.preset === "custom"
       ? null
@@ -481,7 +599,17 @@ export default function ConfigurationPage() {
       label: "Profiles",
       content: (
         <Grid container spacing={2}>
-          {profiles && !config.general.is_docker ? (
+          {config.general.is_docker ? (
+            <Grid size={{ xs: 12 }}>
+              <Alert severity="info">
+                Profiles are not available in this environment.
+              </Alert>
+            </Grid>
+          ) : profileError ? (
+            <Grid size={{ xs: 12 }}>
+              <Alert severity="error">{profileError}</Alert>
+            </Grid>
+          ) : profiles ? (
             <>
               {/* Active profile card */}
               <Grid size={{ xs: 12 }}>
@@ -507,7 +635,7 @@ export default function ConfigurationPage() {
                           variant="outlined"
                           onClick={pickRelocatePath}
                         >
-                          Choose directory…
+                          Choose directory???
                         </Button>
                       </Alert>
                     )}
@@ -541,7 +669,7 @@ export default function ConfigurationPage() {
                       onClick={handleAddExisting}
                       disabled={hasActiveTasks}
                     >
-                      Add Existing…
+                      Add Existing???
                     </Button>
                   </Box>
                   <Divider />
@@ -580,8 +708,7 @@ export default function ConfigurationPage() {
                       </ListItem>
                     ))}
                   </List>
-                  {profiles &&
-                    selectedProfilePath &&
+                  {selectedProfilePath &&
                     selectedProfilePath !== profiles.active_path && (
                       <Typography
                         variant="caption"
@@ -649,7 +776,7 @@ export default function ConfigurationPage() {
           ) : (
             <Grid size={{ xs: 12 }}>
               <Alert severity="info">
-                Profiles are not available in this environment.
+                No profiles are registered yet. Create or add one below.
               </Alert>
             </Grid>
           )}
@@ -693,7 +820,7 @@ export default function ConfigurationPage() {
               </Grid>
             </>
           )}
-          {isBinary && (
+          {canEditMediaDirs && (
             <Grid size={{ xs: 12 }}>
               <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
                 Media Directories
@@ -768,11 +895,7 @@ export default function ConfigurationPage() {
                   <Switch
                     checked={config.general.enable_people}
                     onChange={(e) =>
-                      handleValueChange(
-                        "general",
-                        "enable_people",
-                        e.target.checked
-                      )
+                      handleEnablePeopleToggle(e.target.checked)
                     }
                   />
                 }
@@ -1413,7 +1536,7 @@ export default function ConfigurationPage() {
                   handleValueChange(
                     "duplicates",
                     "duplicate_auto_handling",
-                    e.target.value as any
+                    e.target.value as AppConfig["duplicates"]["duplicate_auto_handling"]
                   )
                 }
               >
@@ -1443,7 +1566,7 @@ export default function ConfigurationPage() {
                   handleValueChange(
                     "duplicates",
                     "duplicate_auto_keep_rule",
-                    e.target.value as any
+                    e.target.value as AppConfig["duplicates"]["duplicate_auto_keep_rule"]
                   )
                 }
               >
@@ -1521,8 +1644,7 @@ export default function ConfigurationPage() {
               <Switch
                 checked={config.processors.exif_processor_active}
                 onChange={(e) =>
-                  handleValueChange(
-                    "processors",
+                  handleProcessorToggle(
                     "exif_processor_active",
                     e.target.checked
                   )
@@ -1541,13 +1663,8 @@ export default function ConfigurationPage() {
             control={
               <Switch
                 checked={config.processors.face_processor_active}
-                onChange={(e) =>
-                  handleValueChange(
-                    "processors",
-                    "face_processor_active",
-                    e.target.checked
-                  )
-                }
+                onChange={(e) => handleFaceProcessorToggle(e.target.checked)}
+                disabled={!config.general.enable_people}
               />
             }
             label="Face Processor"
@@ -1557,14 +1674,14 @@ export default function ConfigurationPage() {
             sx={{ ml: 6, mt: -1, display: "block" }}
           >
             Detects faces in images and prepares them for recognition.
+            {!config.general.enable_people && " Enable People to turn this on."}
           </Typography>
           <FormControlLabel
             control={
               <Switch
                 checked={config.processors.image_embedding_processor_active}
                 onChange={(e) =>
-                  handleValueChange(
-                    "processors",
+                  handleProcessorToggle(
                     "image_embedding_processor_active",
                     e.target.checked
                   )
@@ -1577,8 +1694,23 @@ export default function ConfigurationPage() {
             variant="caption"
             sx={{ ml: 6, mt: -1, display: "block" }}
           >
-            Generates CLIP embeddings for search, similarity, and related
-            content.
+            Generates CLIP embeddings for search, similarity, and related content.
+          </Typography>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={config.tagging.auto_tagging}
+                onChange={(e) => handleAutoTaggingToggle(e.target.checked)}
+                disabled={!config.processors.image_embedding_processor_active}
+              />
+            }
+            label="Auto Tagger"
+          />
+          <Typography
+            variant="caption"
+            sx={{ ml: 6, mt: -1, display: "block" }}
+          >
+            Suggests tags based on CLIP embeddings. Requires image embeddings.
           </Typography>
         </FormGroup>
       ),

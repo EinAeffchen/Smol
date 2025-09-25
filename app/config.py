@@ -11,7 +11,7 @@ import yaml
 from pydantic import BaseModel, Field, PlainSerializer, computed_field
 from typing_extensions import Annotated
 
-from app.logger import logger
+from app.logger import logger, configure_file_logging
 
 E = TypeVar("E", bound=Enum)
 IS_DOCKER = os.getenv("IS_DOCKER", False)
@@ -828,6 +828,10 @@ def reload_settings():
     except Exception as e:
         logger.warning("Could not reset processors after config reload: %s", e)
     try:
+        configure_file_logging(settings.general.data_dir / "logs")
+    except Exception as e:
+        logger.warning("Could not reconfigure file logging: %s", e)
+    try:
         logger.info(
             "Active profile: data_dir=%s omoide_dir=%s thumb_dir=%s db_dir=%s",
             settings.general.data_dir,
@@ -842,3 +846,4 @@ def reload_settings():
 
 settings = load_settings()
 logger.info("DATA_DIR: %s", settings.general.data_dir)
+

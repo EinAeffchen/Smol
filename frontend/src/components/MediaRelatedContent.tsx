@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Box, Typography } from "@mui/material";
 import { Media } from "../types";
 import MediaCard from "./MediaCard";
@@ -6,6 +6,7 @@ import { getSimilarMedia } from "../services/media";
 
 export default function SimilarContent({ mediaId }: { mediaId: number }) {
   const [similar, setSimilar] = useState<Media[]>([]);
+  const similarIds = useMemo(() => similar.map((item) => item.id), [similar]);
 
   useEffect(() => {
     if (!mediaId) return;
@@ -46,7 +47,7 @@ export default function SimilarContent({ mediaId }: { mediaId: number }) {
               mb: 2,
             }}
           >
-            <MediaCard media={item} />
+            <MediaCard media={item} navigationContext={{ ids: similarIds }} />
           </Box>
         ))}
       </Box>

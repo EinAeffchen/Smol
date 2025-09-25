@@ -16,13 +16,14 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 from scenedetect import HistogramDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlalchemy import delete, text
-from sqlmodel import Session, select
+from sqlmodel import Session, select, update
+
 from tqdm import tqdm
 
 import app.database as db
 from app.config import settings
-from app.ffmpeg import ensure_ffmpeg_available
 from app.database import safe_commit
+from app.ffmpeg import ensure_ffmpeg_available
 from app.logger import logger
 from app.models import (
     DuplicateMedia,
@@ -91,7 +92,7 @@ def get_image_taken_date(img_path: Path | None = None) -> datetime:
     alt_time = datetime.fromtimestamp(img_path.stat().st_ctime)
 
     try:
-        img = Image.open(img_path)
+        img = Image.open(str(img_path))
     except UnidentifiedImageError:
         return alt_time
 
@@ -293,7 +294,11 @@ def _generate_video_perceptual_hash(media: Media) -> str | None:
 
         timestamps: list[float] = []
         if duration > 0:
-            effective_samples = min(target_samples, frame_count) if frame_count else target_samples
+            effective_samples = (
+                min(target_samples, frame_count)
+                if frame_count
+                else target_samples
+            )
             effective_samples = max(effective_samples, 1)
             timestamps = (
                 np.linspace(
@@ -307,7 +312,10 @@ def _generate_video_perceptual_hash(media: Media) -> str | None:
             )
         elif fps > 0 and frame_count > 0:
             frame_indices = np.linspace(
-                0, frame_count - 1, min(target_samples, frame_count), dtype=np.int64
+                0,
+                frame_count - 1,
+                min(target_samples, frame_count),
+                dtype=np.int64,
             )
             timestamps = [int(idx) / fps for idx in frame_indices]
 
@@ -324,7 +332,12 @@ def _generate_video_perceptual_hash(media: Media) -> str | None:
             try:
                 hashes.append(imagehash.phash(img))
             except Exception as exc:
-                logger.debug("Failed to hash video frame at %.2fs (%s): %s", ts_seconds, path, exc)
+                logger.debug(
+                    "Failed to hash video frame at %.2fs (%s): %s",
+                    ts_seconds,
+                    path,
+                    exc,
+                )
 
         for ts in timestamps:
             _hash_frame_at(ts)
@@ -333,7 +346,10 @@ def _generate_video_perceptual_hash(media: Media) -> str | None:
 
         if not hashes:
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            remaining = min(target_samples, frame_count if frame_count > 0 else target_samples)
+            remaining = min(
+                target_samples,
+                frame_count if frame_count > 0 else target_samples,
+            )
             while remaining > 0:
                 success, frame = cap.read()
                 if not success:
@@ -625,7 +641,9 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
                 stderr=subprocess.PIPE,
             )
         except Exception as exc:
-            logger.warning("ffmpeg frame extraction failed at %.2fs: %s", ts, exc)
+            logger.warning(
+                "ffmpeg frame extraction failed at %.2fs: %s", ts, exc
+            )
             continue
 
         if result.returncode != 0 or not result.stdout:
@@ -788,17 +806,17 @@ def refresh_similarities_for_person(person_id: int) -> None:
         safe_commit(session)
 
 
-def delete_record(media_id, session):
+def delete_record(media_id, session: Session):
     media = session.get(Media, media_id)
     if not media:
         raise HTTPException(status_code=404, detail="Media not found")
-
+    to_unlink: list[Path] = []
     thumbnail = media.thumbnail_path
     if not thumbnail:
         thumbnail = str(media.id)
     thumb = Path(settings.general.thumb_dir / thumbnail)
     if thumb.is_file():
-        thumb.unlink()
+        to_unlink.append(thumb)
     faces = session.exec(select(Face).where(Face.media_id == media.id)).all()
     for face in faces:
         sql = text(
@@ -808,9 +826,10 @@ def delete_record(media_id, session):
             """
         ).bindparams(f_id=face.id)
         session.exec(sql)
-        thumb = Path(settings.general.thumb_dir / face.thumbnail_path)
-        if thumb.is_file():
-            thumb.unlink()
+        if face.thumbnail_path:
+            thumb = Path(settings.general.thumb_dir / face.thumbnail_path)
+            if thumb.is_file():
+                to_unlink.append(thumb)
 
     sql = text(
         """
@@ -829,6 +848,14 @@ def delete_record(media_id, session):
         ).bindparams(m_id=media.id)
     )
 
+    faces = session.exec(select(Face).where(Face.media_id == media.id)).all()
+    face_ids = [f.id for f in faces]
+    if face_ids:
+        session.exec(
+            update(Person)
+            .where(Person.profile_face_id.in_(face_ids))
+            .values(profile_face_id=None)
+        )
     session.exec(delete(Face).where(Face.media_id == media_id))
     session.exec(delete(MediaTagLink).where(MediaTagLink.media_id == media_id))
     session.exec(delete(ExifData).where(ExifData.media_id == media_id))
@@ -837,8 +864,13 @@ def delete_record(media_id, session):
         delete(DuplicateMedia).where(DuplicateMedia.media_id == media.id)
     )
     session.delete(media)
-
     safe_commit(session)
+
+    for p in to_unlink:
+        try:
+            p.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def delete_file(session: Session, media_id: int):

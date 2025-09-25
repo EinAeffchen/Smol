@@ -12,6 +12,7 @@ import {
 import { MoreVert, Vrpano, Delete, FolderOpen } from "@mui/icons-material";
 import { Media } from "../types";
 import config from "../config";
+import { BinaryNavigationControls } from "./BinaryNavigationControls";
 const ERROR_COLOR = "error.main";
 
 interface MediaHeaderProps {
@@ -56,12 +57,19 @@ export function MediaHeader({
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
+        flexWrap: { xs: "wrap", sm: "nowrap" },
         gap: 2,
         mb: 2,
         width: "100%",
       }}
     >
-      <Box sx={{ width: { xs: "80%", sm: "auto" }, textAlign: "left" }}>
+      <Box
+        sx={{
+          width: { xs: "100%", sm: "auto" },
+          textAlign: "left",
+          mb: { xs: 1, sm: 0 },
+        }}
+      >
         <Typography
           variant="h4"
           component="h1"
@@ -73,7 +81,14 @@ export function MediaHeader({
           {media.filename}
         </Typography>
       </Box>
-      <Box>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+        }}
+      >
+        <BinaryNavigationControls variant="overlay" />
         <IconButton onClick={handleMenuClick} color="primary">
           <MoreVert />
         </IconButton>
@@ -103,7 +118,10 @@ export function MediaHeader({
                   <ListItemText>Convert</ListItemText>
                 </MenuItem>
               )}
-              <MenuItem onClick={() => handleAction("deleteRecord")} sx={{ color: ERROR_COLOR }}>
+              <MenuItem
+                onClick={() => handleAction("deleteRecord")}
+                sx={{ color: ERROR_COLOR }}
+              >
                 <ListItemIcon>
                   <Delete fontSize="small" sx={{ color: ERROR_COLOR }} />
                 </ListItemIcon>

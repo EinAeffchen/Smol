@@ -79,11 +79,14 @@ def list_missing_media(
         .first()
         or 0
     )
+    try:
+        summary_rows = session.exec(
+            select(Media.path).where(*conditions)
+        ).all()
+        summary = build_summary((row[0] for row in summary_rows))
+    except IndexError:
+        summary = []
 
-    summary_rows = session.exec(select(Media.path).where(*conditions)).all()
-    summary = build_summary((row[0] for row in summary_rows))
-
-    logger.info("MEDIA: %s", items[0])
     return MissingMediaPage(
         items=[MissingMediaRead.from_media(media) for media in items],
         next_cursor=next_cursor,

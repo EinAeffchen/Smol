@@ -270,7 +270,7 @@ def _fetch_media_batch_to_process(session: Session, limit: int) -> list[Media]:
         return []
     return session.exec(
         select(Media)
-        .where(or_(*conditions))
+        .where(or_(*conditions), Media.missing_since.is_(None))
         .order_by(Media.duration.asc())
         .limit(limit)
     ).all()

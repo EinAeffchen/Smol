@@ -56,15 +56,26 @@ def configure_file_logging(
         log_dir_path.mkdir(parents=True, exist_ok=True)
         log_file = (log_dir_path / filename).resolve()
 
+        # Remove stale file handlers pointing to different log files
+        for handler in list(logger.handlers):
+            if isinstance(handler, RotatingFileHandler):
+                try:
+                    existing = Path(getattr(handler, "baseFilename", "")).resolve()
+                except Exception:
+                    existing = None
+                if existing and existing != log_file:
+                    logger.removeHandler(handler)
+                    try:
+                        handler.close()
+                    except Exception:
+                        pass
+
         # Check if a handler for this exact file already exists
         def _has_handler(lg: logging.Logger) -> bool:
             for h in lg.handlers:
                 if isinstance(h, RotatingFileHandler):
                     try:
-                        if (
-                            Path(getattr(h, "baseFilename", "")).resolve()
-                            == log_file
-                        ):
+                        if Path(getattr(h, "baseFilename", "")).resolve() == log_file:
                             return True
                     except Exception:
                         continue

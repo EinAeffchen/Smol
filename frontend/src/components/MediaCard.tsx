@@ -23,12 +23,17 @@ function formatDuration(d?: number): string {
   return `${m}:${s}`;
 }
 
+interface MediaNavigationContext {
+  ids: number[];
+}
+
 interface MediaCardProps {
   media: MediaPreview;
   mediaListKey?: string;
+  navigationContext?: MediaNavigationContext;
 }
 
-export default function MediaCard({ media, mediaListKey }: MediaCardProps) {
+export default function MediaCard({ media, mediaListKey, navigationContext }: MediaCardProps) {
   const theme = useTheme();
   // This state now explicitly controls when the video player is active.
   const [isPlayerActive, setIsPlayerActive] = useState(false);
@@ -44,8 +49,9 @@ export default function MediaCard({ media, mediaListKey }: MediaCardProps) {
 
   const linkState = {
     backgroundLocation: location.state?.backgroundLocation || location,
-    mediaListKey: mediaListKey,
-    media: media,
+    mediaListKey,
+    media,
+    navigationContext,
   };
 
   const handleMouseEnter = () => {
