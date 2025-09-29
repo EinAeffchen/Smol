@@ -67,18 +67,18 @@ def _filter_macos_framework_conflicts(entries):
     return filtered
 
 def _ensure_sklearn_openmp_runtime(entries):
-    if sys.platform != 'win32':
+    if sys.platform != "win32":
         return entries
-    present = {os.path.basename(os.path.normpath(dest)).lower() for _, dest in entries}
-    if any(name.startswith('vcomp140') for name in present):
+    lower_names = {os.path.basename(os.path.normpath(dest)).lower() for _, dest in entries}
+    if any(name.startswith("vcomp140") for name in lower_names):
         return entries
     try:
         import sklearn  # type: ignore
-        libs_dir = Path(sklearn.__file__).resolve().parent / '.libs'
+        libs_dir = Path(sklearn.__file__).resolve().parent / ".libs"
         if libs_dir.exists():
-            for dll in libs_dir.glob('vcomp140*.dll'):
-                dest = os.path.join('sklearn', '.libs', dll.name)
-                entries.append((str(dll), dest))
+            for dll in libs_dir.glob("vcomp140*.dll"):
+                entries.append((str(dll), os.path.basename(dll)))
+                break
     except Exception:
         pass
     return entries

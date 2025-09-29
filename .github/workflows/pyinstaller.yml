@@ -97,7 +97,20 @@ jobs:
       - name: Clean previous build artifacts
         run: python -c "import shutil, pathlib; [shutil.rmtree(pathlib.Path(p), ignore_errors=True) for p in ('build','dist')]"
 
+      - name: Force clean build artifacts
+        run: |
+          rm -rf build dist *.spec
+
+      - name: Build binary with PyInstaller (macOS workaround)
+        env:
+          APP_VERSION: ${{ env.APP_VERSION }}
+        if: runner.os == 'macOS'
+        run: |
+          export PYINSTALLER_STRIP_SYMLINKS=1
+          pyinstaller --clean --noconfirm main.spec
+
       - name: Build binary with PyInstaller
+        if: runner.os != 'macOS'
         env:
           APP_VERSION: ${{ env.APP_VERSION }}
         run: |
