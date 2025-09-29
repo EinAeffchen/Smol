@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import (
     collect_data_files,
@@ -53,6 +54,34 @@ def _filter_qt_plugins(entries):
             continue
         filtered.append((src, dest))
     return filtered
+
+def _filter_macos_framework_conflicts(entries):
+    if sys.platform != 'darwin':
+        return entries
+    filtered = []
+    for src, dest in entries:
+        norm_dest = os.path.normpath(dest)
+        if '.framework' in norm_dest.split(os.sep):
+            continue
+        filtered.append((src, dest))
+    return filtered
+
+def _ensure_sklearn_openmp_runtime(entries):
+    if sys.platform != 'win32':
+        return entries
+    present = {os.path.basename(os.path.normpath(dest)).lower() for _, dest in entries}
+    if any(name.startswith('vcomp140') for name in present):
+        return entries
+    try:
+        import sklearn  # type: ignore
+        libs_dir = Path(sklearn.__file__).resolve().parent / '.libs'
+        if libs_dir.exists():
+            for dll in libs_dir.glob('vcomp140*.dll'):
+                dest = os.path.join('sklearn', '.libs', dll.name)
+                entries.append((str(dll), dest))
+    except Exception:
+        pass
+    return entries
 
 def get_package_path(package_name):
     """Finds the path to an installed package."""
@@ -304,8 +333,11 @@ APP_NAME = f"omoide-{APP_VERSION}"
 # Remove duplicate data/binary entries that can cause PyInstaller symlink collisions (macOS frameworks)
 
 datas = _filter_qt_plugins(datas)
+datas = _filter_macos_framework_conflicts(datas)
 datas = _dedupe_framework_resources(datas)
 datas = _dedupe_toc(datas)
+binaries = _filter_macos_framework_conflicts(binaries)
+binaries = _ensure_sklearn_openmp_runtime(binaries)
 binaries = _dedupe_toc(binaries)
 
 a = Analysis(
