@@ -124,7 +124,7 @@ jobs:
           APP_ARTIFACT_PATH: ${{ env.APP_ARTIFACT_PATH }}
         run: |
           $ErrorActionPreference = 'Stop'
-          python -c @'
+          $bundleScript = @'
 import os
 import pathlib
 import shutil
@@ -159,6 +159,9 @@ dest = target_dir / 'vcomp140.dll'
 shutil.copy2(src, dest)
 print(f'Copied {src} -> {dest}')
 '@
+          $tempPath = Join-Path $env:RUNNER_TEMP 'bundle_vcomp_runtime.py'
+          Set-Content -Path $tempPath -Value $bundleScript -Encoding UTF8
+          python $tempPath
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
