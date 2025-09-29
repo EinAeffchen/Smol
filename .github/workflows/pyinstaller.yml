@@ -117,6 +117,49 @@ jobs:
         run: |
           pyinstaller --clean --noconfirm main.spec
 
+      - name: Bundle VC runtime (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          APP_ARTIFACT_PATH: ${{ env.APP_ARTIFACT_PATH }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          python -c @'
+import os
+import pathlib
+import shutil
+
+try:
+    import sklearn  # type: ignore
+except ImportError as exc:
+    raise SystemExit(f"scikit-learn not available: {exc}")
+
+dist_root = pathlib.Path(os.environ['APP_ARTIFACT_PATH']).resolve()
+target_dir = dist_root / '_internal' / 'sklearn' / '.libs'
+target_dir.mkdir(parents=True, exist_ok=True)
+
+candidates = []
+libs_dir = pathlib.Path(sklearn.__file__).resolve().parent / '.libs'
+if libs_dir.exists():
+    candidates.extend(libs_dir.glob('vcomp140*.dll'))
+
+if not candidates:
+    system_root = pathlib.Path(os.environ.get('SystemRoot', r'C:\Windows'))
+    for rel in ('System32', 'SysWOW64'):
+        candidate = system_root / rel / 'vcomp140.dll'
+        if candidate.exists():
+            candidates.append(candidate)
+            break
+
+if not candidates:
+    raise SystemExit('Unable to locate vcomp140.dll for bundling.')
+
+src = pathlib.Path(candidates[0])
+dest = target_dir / 'vcomp140.dll'
+shutil.copy2(src, dest)
+print(f'Copied {src} -> {dest}')
+'@
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

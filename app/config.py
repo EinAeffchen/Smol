@@ -1,6 +1,7 @@
 import gc
 import math
 import os
+import shutil
 import sys
 import threading
 from enum import Enum
@@ -276,7 +277,9 @@ class GeneralSettings(BaseModel):
     @computed_field
     @property
     def models_dir(self) -> Path:
-        return self.omoide_dir / "models"
+        if IS_DOCKER:
+            return self.omoide_dir / "models"
+        return get_os_app_config_dir() / "models"
 
     @computed_field
     @property
@@ -292,6 +295,36 @@ class GeneralSettings(BaseModel):
         self.omoide_dir.mkdir(parents=True, exist_ok=True)
         self.thumb_dir.mkdir(parents=True, exist_ok=True)
         self.models_dir.mkdir(parents=True, exist_ok=True)
+        if not IS_DOCKER:
+            legacy_models_dir = self.omoide_dir / "models"
+            try:
+                if legacy_models_dir.exists() and legacy_models_dir != self.models_dir:
+                    migrated_any = False
+                    for item in legacy_models_dir.iterdir():
+                        dest = self.models_dir / item.name
+                        if dest.exists():
+                            continue
+                        try:
+                            shutil.move(str(item), dest)
+                            migrated_any = True
+                        except Exception as move_err:
+                            logger.warning(
+                                "Could not migrate legacy model %s -> %s: %s",
+                                item,
+                                dest,
+                                move_err,
+                            )
+                    if migrated_any:
+                        logger.info(
+                            "Migrated profile models into shared cache: %s",
+                            self.models_dir,
+                        )
+                    try:
+                        legacy_models_dir.rmdir()
+                    except OSError:
+                        pass
+            except Exception as e:
+                logger.warning("Could not migrate legacy models directory: %s", e)
         if IS_DOCKER:
             self.media_dirs = [Path("/app/media")]
 

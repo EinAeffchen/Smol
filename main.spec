@@ -66,34 +66,6 @@ def _filter_macos_framework_conflicts(entries):
         filtered.append((src, dest))
     return filtered
 
-def _ensure_sklearn_openmp_runtime(entries):
-    if sys.platform != "win32":
-        return entries
-    target_dest = os.path.join("sklearn", ".libs", "vcomp140.dll")
-    normalized = {os.path.normpath(dest).lower() for _, dest in entries}
-    if os.path.normpath(target_dest).lower() in normalized:
-        return entries
-    candidates = []
-    try:
-        import sklearn  # type: ignore
-        libs_dir = Path(sklearn.__file__).resolve().parent / ".libs"
-        if libs_dir.exists():
-            for dll in libs_dir.glob("vcomp140*.dll"):
-                candidates.append(str(dll))
-                break
-    except Exception:
-        pass
-    if not candidates:
-        system_root = os.environ.get("SystemRoot", r"C:\Windows")
-        for rel in ("System32", "SysWOW64"):
-            candidate = os.path.join(system_root, rel, "vcomp140.dll")
-            if os.path.isfile(candidate):
-                candidates.append(candidate)
-                break
-    if candidates:
-        entries.append((candidates[0], target_dest))
-    return entries
-
 def get_package_path(package_name):
     """Finds the path to an installed package."""
     import importlib.util
@@ -348,7 +320,6 @@ datas = _filter_macos_framework_conflicts(datas)
 datas = _dedupe_framework_resources(datas)
 datas = _dedupe_toc(datas)
 binaries = _filter_macos_framework_conflicts(binaries)
-binaries = _ensure_sklearn_openmp_runtime(binaries)
 binaries = _dedupe_toc(binaries)
 
 a = Analysis(
