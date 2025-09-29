@@ -82,23 +82,20 @@ jobs:
           # Install remaining project dependencies (excluding torch/vision)
           python -m pip install -r requirements-ci.txt
 
-      - name: Set output filename per OS
+      - name: Set artifact metadata
         shell: bash
         run: |
           BASENAME="omoide-${APP_VERSION}"
-          case "${RUNNER_OS}" in
-            Windows)
-              echo "APP_BASENAME=${BASENAME}.exe" >> $GITHUB_ENV ;;
-            macOS)
-              echo "APP_BASENAME=${BASENAME}" >> $GITHUB_ENV ;;
-            Linux)
-              echo "APP_BASENAME=${BASENAME}" >> $GITHUB_ENV ;;
-          esac
+          echo "APP_NAME=${BASENAME}" >> $GITHUB_ENV
+          echo "APP_ARTIFACT_PATH=dist/${BASENAME}" >> $GITHUB_ENV
 
       - name: Show dependency versions (debug)
         run: |
           python -V
           pip list
+
+      - name: Clean previous build artifacts
+        run: python -c "import shutil, pathlib; [shutil.rmtree(pathlib.Path(p), ignore_errors=True) for p in ('build','dist')]"
 
       - name: Build binary with PyInstaller
         env:
@@ -110,7 +107,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: omoide-${{ runner.os }}-${{ env.APP_VERSION }}
-          path: dist/${{ env.APP_BASENAME }}
+          path: ${{ env.APP_ARTIFACT_PATH }}
           if-no-files-found: error
 
   release:

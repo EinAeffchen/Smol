@@ -9,6 +9,18 @@ from PyInstaller.utils.hooks import (
 )
 import glob
 
+
+def _dedupe_toc(entries):
+    seen = set()
+    unique = []
+    for src, dest in entries:
+        key = (os.path.normpath(src), dest)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append((src, dest))
+    return unique
+
 def get_package_path(package_name):
     """Finds the path to an installed package."""
     import importlib.util
@@ -241,6 +253,11 @@ def _resolve_version():
 
 APP_VERSION = _resolve_version()
 APP_NAME = f"omoide-{APP_VERSION}"
+
+# Remove duplicate data/binary entries that can cause PyInstaller symlink collisions (macOS frameworks)
+
+datas = _dedupe_toc(datas)
+binaries = _dedupe_toc(binaries)
 
 a = Analysis(
     ['app/main.py'],
