@@ -59,9 +59,7 @@ export default function OrphanFacesPage() {
 
   useEffect(() => {
     // Only call fetchInitial once when the component mounts
-    if (orphans.length === 0) {
-      fetchInitial(listKey, () => getOrphanFaces(null));
-    }
+    fetchInitial(listKey, () => getOrphanFaces(null));
   }, [fetchInitial, listKey, orphans.length]);
 
   useEffect(() => {

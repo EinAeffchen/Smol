@@ -125,40 +125,41 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $bundleScript = @'
-import os
-import pathlib
-import shutil
+          import os
+          import pathlib
+          import shutil
 
-try:
-    import sklearn  # type: ignore
-except ImportError as exc:
-    raise SystemExit(f"scikit-learn not available: {exc}")
+          try:
+              import sklearn  # type: ignore
+          except ImportError:
+              sklearn = None
 
-dist_root = pathlib.Path(os.environ['APP_ARTIFACT_PATH']).resolve()
-target_dir = dist_root / '_internal' / 'sklearn' / '.libs'
-target_dir.mkdir(parents=True, exist_ok=True)
+          dist_root = pathlib.Path(os.environ['APP_ARTIFACT_PATH']).resolve()
+          target_dir = dist_root / '_internal' / 'sklearn' / '.libs'
+          target_dir.mkdir(parents=True, exist_ok=True)
 
-candidates = []
-libs_dir = pathlib.Path(sklearn.__file__).resolve().parent / '.libs'
-if libs_dir.exists():
-    candidates.extend(libs_dir.glob('vcomp140*.dll'))
+          candidates = []
+          if sklearn is not None:
+              libs_dir = pathlib.Path(sklearn.__file__).resolve().parent / '.libs'
+              if libs_dir.exists():
+                  candidates.extend(libs_dir.glob('vcomp140*.dll'))
 
-if not candidates:
-    system_root = pathlib.Path(os.environ.get('SystemRoot', r'C:\Windows'))
-    for rel in ('System32', 'SysWOW64'):
-        candidate = system_root / rel / 'vcomp140.dll'
-        if candidate.exists():
-            candidates.append(candidate)
-            break
+          if not candidates:
+              system_root = pathlib.Path(os.environ.get('SystemRoot', r'C\Windows'))
+              for rel in ('System32', 'SysWOW64'):
+                  candidate = system_root / rel / 'vcomp140.dll'
+                  if candidate.exists():
+                      candidates.append(candidate)
+                      break
 
-if not candidates:
-    raise SystemExit('Unable to locate vcomp140.dll for bundling.')
+          if not candidates:
+              raise SystemExit('Unable to locate vcomp140.dll for bundling.')
 
-src = pathlib.Path(candidates[0])
-dest = target_dir / 'vcomp140.dll'
-shutil.copy2(src, dest)
-print(f'Copied {src} -> {dest}')
-'@
+          src = pathlib.Path(candidates[0])
+          dest = target_dir / 'vcomp140.dll'
+          shutil.copy2(src, dest)
+          print(f'Copied {src} -> {dest}')
+          '@
           $tempPath = Join-Path $env:RUNNER_TEMP 'bundle_vcomp_runtime.py'
           Set-Content -Path $tempPath -Value $bundleScript -Encoding UTF8
           python $tempPath
