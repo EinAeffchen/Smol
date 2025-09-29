@@ -29,13 +29,13 @@ export function PeopleTabContent({
 
   const handleDeleteFace = async (faceIds: number[]) => {
     await deleteFace(faceIds);
-    setOrphans((prev) => prev.filter((f) => !faceIds.includes(f)));
+    setOrphans((prev) => prev.filter((f) => !faceIds.includes(f.id)));
     onDataChanged();
   };
 
   const handleAssignFace = async (faceIds: number[], personId: number) => {
     await assignFace(faceIds, personId);
-    setOrphans((prev) => prev.filter((f) => !faceIds.includes(f)));
+    setOrphans((prev) => prev.filter((f) => !faceIds.includes(f.id)));
     onDataChanged();
   };
 

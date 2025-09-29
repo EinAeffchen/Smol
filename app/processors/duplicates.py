@@ -5,6 +5,7 @@ from app.models import Media, ProcessingTask, DuplicateGroup, DuplicateMedia
 from sqlalchemy import func
 from datetime import datetime, timezone
 from app.config import settings, DuplicateHandlingRule
+import imagehash
 
 class UnionFind:
     def __init__(self, elements):
@@ -100,7 +101,77 @@ class DuplicateProcessor:
                 )
                 self._update_task_progress_and_check_status(
                     session, 1, 2
-                ) 
+                )
+
+                near_duplicate_groups = 0
+                if self.threshold and self.threshold > 0:
+                    video_stmt = (
+                        select(Media.id, Media.phash)
+                        .where(
+                            Media.duration.is_not(None),
+                            Media.phash.is_not(None),
+                            func.length(Media.phash) > 0,
+                        )
+                    )
+                    video_candidates = session.exec(video_stmt).all()
+                    valid_video_hashes: list[tuple[int, imagehash.ImageHash]] = []
+                    for media_id, phash in video_candidates:
+                        try:
+                            hash_obj = imagehash.hex_to_hash(phash)
+                        except (ValueError, TypeError) as exc:
+                            logger.debug(
+                                "Skipping video %s due to invalid pHash %s: %s",
+                                media_id,
+                                phash,
+                                exc,
+                            )
+                            continue
+                        valid_video_hashes.append((media_id, hash_obj))
+
+                    if len(valid_video_hashes) > 1:
+                        uf = UnionFind([media_id for media_id, _ in valid_video_hashes])
+                        for idx in range(len(valid_video_hashes)):
+                            media_a, hash_a = valid_video_hashes[idx]
+                            for jdx in range(idx + 1, len(valid_video_hashes)):
+                                media_b, hash_b = valid_video_hashes[jdx]
+                                try:
+                                    distance = hash_a - hash_b
+                                except Exception as exc:
+                                    logger.debug(
+                                        "Failed to compare hashes for %s and %s: %s",
+                                        media_a,
+                                        media_b,
+                                        exc,
+                                    )
+                                    continue
+                                if distance <= self.threshold:
+                                    uf.union(media_a, media_b)
+
+                        cluster_map: dict[int, list[int]] = {}
+                        for media_id, _ in valid_video_hashes:
+                            root = uf.find(media_id)
+                            cluster_map.setdefault(root, []).append(media_id)
+
+                        for group_media_ids in cluster_map.values():
+                            if len(group_media_ids) < 2:
+                                continue
+                            if (
+                                settings.duplicates.duplicate_auto_handling
+                                is DuplicateHandlingRule.KEEP
+                            ):
+                                self._create_or_update_group(
+                                    session, group_media_ids
+                                )
+                            near_duplicate_groups += 1
+
+                logger.info(
+                    "Identified %d near-duplicate video groups using threshold %d",
+                    near_duplicate_groups,
+                    self.threshold,
+                )
+                self._update_task_progress_and_check_status(
+                    session, 2, 2
+                )
 
                 self._update_task_status(session, "completed")
                 logger.info("pHash duplicate detection task finished.")

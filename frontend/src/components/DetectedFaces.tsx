@@ -152,9 +152,11 @@ export default function DetectedFaces({
     onClearSelection();
     await onAssign(faceIds, assignedToPersonId);
   };
-  const handleDetach = async (
-    faceIds: number[],
-  ) => {
+  const handleDetach = async () => {
+    if (!onDetach || selectedFaceIds.length === 0) {
+      return;
+    }
+    const faceIds = [...selectedFaceIds];
     onClearSelection();
     await onDetach(faceIds);
   };

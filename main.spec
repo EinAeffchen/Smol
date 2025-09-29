@@ -69,18 +69,29 @@ def _filter_macos_framework_conflicts(entries):
 def _ensure_sklearn_openmp_runtime(entries):
     if sys.platform != "win32":
         return entries
-    lower_names = {os.path.basename(os.path.normpath(dest)).lower() for _, dest in entries}
-    if any(name.startswith("vcomp140") for name in lower_names):
+    target_dest = os.path.join("sklearn", ".libs", "vcomp140.dll")
+    normalized = {os.path.normpath(dest).lower() for _, dest in entries}
+    if os.path.normpath(target_dest).lower() in normalized:
         return entries
+    candidates = []
     try:
         import sklearn  # type: ignore
         libs_dir = Path(sklearn.__file__).resolve().parent / ".libs"
         if libs_dir.exists():
             for dll in libs_dir.glob("vcomp140*.dll"):
-                entries.append((str(dll), os.path.basename(dll)))
+                candidates.append(str(dll))
                 break
     except Exception:
         pass
+    if not candidates:
+        system_root = os.environ.get("SystemRoot", r"C:\Windows")
+        for rel in ("System32", "SysWOW64"):
+            candidate = os.path.join(system_root, rel, "vcomp140.dll")
+            if os.path.isfile(candidate):
+                candidates.append(candidate)
+                break
+    if candidates:
+        entries.append((candidates[0], target_dest))
     return entries
 
 def get_package_path(package_name):
