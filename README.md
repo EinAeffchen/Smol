@@ -2,7 +2,7 @@
   <img src="frontend/public/brand/omoide_header_dark.png" alt="logo" width="200"/>
 </div>
 
-# Smart Media Organizing Library
+## Offline-first Memory Organization & Intelligent Discovery Engine
 
 Self‑hosted, offline‑capable photo & video library with AI features. No cloud services required. Everything runs locally after an initial one‑time model setup.
 
