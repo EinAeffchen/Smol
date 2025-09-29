@@ -126,6 +126,9 @@ try:
             binaries.append((pyd, '.'))
         for dll in glob.glob(os.path.join(d, 'cv2', 'opencv_videoio_ffmpeg*.dll')):
             binaries.append((dll, '.'))
+except Exception:
+    pass
+
 # Ensure scikit-learn DLLs (e.g., vcomp140.dll) are bundled for Windows builds
 try:
     sklearn_bins = collect_dynamic_libs('sklearn')
@@ -133,16 +136,12 @@ try:
 except Exception:
     try:
         import sklearn  # type: ignore
-        import sys
         skl_lib_dir = Path(sklearn.__file__).resolve().parent / '.libs'
         if skl_lib_dir.exists():
             for dll in skl_lib_dir.glob('*.dll'):
                 binaries.append((str(dll), '.'))
     except Exception:
         pass
-
-except Exception:
-    pass
 
 """
 Bundle sqlite-vec extension (vec0.*) to bundle root so runtime can load it.
