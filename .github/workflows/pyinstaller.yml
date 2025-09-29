@@ -98,8 +98,9 @@ jobs:
         run: python -c "import shutil, pathlib; [shutil.rmtree(pathlib.Path(p), ignore_errors=True) for p in ('build','dist')]"
 
       - name: Force clean build artifacts
+        if: runner.os == 'macOS'
         run: |
-          rm -rf build dist *.spec
+          rm -rf build dist
 
       - name: Build binary with PyInstaller (macOS workaround)
         env:
