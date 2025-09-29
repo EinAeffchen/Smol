@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="frontend/public/logo.png" alt="logo" width="200"/>
+  <img src="frontend/public/brand/omoide_header_dark.png" alt="logo" width="200"/>
 </div>
 
 # Smart Media Organizing Library
