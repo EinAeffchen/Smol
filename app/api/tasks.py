@@ -38,6 +38,7 @@ from app.utils import (
     generate_thumbnail,
     get_image_taken_date,
     process_file,
+    recalculate_person_appearance_counts,
     split_video,
     vector_from_stored,
     vector_to_blob,
@@ -878,6 +879,7 @@ def assign_to_existing_persons(
         l2_thr = 0.8  # safe-ish fallback for normalized vectors (cos~0.68)
 
     with Session(db.engine) as session:
+        affected_person_ids: set[int] = set()
         for face_id, emb in tqdm(zip(face_ids, embs), total=len(face_ids)):
             face = session.get(Face, face_id)
             task = session.get(ProcessingTask, task_id)
@@ -894,6 +896,9 @@ def assign_to_existing_persons(
                 )
                 task.processed += 1
                 if task.processed % 100 == 0:
+                    if affected_person_ids:
+                        recalculate_person_appearance_counts(session, affected_person_ids)
+                        affected_person_ids.clear()
                     session.add(task)
                     safe_commit(session)
                 continue
@@ -926,6 +931,9 @@ def assign_to_existing_persons(
                         unassigned.append(face_id)
                         task.processed += 1
                         if task.processed % 100 == 0:
+                            if affected_person_ids:
+                                recalculate_person_appearance_counts(session, affected_person_ids)
+                                affected_person_ids.clear()
                             session.add(task)
                             safe_commit(session)
                         continue
@@ -943,6 +951,9 @@ def assign_to_existing_persons(
                     unassigned.append(face_id)
                     task.processed += 1
                     if task.processed % 100 == 0:
+                        if affected_person_ids:
+                            recalculate_person_appearance_counts(session, affected_person_ids)
+                            affected_person_ids.clear()
                         session.add(task)
                         safe_commit(session)
                     continue
@@ -964,6 +975,9 @@ def assign_to_existing_persons(
                     unassigned.append(face_id)
                     task.processed += 1
                     if task.processed % 100 == 0:
+                        if affected_person_ids:
+                            recalculate_person_appearance_counts(session, affected_person_ids)
+                            affected_person_ids.clear()
                         session.add(task)
                         safe_commit(session)
                     continue
@@ -978,6 +992,9 @@ def assign_to_existing_persons(
                     unassigned.append(face_id)
                     task.processed += 1
                     if task.processed % 100 == 0:
+                        if affected_person_ids:
+                            recalculate_person_appearance_counts(session, affected_person_ids)
+                            affected_person_ids.clear()
                         session.add(task)
                         safe_commit(session)
                     continue
@@ -998,11 +1015,7 @@ def assign_to_existing_persons(
                         ).bindparams(p_id=person_id, f_id=face_id)
                     )
 
-                    # Increment appearance count safely
-                    person.appearance_count = (
-                        person.appearance_count or 0
-                    ) + 1
-                    session.add(person)
+                    affected_person_ids.add(person_id)
                 else:
                     logger.warning(
                         "Face %s not found during assignment; skipping update.",
@@ -1015,9 +1028,15 @@ def assign_to_existing_persons(
 
             # commit periodically to avoid huge transactions
             if task.processed % 100 == 0:
+                if affected_person_ids:
+                    recalculate_person_appearance_counts(session, affected_person_ids)
+                    affected_person_ids.clear()
                 session.add(task)
                 safe_commit(session)
 
+        if affected_person_ids:
+            recalculate_person_appearance_counts(session, affected_person_ids)
+            affected_person_ids.clear()
         session.add(task)
         safe_commit(session)
     return unassigned

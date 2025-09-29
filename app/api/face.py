@@ -15,7 +15,10 @@ from app.logger import logger
 from app.models import Face, Person, PersonSimilarity, PersonTagLink
 from app.schemas.face import CursorPage, FaceAssign
 from app.schemas.person import PersonMinimal
-from app.utils import update_person_embedding
+from app.utils import (
+    recalculate_person_appearance_counts,
+    update_person_embedding,
+)
 
 router = APIRouter()
 
@@ -38,28 +41,30 @@ async def assign_faces(
     if not new_person:
         raise HTTPException(status_code=404, detail="Person not found")
 
+    affected_person_ids: set[int] = set()
+    if new_person_id is not None:
+        affected_person_ids.add(new_person_id)
+
     for face_id in body.face_ids:
         face = session.get(Face, face_id)
         if not face:
             logger.warning(f"Face with ID {face_id} not found, skipping assignment.")
             continue
 
-        original_person_object = face.person
-        original_person_id: int | None = None
-        if original_person_object:
-            original_person_id = original_person_object.id
-            original_person_object.appearance_count -= 1
-            session.add(original_person_object)
+        original_person_id = face.person_id
+        if original_person_id == new_person_id:
+            continue
+        if original_person_id is not None:
+            affected_person_ids.add(original_person_id)
 
         face.person = new_person
-        new_person.appearance_count += 1
-
-        session.add(new_person)
         session.add(face)
 
         if original_person_id and original_person_id != body.person_id:
             old_person_can_be_deleted(session, original_person_id)
         update_face_embedding(session, face_id, new_person_id)
+
+    recalculate_person_appearance_counts(session, affected_person_ids)
     if new_person_id and new_person_id > 0:
         update_person_embedding(session, new_person_id)
     safe_commit(session)
@@ -80,6 +85,8 @@ async def detach_faces(
             status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
 
+    affected_person_ids: set[int] = set()
+
     for face_id in face_ids:
         face = session.get(Face, face_id)
         if not face:
@@ -88,10 +95,7 @@ async def detach_faces(
 
         person_id = face.person_id
         if person_id:
-            person = face.person
-            if person:
-                person.appearance_count -= 1
-                session.add(person)
+            affected_person_ids.add(person_id)
 
         face.person_id = None
         session.add(face)
@@ -102,8 +106,10 @@ async def detach_faces(
             session, face_id, -1
         )  # -1 detaches face from person in embedding table
         # update embedding of person to fix suggested faces after detach
-    if person_id:
-        update_person_embedding(session, person_id)
+    recalculate_person_appearance_counts(session, affected_person_ids)
+    for pid in affected_person_ids:
+        if session.get(Person, pid):
+            update_person_embedding(session, pid)
     safe_commit(session)
     return {"message": "Faces detached successfully"}
 
@@ -144,6 +150,7 @@ def delete_faces(face_ids: list[int] = Query(..., alias="face_ids"), session: Se
         raise HTTPException(
             status_code=403, detail="Not allowed in settings.general.read_only mode."
         )
+    affected_person_ids: set[int] = set()
     for face_id in face_ids:
         face = session.get(Face, face_id)
         if not face:
@@ -155,10 +162,9 @@ def delete_faces(face_ids: list[int] = Query(..., alias="face_ids"), session: Se
         if thumb.exists():
             thumb.unlink()
 
-        if person:=face.person:
+        if person := face.person:
             person_id = face.person.id
-            person.appearance_count -=1
-            session.add(person)
+            affected_person_ids.add(person_id)
         else:
             person_id = None
         session.delete(face)
@@ -166,8 +172,10 @@ def delete_faces(face_ids: list[int] = Query(..., alias="face_ids"), session: Se
         update_face_embedding(session, face_id, person_id, delete_face=True)
         if person_id:
             old_person_can_be_deleted(session, person_id)
-    if person_id:
-        update_person_embedding(session, person_id)
+    recalculate_person_appearance_counts(session, affected_person_ids)
+    for pid in affected_person_ids:
+        if session.get(Person, pid):
+            update_person_embedding(session, pid)
     safe_commit(session)
     return {"message": "Faces deleted successfully"}
 
@@ -233,25 +241,30 @@ async def create_person_from_faces(
     if not faces:
         raise HTTPException(status_code=404, detail="No valid faces found")
 
+    media_ids = {face.media_id for face in faces}
+
     # Create the Person
     person = Person(
         name=name,
         profile_face_id=faces[0].id,  # Set profile to the first face
-        appearance_count=len(faces)
+        appearance_count=len(media_ids),
     )
     session.add(person)
     session.flush()
     person_id = person.id
 
+    previous_person_ids: set[int] = set()
     for face in faces:
         previous_person = face.person
         face.person_id = person_id
         session.add(face)
         if previous_person and previous_person.id != person_id:
-            previous_person.appearance_count -= 1
-            session.add(previous_person)
+            previous_person_ids.add(previous_person.id)
             old_person_can_be_deleted(session, previous_person.id)
         update_face_embedding(session, face.id, person_id)
+    target_person_ids = set(previous_person_ids)
+    target_person_ids.add(person_id)
+    recalculate_person_appearance_counts(session, target_person_ids)
     if person_id:
         update_person_embedding(session, person_id)
     safe_commit(session)

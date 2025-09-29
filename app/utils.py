@@ -15,7 +15,7 @@ from fastapi import HTTPException
 from PIL import Image, ImageOps, UnidentifiedImageError
 from scenedetect import HistogramDetector, detect
 from scenedetect.video_splitter import TimecodePair
-from sqlalchemy import delete, text
+from sqlalchemy import delete, distinct, func, text
 from sqlmodel import Session, select, update
 
 from tqdm import tqdm
@@ -86,6 +86,28 @@ def vector_from_stored(value: Any) -> np.ndarray | None:
         return None
     return arr
 
+
+def recalculate_person_appearance_counts(
+    session: Session, person_ids: Iterable[int]
+) -> None:
+    ids = {pid for pid in person_ids if pid is not None}
+    if not ids:
+        return
+    rows = session.exec(
+        select(
+            Face.person_id,
+            func.count(distinct(Face.media_id)),
+        )
+        .where(Face.person_id.in_(ids))
+        .group_by(Face.person_id)
+    ).all()
+    counts = {pid: count for pid, count in rows}
+    for pid in ids:
+        person = session.get(Person, pid)
+        if person is None:
+            continue
+        person.appearance_count = counts.get(pid, 0)
+        session.add(person)
 
 def get_image_taken_date(img_path: Path | None = None) -> datetime:
     # fallback use creation time
