@@ -21,6 +21,19 @@ def _dedupe_toc(entries):
         unique.append((src, dest))
     return unique
 
+
+def _dedupe_framework_resources(entries):
+    seen = set()
+    unique = []
+    for src, dest in entries:
+        norm_dest = os.path.normpath(dest)
+        if norm_dest.endswith('.framework/Resources'):
+            if norm_dest in seen:
+                continue
+            seen.add(norm_dest)
+        unique.append((src, dest))
+    return unique
+
 def get_package_path(package_name):
     """Finds the path to an installed package."""
     import importlib.util
@@ -256,6 +269,7 @@ APP_NAME = f"omoide-{APP_VERSION}"
 
 # Remove duplicate data/binary entries that can cause PyInstaller symlink collisions (macOS frameworks)
 
+datas = _dedupe_framework_resources(datas)
 datas = _dedupe_toc(datas)
 binaries = _dedupe_toc(binaries)
 
