@@ -34,6 +34,26 @@ def _dedupe_framework_resources(entries):
         unique.append((src, dest))
     return unique
 
+
+def _filter_qt_plugins(entries):
+    skip_keywords = [
+        os.path.normpath('PySide6/Qt/plugins/sqldrivers'),
+        os.path.normpath('PySide6/Qt/plugins/audio'),
+        os.path.normpath('PySide6/Qt/plugins/sceneparsers'),
+    ]
+    skip_suffixes = [
+        os.path.normpath('PySide6/Qt/plugins/imageformats/libqsvg.dylib'),
+    ]
+    filtered = []
+    for src, dest in entries:
+        norm_dest = os.path.normpath(dest)
+        if any(keyword in norm_dest for keyword in skip_keywords):
+            continue
+        if any(norm_dest.endswith(suffix) for suffix in skip_suffixes):
+            continue
+        filtered.append((src, dest))
+    return filtered
+
 def get_package_path(package_name):
     """Finds the path to an installed package."""
     import importlib.util
@@ -269,6 +289,7 @@ APP_NAME = f"omoide-{APP_VERSION}"
 
 # Remove duplicate data/binary entries that can cause PyInstaller symlink collisions (macOS frameworks)
 
+datas = _filter_qt_plugins(datas)
 datas = _dedupe_framework_resources(datas)
 datas = _dedupe_toc(datas)
 binaries = _dedupe_toc(binaries)
