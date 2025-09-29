@@ -88,6 +88,7 @@ jobs:
           BASENAME="omoide-${APP_VERSION}"
           echo "APP_NAME=${BASENAME}" >> $GITHUB_ENV
           echo "APP_ARTIFACT_PATH=dist/${BASENAME}" >> $GITHUB_ENV
+          echo "APP_ARTIFACT_ARCHIVE=dist/${BASENAME}.zip" >> $GITHUB_ENV
 
       - name: Show dependency versions (debug)
         run: |
@@ -164,11 +165,36 @@ jobs:
           Set-Content -Path $tempPath -Value $bundleScript -Encoding UTF8
           python $tempPath
 
+      - name: Package artifact archive
+        shell: pwsh
+        env:
+          APP_ARTIFACT_PATH: ${{ env.APP_ARTIFACT_PATH }}
+          APP_ARTIFACT_ARCHIVE: ${{ env.APP_ARTIFACT_ARCHIVE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $packageScript = @'
+          import os
+          import pathlib
+          import shutil
+
+          src = pathlib.Path(os.environ['APP_ARTIFACT_PATH']).resolve()
+          archive = pathlib.Path(os.environ['APP_ARTIFACT_ARCHIVE']).resolve()
+          archive.parent.mkdir(parents=True, exist_ok=True)
+          if archive.exists():
+              archive.unlink()
+          base = archive.with_suffix('')
+          shutil.make_archive(str(base), 'zip', root_dir=src.parent, base_dir=src.name)
+          print(f'Created archive at {archive}')
+          '@
+          $tempPath = Join-Path $env:RUNNER_TEMP 'package_artifact.py'
+          Set-Content -Path $tempPath -Value $packageScript -Encoding UTF8
+          python $tempPath
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: omoide-${{ runner.os }}-${{ env.APP_VERSION }}
-          path: ${{ env.APP_ARTIFACT_PATH }}
+          path: ${{ env.APP_ARTIFACT_ARCHIVE }}
           if-no-files-found: error
 
   release:
