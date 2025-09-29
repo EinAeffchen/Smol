@@ -115,8 +115,6 @@ On first start, open Settings → Profiles and set your media folder(s). Click S
 
 ## Screenshots
 
-> Placeholder images — replace with real screenshots before release.
-
 - Library grid: ![Library grid](docs/screenshots/library-grid.png)
 - Media detail (faces, tags, EXIF): ![Media detail](docs/screenshots/media-detail.png)
 - Search by text: ![Text search](docs/screenshots/search-text.png)
