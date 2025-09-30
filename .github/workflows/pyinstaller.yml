@@ -54,7 +54,9 @@ jobs:
             SHA=$(git rev-parse --short HEAD)
             VERSION="${BASE}+${SHA}"
           fi
+          SAFE_VERSION=$(echo "${VERSION}" | tr -c '[:alnum:]._-' '_')
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "APP_VERSION_SAFE=${SAFE_VERSION}" >> $GITHUB_ENV
 
       - name: Linux dependencies (Qt / WebEngine)
         if: runner.os == 'Linux'
@@ -85,7 +87,8 @@ jobs:
       - name: Set artifact metadata
         shell: bash
         run: |
-          BASENAME="omoide-${APP_VERSION}"
+          VERSION_SAFE=${APP_VERSION_SAFE:-$APP_VERSION}
+          BASENAME="omoide-${VERSION_SAFE}"
           OS_SUFFIX="${RUNNER_OS,,}"
           echo "APP_NAME=${BASENAME}" >> $GITHUB_ENV
           echo "APP_ARTIFACT_PATH=dist/${BASENAME}" >> $GITHUB_ENV

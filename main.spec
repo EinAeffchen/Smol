@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
+import re
 import sys
 from pathlib import Path
 from PyInstaller.utils.hooks import (
@@ -311,7 +312,8 @@ def _resolve_version():
     return _dt.now().strftime('%Y.%m.%d')
 
 APP_VERSION = _resolve_version()
-APP_NAME = f"omoide-{APP_VERSION}"
+APP_VERSION_FS = re.sub(r"[^A-Za-z0-9._-]", "_", APP_VERSION)
+APP_NAME = f"omoide-{APP_VERSION_FS}"
 
 # Remove duplicate data/binary entries that can cause PyInstaller symlink collisions (macOS frameworks)
 

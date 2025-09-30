@@ -16,6 +16,7 @@ pyinstaller>=6.15.0
 pyside6>=6.9.1
 python-multipart==0.0.20
 pywebview>=6.0
+qtpy>=2.4.1
 scenedetect==0.6.6
 sqlalchemy-vectorstores==0.1.3.post1
 sqlite-vec==0.1.6

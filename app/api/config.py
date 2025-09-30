@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -16,6 +17,7 @@ from app.config import (
 from app.models import ProcessingTask
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/reload", status_code=204)
@@ -50,8 +52,31 @@ def pick_directory():
             status_code=400, detail="Folder picker not available in Docker."
         )
 
-    # Prefer enabling this when running as a packaged/binary app
-    # but keep it available for local dev as well.
+    # Prefer the running pywebview window (Qt dialog) when available so users
+    # get a native experience even from the packaged binary.
+    try:
+        import webview
+
+        window = next(iter(webview.windows), None)
+        if window is not None:
+            try:
+                selection = window.create_file_dialog(webview.FOLDER_DIALOG)
+                if isinstance(selection, (list, tuple)):
+                    for item in selection:
+                        if item:
+                            return {"path": str(item)}
+                    return {"path": ""}
+                if isinstance(selection, str):
+                    return {"path": selection}
+                return {"path": ""}
+            except Exception as exc:  # pragma: no cover - GUI specific
+                logger.debug("pywebview folder picker failed: %s", exc)
+    except Exception:
+        # Either pywebview is not installed or no window is active; fallback to
+        # the tkinter implementation below.
+        pass
+
+    # As a fallback keep the tkinter dialog for local development scenarios.
     try:
         import tkinter as tk
         from tkinter import filedialog
