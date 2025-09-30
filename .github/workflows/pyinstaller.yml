@@ -86,9 +86,10 @@ jobs:
         shell: bash
         run: |
           BASENAME="omoide-${APP_VERSION}"
+          OS_SUFFIX="${RUNNER_OS,,}"
           echo "APP_NAME=${BASENAME}" >> $GITHUB_ENV
           echo "APP_ARTIFACT_PATH=dist/${BASENAME}" >> $GITHUB_ENV
-          echo "APP_ARTIFACT_ARCHIVE=dist/${BASENAME}.zip" >> $GITHUB_ENV
+          echo "APP_ARTIFACT_ARCHIVE=dist/${BASENAME}-${OS_SUFFIX}.zip" >> $GITHUB_ENV
 
       - name: Show dependency versions (debug)
         run: |

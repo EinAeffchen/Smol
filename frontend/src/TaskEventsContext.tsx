@@ -24,6 +24,7 @@ type TaskEventsContextValue = {
   completionCounters: Record<TaskType, number>;
   globalCompletionCount: number;
   forceRefresh: () => Promise<void>;
+  subscribe: () => () => void;
 };
 
 const TaskEventsContext = createContext<TaskEventsContextValue | null>(null);
@@ -49,6 +50,8 @@ export function TaskEventsProvider({
 
   const prevTasksRef = useRef<Record<string, Task>>({});
   const pendingFetchRef = useRef<Promise<void> | null>(null);
+  const subscribersRef = useRef(0);
+  const pollIntervalRef = useRef<number | null>(null);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -124,13 +127,37 @@ export function TaskEventsProvider({
     }
   }, [applyFinishedTasks]);
 
-  useEffect(() => {
+  const startPolling = useCallback(() => {
     if (typeof window === "undefined") return;
-
+    if (pollIntervalRef.current !== null) return;
     fetchTasks();
-    const interval = window.setInterval(fetchTasks, 2000);
-    return () => window.clearInterval(interval);
+    pollIntervalRef.current = window.setInterval(fetchTasks, 2000);
   }, [fetchTasks]);
+
+  const stopPolling = useCallback(() => {
+    if (typeof window === "undefined") return;
+    if (pollIntervalRef.current !== null) {
+      window.clearInterval(pollIntervalRef.current);
+      pollIntervalRef.current = null;
+    }
+  }, []);
+
+  const subscribe = useCallback(() => {
+    subscribersRef.current += 1;
+    if (subscribersRef.current === 1) {
+      startPolling();
+    }
+    return () => {
+      subscribersRef.current = Math.max(0, subscribersRef.current - 1);
+      if (subscribersRef.current === 0) {
+        stopPolling();
+      }
+    };
+  }, [startPolling, stopPolling]);
+
+  useEffect(() => () => {
+    stopPolling();
+  }, [stopPolling]);
 
   const forceRefresh = useCallback(async () => {
     await fetchTasks();
@@ -142,8 +169,9 @@ export function TaskEventsProvider({
       completionCounters,
       globalCompletionCount,
       forceRefresh,
+      subscribe,
     }),
-    [activeTasks, completionCounters, globalCompletionCount, forceRefresh]
+    [activeTasks, completionCounters, globalCompletionCount, forceRefresh, subscribe]
   );
 
   return (
@@ -153,12 +181,20 @@ export function TaskEventsProvider({
   );
 }
 
-export function useTaskEvents() {
+export function useTaskEvents(shouldSubscribe = true) {
   const ctx = useContext(TaskEventsContext);
   if (!ctx) {
     throw new Error("useTaskEvents must be used within a TaskEventsProvider");
   }
-  return ctx;
+  const { subscribe, ...rest } = ctx;
+  useEffect(() => {
+    if (!shouldSubscribe) {
+      return undefined;
+    }
+    const unsubscribe = subscribe();
+    return unsubscribe;
+  }, [subscribe, shouldSubscribe]);
+  return rest;
 }
 
 export function useTaskCompletionVersion(taskTypes?: TaskType[]) {

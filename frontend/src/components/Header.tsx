@@ -133,7 +133,7 @@ function MobileDrawer({
             >
               Control Panel
             </Typography>
-            <TaskManager />
+            <TaskManager isActive={open} />
           </Box>
         </>
       )}
@@ -495,7 +495,7 @@ export function Header() {
             >
               Control Panel
             </Typography>
-            <TaskManager />
+            <TaskManager isActive={isControlPanelOpen} />
           </Box>
         )}
       </Drawer>

@@ -33,8 +33,12 @@ const TASK_LABELS: TaskLabels = {
   find_duplicates: "Find duplicates",
 };
 
-export default function TaskManager() {
-  const { activeTasks, forceRefresh } = useTaskEvents();
+type TaskManagerProps = {
+  isActive: boolean;
+};
+
+export default function TaskManager({ isActive }: TaskManagerProps) {
+  const { activeTasks, forceRefresh } = useTaskEvents(isActive);
   const [snack, setSnack] = useState<{ open: boolean; msg: string; sev: "success" | "error" }>({ open: false, msg: "", sev: "success" });
   // Track when each task last made progress to enable an indeterminate fallback
   const lastProgressRef = useRef<Record<string, { processed: number; changedAt: number }>>({});
@@ -145,8 +149,8 @@ export default function TaskManager() {
                 />
                 {t.status === "running" && (
                   <Typography variant="caption" color="text.secondary">
-                    {t.current_step ? `Step: ${t.current_step}` : showIndeterminate ? "Working…" : ""}
-                    {t.current_item ? `  —  ${t.current_item}` : ""}
+                    {t.current_step ? `Step: ${t.current_step}` : showIndeterminate ? "Working..." : ""}
+                    {t.current_item ? `  -  ${t.current_item}` : ""}
                   </Typography>
                 )}
                 {t.status === "running" && (
