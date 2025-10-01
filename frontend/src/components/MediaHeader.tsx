@@ -32,7 +32,7 @@ export function MediaHeader({
 }: MediaHeaderProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const menuOpen = Boolean(anchorEl);
-
+  const filename = media ? media.filename : "File not found!";
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
@@ -78,7 +78,7 @@ export function MediaHeader({
             fontSize: "clamp(1.25rem, 4vw, 1.75rem)",
           }}
         >
-          {media.filename}
+          {filename}
         </Typography>
       </Box>
       <Box
@@ -97,7 +97,7 @@ export function MediaHeader({
           <Menu anchorEl={anchorEl} open={menuOpen} onClose={handleMenuClose}>
             <>
               <Divider />
-              {isBinary && (
+              {isBinary && media && (
                 <MenuItem
                   onClick={() => {
                     onOpenFolder?.(media.id);
@@ -110,7 +110,7 @@ export function MediaHeader({
                   <ListItemText>Open Containing Folder</ListItemText>
                 </MenuItem>
               )}
-              {media.duration && (
+              {media && media.duration && (
                 <MenuItem onClick={() => handleAction("convert")}>
                   <ListItemIcon>
                     <Vrpano fontSize="small" />

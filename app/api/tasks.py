@@ -234,14 +234,13 @@ def _run_media_processing_and_chain(task_id: str):
     logger.info("Media processing finished.")
     if settings.general.enable_people and settings.scan.auto_cluster_on_scan:
         logger.info("Starting Person Clustering...")
-    with Session(db.engine) as new_session:
-        next_task = ProcessingTask(
-            task_type="cluster_persons", total=0, processed=0
-        )
-        new_session.add(next_task)
-        new_session.commit()
-        new_session.refresh(next_task)
-
+        with Session(db.engine) as new_session:
+            next_task = ProcessingTask(
+                task_type="cluster_persons", total=0, processed=0
+            )
+            new_session.add(next_task)
+            new_session.commit()
+            new_session.refresh(next_task)
         run_person_clustering(next_task.id)  # Call the final worker
     logger.info("Task chain completed")
 
@@ -897,7 +896,9 @@ def assign_to_existing_persons(
                 task.processed += 1
                 if task.processed % 100 == 0:
                     if affected_person_ids:
-                        recalculate_person_appearance_counts(session, affected_person_ids)
+                        recalculate_person_appearance_counts(
+                            session, affected_person_ids
+                        )
                         affected_person_ids.clear()
                     session.add(task)
                     safe_commit(session)
@@ -932,7 +933,9 @@ def assign_to_existing_persons(
                         task.processed += 1
                         if task.processed % 100 == 0:
                             if affected_person_ids:
-                                recalculate_person_appearance_counts(session, affected_person_ids)
+                                recalculate_person_appearance_counts(
+                                    session, affected_person_ids
+                                )
                                 affected_person_ids.clear()
                             session.add(task)
                             safe_commit(session)
@@ -952,7 +955,9 @@ def assign_to_existing_persons(
                     task.processed += 1
                     if task.processed % 100 == 0:
                         if affected_person_ids:
-                            recalculate_person_appearance_counts(session, affected_person_ids)
+                            recalculate_person_appearance_counts(
+                                session, affected_person_ids
+                            )
                             affected_person_ids.clear()
                         session.add(task)
                         safe_commit(session)
@@ -976,7 +981,9 @@ def assign_to_existing_persons(
                     task.processed += 1
                     if task.processed % 100 == 0:
                         if affected_person_ids:
-                            recalculate_person_appearance_counts(session, affected_person_ids)
+                            recalculate_person_appearance_counts(
+                                session, affected_person_ids
+                            )
                             affected_person_ids.clear()
                         session.add(task)
                         safe_commit(session)
@@ -993,7 +1000,9 @@ def assign_to_existing_persons(
                     task.processed += 1
                     if task.processed % 100 == 0:
                         if affected_person_ids:
-                            recalculate_person_appearance_counts(session, affected_person_ids)
+                            recalculate_person_appearance_counts(
+                                session, affected_person_ids
+                            )
                             affected_person_ids.clear()
                         session.add(task)
                         safe_commit(session)
@@ -1029,7 +1038,9 @@ def assign_to_existing_persons(
             # commit periodically to avoid huge transactions
             if task.processed % 100 == 0:
                 if affected_person_ids:
-                    recalculate_person_appearance_counts(session, affected_person_ids)
+                    recalculate_person_appearance_counts(
+                        session, affected_person_ids
+                    )
                     affected_person_ids.clear()
                 session.add(task)
                 safe_commit(session)

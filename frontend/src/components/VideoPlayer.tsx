@@ -9,9 +9,15 @@ interface VideoWithPreviewProps {
   initialTime?: number;
 }
 
-export function VideoWithPreview({ media, initialTime = 0 }: VideoWithPreviewProps) {
+export function VideoWithPreview({
+  media,
+  initialTime = 0,
+}: VideoWithPreviewProps) {
   const [isLoading, setIsLoading] = useState(false);
-  const mediaUrl = `${API}/originals/${media.path}`;
+  const mediaUrl = media
+    ? `${API}/originals/${media.path}`
+    : `${API}/static/brand/404.png`;
+
   const scenesUrl = `${API}/api/media/${media.id}/scenes.vtt`;
   const thumbnailUrl = media.thumbnail_path
     ? `${API}/thumbnails/${media.thumbnail_path}`
@@ -75,7 +81,7 @@ export function VideoWithPreview({ media, initialTime = 0 }: VideoWithPreviewPro
     const progressBarStart = PROGRESS_BAR_LEFT_OFFSET;
     let progressBarEnd = rect.width - PROGRESS_BAR_RIGHT_OFFSET;
     if (!hasAudio) {
-      progressBarEnd = progressBarEnd+70;
+      progressBarEnd = progressBarEnd + 70;
     }
     const progressBarWidth = progressBarEnd - progressBarStart;
 
@@ -133,7 +139,7 @@ export function VideoWithPreview({ media, initialTime = 0 }: VideoWithPreviewPro
     }
   }, [isReady, initialTime, media.id]);
 
-  if (!media.path) {
+  if (!media || !media.path) {
     return <Typography color="text.secondary">No video available</Typography>;
   }
 
@@ -205,6 +211,6 @@ export function VideoWithPreview({ media, initialTime = 0 }: VideoWithPreviewPro
     </Box>
   );
 }
-  // useEffect(() => {
-  //   setIsReady(false);
-  // }, [media.id]);
+// useEffect(() => {
+//   setIsReady(false);
+// }, [media.id]);

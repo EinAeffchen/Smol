@@ -6,6 +6,7 @@ import {
   Dialog,
   DialogContent,
   Typography,
+  Button,
   CircularProgress,
   Snackbar,
   LinearProgress,
@@ -71,6 +72,7 @@ export default function MediaDetailPage() {
     preloadedMedia ? { media: preloadedMedia, persons: [], orphans: [] } : null
   );
   const [isDetailLoading, setIsDetailLoading] = useState(!preloadedMedia);
+  const [loadError, setLoadError] = useState<{ status?: number; message: string } | null>(null);
 
   // C. Local state for all other UI and features
   const [task, setTask] = useState<Task | null>(null);

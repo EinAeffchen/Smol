@@ -9,6 +9,8 @@ interface MediaDisplayProps {
 }
 
 export function MediaDisplay({ media, initialTime }: MediaDisplayProps) {
+  const mediaUrl = (media) ? `${API}/originals/${media.path}` : `${API}/static/brand/404.png`;
+  const filename = (media) ? media.filename : "404 Not found";
   return (
     <Box display="flex" justifyContent="center" mb={2}>
       <Paper
@@ -21,7 +23,7 @@ export function MediaDisplay({ media, initialTime }: MediaDisplayProps) {
           bgcolor: "background.paper",
         }}
       >
-        {media.duration ? (
+        {media && media.duration ? (
           <VideoWithPreview
             key={media.id}
             media={media}
@@ -30,8 +32,8 @@ export function MediaDisplay({ media, initialTime }: MediaDisplayProps) {
         ) : (
           <Box
             component="img"
-            src={`${API}/originals/${media.path}`}
-            alt={media.filename}
+            src={mediaUrl}
+            alt={filename}
             sx={{
               width: "100%",
               height: "auto",

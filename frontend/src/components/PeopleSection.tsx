@@ -38,7 +38,7 @@ export function PeopleSection({
 }: PeopleSectionProps) {
   return (
     <>
-      {persons.length > 0 && (
+      {persons && persons.length > 0 && (
         <Box mb={4}>
           <Typography variant="h6" gutterBottom>
             Detected Persons

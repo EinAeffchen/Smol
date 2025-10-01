@@ -28,60 +28,63 @@ export const DuplicateMediaCard: React.FC<DuplicateMediaCardProps> = ({
   const location = useLocation();
   const theme = useTheme();
 
+  const filename = media ? media.filename : "404 Not found";
   const thumbUrl = media.thumbnail_path
     ? `${API}/thumbnails/${media.thumbnail_path}`
     : `${API}/thumbnails/${media.id}.jpg`;
 
   return (
-    <Card
-      sx={{
-        height: "100%",
-        border: isSelectedAsMaster
-          ? `2px solid ${theme.palette.primary.main}`
-          : `2px solid transparent`,
-        boxShadow: isSelectedAsMaster ? theme.shadows[4] : theme.shadows[1],
-      }}
-    >
-      <Link
-        to={`/medium/${media.id}`}
-        state={{ backgroundLocation: location }}
-        style={{ textDecoration: "none", color: "inherit" }}
+    media && (
+      <Card
+        sx={{
+          height: "100%",
+          border: isSelectedAsMaster
+            ? `2px solid ${theme.palette.primary.main}`
+            : `2px solid transparent`,
+          boxShadow: isSelectedAsMaster ? theme.shadows[4] : theme.shadows[1],
+        }}
       >
-        <CardMedia
-          component="img"
-          height="200"
-          image={thumbUrl}
-          alt={media.filename}
-          sx={{ objectFit: "cover" }}
-        />
-      </Link>
-      <CardContent>
-        <FormControlLabel
-          control={
-            <Radio
-              checked={isSelectedAsMaster}
-              onChange={onSelectMaster}
-              name={`master-select-${media.group_id}`}
-            />
-          }
-          label="Keep this one"
-        />
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          noWrap
-          title={media.path}
+        <Link
+          to={`/medium/${media.id}`}
+          state={{ backgroundLocation: location }}
+          style={{ textDecoration: "none", color: "inherit" }}
         >
-          {media.path}
-        </Typography>
-        {/* Displaying more metadata helps the user choose */}
-        <Typography variant="caption" color="text.secondary" display="block">
-          {media.width}x{media.height}
-        </Typography>
-        <Typography variant="caption" color="text.secondary" display="block">
-          {(media.size / 1024 / 1024).toFixed(2)} MB
-        </Typography>
-      </CardContent>
-    </Card>
+          <CardMedia
+            component="img"
+            height="200"
+            image={thumbUrl}
+            alt={filename}
+            sx={{ objectFit: "cover" }}
+          />
+        </Link>
+        <CardContent>
+          <FormControlLabel
+            control={
+              <Radio
+                checked={isSelectedAsMaster}
+                onChange={onSelectMaster}
+                name={`master-select-${media.group_id}`}
+              />
+            }
+            label="Keep this one"
+          />
+          <Typography
+            variant="body2"
+            color="text.secondary"
+            noWrap
+            title={media.path}
+          >
+            {media.path}
+          </Typography>
+          {/* Displaying more metadata helps the user choose */}
+          <Typography variant="caption" color="text.secondary" display="block">
+            {media.width}x{media.height}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" display="block">
+            {(media.size / 1024 / 1024).toFixed(2)} MB
+          </Typography>
+        </CardContent>
+      </Card>
+    )
   );
 };

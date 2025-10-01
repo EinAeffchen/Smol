@@ -69,38 +69,42 @@ export function MediaContentTabs(props: MediaContentTabsProps) {
         >
           {renderTab("Similar", <CollectionsIcon />)}
           {config.ENABLE_PEOPLE &&
+            persons &&
             renderTab(`People (${persons.length})`, <PeopleIcon />)}
           {renderTab("Tags", <TagIcon />)}
           {renderTab("Exif Data", <DataObjectIcon />)}
         </Tabs>
       </Box>
+      {media && (
+        <>
+          <TabPanel value={tabValue} index={tabIndices.similar}>
+            <Suspense fallback={<CircularProgress />}>
+              {media && <SimilarContent mediaId={media.id} />}
+            </Suspense>
+          </TabPanel>
+          {config.ENABLE_PEOPLE && (
+            <TabPanel value={tabValue} index={tabIndices.people}>
+              {/* The People tab now uses its own smart component */}
+              <PeopleTabContent
+                initialPersons={persons}
+                initialOrphans={orphans}
+                onDataChanged={onDetailReload}
+              />
+            </TabPanel>
+          )}
+          <TabPanel value={tabValue} index={tabIndices.tags}>
+            <TagsSection
+              media={media}
+              onTagAdded={onTagAdded}
+              onUpdate={onTagUpdate}
+            />
+          </TabPanel>
 
-      <TabPanel value={tabValue} index={tabIndices.similar}>
-        <Suspense fallback={<CircularProgress />}>
-          <SimilarContent mediaId={media.id} />
-        </Suspense>
-      </TabPanel>
-      {config.ENABLE_PEOPLE && (
-        <TabPanel value={tabValue} index={tabIndices.people}>
-          {/* The People tab now uses its own smart component */}
-          <PeopleTabContent
-            initialPersons={persons}
-            initialOrphans={orphans}
-            onDataChanged={onDetailReload}
-          />
-        </TabPanel>
+          <TabPanel value={tabValue} index={tabIndices.exif}>
+            <MediaExif mediaId={media.id} />
+          </TabPanel>
+        </>
       )}
-      <TabPanel value={tabValue} index={tabIndices.tags}>
-        <TagsSection
-          media={media}
-          onTagAdded={onTagAdded}
-          onUpdate={onTagUpdate}
-        />
-      </TabPanel>
-
-      <TabPanel value={tabValue} index={tabIndices.exif}>
-        <MediaExif mediaId={media.id} />
-      </TabPanel>
     </Box>
   );
 }

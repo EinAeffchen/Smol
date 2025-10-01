@@ -33,20 +33,32 @@ interface MediaCardProps {
   navigationContext?: MediaNavigationContext;
 }
 
-export default function MediaCard({ media, mediaListKey, navigationContext }: MediaCardProps) {
+export default function MediaCard({
+  media,
+  mediaListKey,
+  navigationContext,
+}: MediaCardProps) {
   const theme = useTheme();
   // This state now explicitly controls when the video player is active.
   const [isPlayerActive, setIsPlayerActive] = useState(false);
   const hoverTimeoutRef = useRef<number | null>(null);
   const location = useLocation();
 
-  const isVideo = typeof media.duration === "number";
+  const isVideo = media ? typeof media.duration === "number" : false;
 
-  const mediaUrl = `${API}/originals/${media.path}`;
-  const thumbUrl = media.thumbnail_path
-    ? `${API}/thumbnails/${media.thumbnail_path}`
-    : `${API}/thumbnails/${media.id}.jpg`;
-
+  const mediaUrl = media
+    ? `${API}/originals/${media.path}`
+    : `${API}/static/brand/404.png`;
+  const filename = media ? media.filename : "404 Not found";
+  const mediaId = media ? media.id : null;
+  let thumbUrl;
+  if (media) {
+    thumbUrl = media.thumbnail_path
+      ? `${API}/thumbnails/${media.thumbnail_path}`
+      : `${API}/thumbnails/${media.id}.jpg`;
+  } else {
+    thumbUrl = `${API}/static/brand/404.png`;
+  }
   const linkState = {
     backgroundLocation: location.state?.backgroundLocation || location,
     mediaListKey,
@@ -83,7 +95,7 @@ export default function MediaCard({ media, mediaListKey, navigationContext }: Me
       }}
     >
       <Link
-        to={`/medium/${media.id}`}
+        to={`/medium/${mediaId}`}
         state={linkState}
         replace={!!location.state?.backgroundLocation}
         style={{ textDecoration: "none", color: "inherit" }}
@@ -111,7 +123,7 @@ export default function MediaCard({ media, mediaListKey, navigationContext }: Me
             <CardMedia
               component="img"
               src={thumbUrl}
-              alt={media.filename}
+              alt={filename}
               sx={{
                 width: "100%",
                 height: "100%",
@@ -164,7 +176,12 @@ export default function MediaCard({ media, mediaListKey, navigationContext }: Me
                 pointerEvents: "none",
               }}
             >
-              <PlayArrowIcon sx={{ fontSize: "3rem", color: (theme) => theme.palette.common.white }} />
+              <PlayArrowIcon
+                sx={{
+                  fontSize: "3rem",
+                  color: (theme) => theme.palette.common.white,
+                }}
+              />
             </Box>
           )}
 
@@ -177,7 +194,7 @@ export default function MediaCard({ media, mediaListKey, navigationContext }: Me
               p: 1.5,
               color: (theme) => theme.palette.common.white,
               background: (theme) =>
-                `linear-gradient(to top, ${theme.palette.mode === 'dark' ? 'rgba(0,0,0,0.8)' : 'rgba(0,0,0,0.7)'} 0%, rgba(0,0,0,0) 50%)`,
+                `linear-gradient(to top, ${theme.palette.mode === "dark" ? "rgba(0,0,0,0.8)" : "rgba(0,0,0,0.7)"} 0%, rgba(0,0,0,0) 50%)`,
               pointerEvents: "none",
             }}
           >
@@ -188,7 +205,7 @@ export default function MediaCard({ media, mediaListKey, navigationContext }: Me
                 alignItems: "center",
               }}
             >
-              {isVideo ? (
+              {isVideo && media ? (
                 <Box display="flex" alignItems="center" gap={0.5}>
                   <PlayCircleOutlineIcon sx={{ fontSize: "1rem" }} />
                   <Typography variant="caption" lineHeight={1}>
@@ -199,7 +216,7 @@ export default function MediaCard({ media, mediaListKey, navigationContext }: Me
                 <div />
               )}
               <Typography variant="caption" lineHeight={1}>
-                {media.width && media.height
+                {media && media.width && media.height
                   ? `${media.width}×${media.height}`
                   : ""}
               </Typography>
