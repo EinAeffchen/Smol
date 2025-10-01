@@ -904,13 +904,21 @@ def delete_file(session: Session, media_id: int):
 
     # delete original file
     orig = Path(media.path)
-    if orig.exists():
+    try:
         orig.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("Failed to delete original file %s: %s", orig, exc)
 
     # delete thumbnail
     if not media.thumbnail_path:
         thumb = settings.general.thumb_dir / f"{media.id}.jpg"
     else:
         thumb = settings.general.thumb_dir / media.thumbnail_path
-    if thumb.exists():
+    try:
         thumb.unlink()
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        logger.warning("Failed to delete thumbnail %s: %s", thumb, exc)

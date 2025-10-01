@@ -21,7 +21,7 @@ from sqlmodel import Session, delete, distinct, select, text, update
 from app.config import settings
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
-from app.models import Face, Media, Person, PersonTagLink, TimelineEvent
+from app.models import Face, Media, Person, PersonSimilarity, PersonTagLink, TimelineEvent
 from app.schemas.face import CursorPage as FaceCursorPage
 from app.schemas.person import (
     CursorPage,
@@ -563,17 +563,62 @@ def merge_persons(
     session.exec(
         update(Face).where(Face.person_id == sid).values(person_id=tid)
     )
+    session.exec(
+        text(
+            """
+            UPDATE face_embeddings
+            SET person_id = :target_id
+            WHERE person_id = :source_id
+            """
+        ).bindparams(target_id=tid, source_id=sid)
+    )
+    session.exec(
+        update(TimelineEvent)
+        .where(TimelineEvent.person_id == sid)
+        .values(person_id=tid)
+    )
+
+    source_tag_ids = set(
+        session.exec(
+            select(PersonTagLink.tag_id).where(PersonTagLink.person_id == sid)
+        ).all()
+    )
+    if source_tag_ids:
+        target_tag_ids = set(
+            session.exec(
+                select(PersonTagLink.tag_id).where(PersonTagLink.person_id == tid)
+            ).all()
+        )
+        for tag_id in source_tag_ids - target_tag_ids:
+            session.add(PersonTagLink(person_id=tid, tag_id=tag_id))
+    session.exec(
+        delete(PersonTagLink).where(PersonTagLink.person_id == sid)
+    )
+
+    session.exec(
+        delete(PersonSimilarity).where(
+            or_(
+                PersonSimilarity.person_id == sid,
+                PersonSimilarity.other_id == sid,
+            )
+        )
+    )
+
+    if target.profile_face_id is None and source.profile_face_id is not None:
+        target.profile_face_id = source.profile_face_id
 
     session.delete(source)
     safe_commit(session)
+
     update_person_embedding(session, tid)
-    sql = text(
-        """
-        DELETE FROM person_embeddings
-        WHERE person_id=:p_id
-        """
-    ).bindparams(p_id=sid)
-    session.exec(sql)
+    session.exec(
+        text(
+            """
+            DELETE FROM person_embeddings
+            WHERE person_id=:p_id
+            """
+        ).bindparams(p_id=sid)
+    )
     recalculate_person_appearance_counts(session, [tid])
     session.refresh(target)
     safe_commit(session)
@@ -615,6 +660,17 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
     session.exec(sql)
     session.exec(
         delete(PersonTagLink).where(PersonTagLink.person_id == person_id)
+    )
+    session.exec(
+        delete(PersonSimilarity).where(
+            or_(
+                PersonSimilarity.person_id == person_id,
+                PersonSimilarity.other_id == person_id,
+            )
+        )
+    )
+    session.exec(
+        delete(TimelineEvent).where(TimelineEvent.person_id == person_id)
     )
 
     session.delete(person)

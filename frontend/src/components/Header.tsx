@@ -197,10 +197,12 @@ export function Header() {
       label: "Maintenance",
       items: [
         { label: "Duplicates", to: "/duplicates" },
-        { label: "Configuration", to: "/configuration" },
         { label: "Review Missing", to: "/missing" },
-
       ],
+    },
+    {
+      label: "Configuration",
+      items: [{ label: "Configuration", to: "/configuration" }],
     },
   ];
 
@@ -292,6 +294,27 @@ export function Header() {
         {navSections.map((section) => {
           const active = isSectionActive(section);
           const menuId = sectionMenuId(section.label);
+          if (section.items.length === 1) {
+            const [item] = section.items;
+            return (
+              <Button
+                key={section.label}
+                component={RouterNavLink}
+                to={item.to}
+                replace
+                state={{}}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 600,
+                  borderRadius: 1,
+                  "&:hover": { backgroundColor: "action.hover" },
+                  color: active ? "accent.main" : "text.primary",
+                }}
+              >
+                {item.label}
+              </Button>
+            );
+          }
           return (
             <React.Fragment key={section.label}>
               <Button
