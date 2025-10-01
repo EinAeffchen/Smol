@@ -42,6 +42,7 @@ from app.schemas.timeline import (
 )
 from app.utils import (
     get_person_embedding,
+    recalculate_person_appearance_counts,
     refresh_similarities_for_person,
     update_person_embedding,
 )
@@ -552,9 +553,8 @@ def merge_persons(
         )
 
     source = session.get(Person, sid)
-    source_media_count = source.appearance_count
     target = session.get(Person, tid)
-    target.appearance_count += source_media_count
+
     if not source or not target:
         raise HTTPException(
             status_code=404, detail="Source or target person not found"
@@ -574,7 +574,7 @@ def merge_persons(
         """
     ).bindparams(p_id=sid)
     session.exec(sql)
-
+    recalculate_person_appearance_counts(session, [tid])
     session.refresh(target)
     safe_commit(session)
     return target
