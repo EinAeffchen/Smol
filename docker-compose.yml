@@ -1,6 +1,6 @@
 services:
   omoide:
-    image: einaeffchen2/omoide
+    image: einaeffchen/omoide
     container_name: omoide
     ports:
       - "${PORT}:8123"
