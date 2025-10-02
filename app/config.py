@@ -146,7 +146,6 @@ def get_static_assets_dir() -> Path:
         # This must match the DESTINATION part of your --add-data flag
         # e.g., --add-data "frontend/dist:dist"
         base_path = Path(sys._MEIPASS)
-        logger.info("Base path: %s", base_path)
         static_dir = base_path / "dist"
 
     # 2. Check if running inside our Docker container via an env var
@@ -629,13 +628,10 @@ def _apply_env_overrides(config_data: dict) -> None:
         if not key.startswith(ENV_PREFIX):
             continue
         path_segments = key[len(ENV_PREFIX) :].split("__")
-        logger.info("KEY: %s:%s", key, raw_value)
         if not path_segments:
             continue
-        logger.info("path_segments: %s", path_segments)
         target = config_data
         for segment in path_segments[:-1]:
-            logger.info("SEGMENT: %s", segment)
             segment_lower = segment.lower()
             current = target.get(segment_lower)
             if not isinstance(current, dict):
@@ -643,9 +639,7 @@ def _apply_env_overrides(config_data: dict) -> None:
                 target[segment_lower] = current
             target = current
         final_key = path_segments[-1].lower()
-        logger.info("FINAL KEY: %s", final_key)
         target[final_key] = _coerce_env_value(raw_value)
-        logger.info("SET TO: %s", target[final_key])
 
 
 def load_settings() -> AppSettings:
@@ -664,7 +658,6 @@ def load_settings() -> AppSettings:
         config_data.update(file_config)
 
     _apply_env_overrides(config_data)
-    logger.info(config_data)
     # 3. Load into Pydantic model. This applies defaults for any missing values.
     return AppSettings.model_validate(config_data)
 
@@ -892,4 +885,3 @@ def reload_settings():
 
 
 settings = load_settings()
-logger.info("settings: %s", settings)

@@ -5,6 +5,7 @@ Revises: 92f7ecebc445
 Create Date: 2025-10-06 12:00:00.000000
 
 """
+
 from typing import Sequence, Union
 
 import sqlalchemy as sa
@@ -43,11 +44,6 @@ def upgrade() -> None:
         "media",
         ["missing_confirmed"],
         unique=False,
-    )
-    op.alter_column(
-        "media",
-        "missing_confirmed",
-        server_default=None,
     )
 
 
