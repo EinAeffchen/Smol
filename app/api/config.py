@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
@@ -16,7 +16,15 @@ from app.config import (
 )
 from app.models import ProcessingTask
 
-router = APIRouter()
+def _ensure_config_access_allowed() -> None:
+    if settings.general.read_only:
+        raise HTTPException(
+            status_code=403,
+            detail="Configuration endpoints are disabled in read-only mode.",
+        )
+
+
+router = APIRouter(dependencies=[Depends(_ensure_config_access_allowed)])
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +32,16 @@ logger = logging.getLogger(__name__)
 async def reload_settings_endpoint():
     """Reloads the settings from the config.yaml file."""
     reload_settings()
+    try:
+        # Import locally to avoid circular import during app startup.
+        from app.main import configure_auto_scan_job  # noqa:WPS433
+
+        configure_auto_scan_job()
+    except Exception as exc:  # pragma: no cover - scheduler reconfiguration
+        logger.warning(
+            "Failed to reconfigure auto-scan scheduler after reload: %s",
+            exc,
+        )
 
 
 @router.get("/", response_model=AppSettings)

@@ -15,8 +15,8 @@ import OrphanFacesPage from "./pages/OrphanFaces";
 import MapEditorPage from "./pages/MapEditorPage";
 import DuplicatesPage from "./pages/DuplicatesPage";
 import ConfigurationPage from "./pages/ConfigurationPage";
-import MissingPage from "./pages/MissingFilesPage";
 import MissingFilesPage from "./pages/MissingFilesPage";
+import { WriteModeBoundary } from "./components/ReadOnlyBoundary";
 
 export const AppRoutes = () => {
   const location = useLocation();
@@ -31,16 +31,51 @@ export const AppRoutes = () => {
           <Route path="/medium/:id" element={<MediaDetailPage />} />
           <Route path="/images" element={<ImagesPage />} />
           <Route path="/map" element={<MapPage />} />
-          <Route path="/maptagger" element={<MapEditorPage />} />
+          <Route
+            path="/maptagger"
+            element={
+              <WriteModeBoundary description="Geo-tagging tools are disabled while the system is in read-only mode.">
+                <MapEditorPage />
+              </WriteModeBoundary>
+            }
+          />
           <Route path="/tags" element={<TagsPage />} />
-          <Route path="/orphanfaces" element={<OrphanFacesPage />} />
+          <Route
+            path="/orphanfaces"
+            element={
+              <WriteModeBoundary description="Face assignment tools are disabled while the system is in read-only mode.">
+                <OrphanFacesPage />
+              </WriteModeBoundary>
+            }
+          />
           <Route path="/videos" element={<VideosPage />} />
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/person/:id" element={<PersonDetailPage />} />
           <Route path="/tag/:id" element={<TagDetailPage />} />
-          <Route path="/duplicates" element={<DuplicatesPage />} />
-          <Route path="/configuration" element={<ConfigurationPage />} />
-          <Route path="/missing" element={<MissingFilesPage />} />
+          <Route
+            path="/duplicates"
+            element={
+              <WriteModeBoundary description="Duplicate review actions are disabled while the system is in read-only mode.">
+                <DuplicatesPage />
+              </WriteModeBoundary>
+            }
+          />
+          <Route
+            path="/configuration"
+            element={
+              <WriteModeBoundary description="Configuration settings cannot be viewed or edited while the system is in read-only mode.">
+                <ConfigurationPage />
+              </WriteModeBoundary>
+            }
+          />
+          <Route
+            path="/missing"
+            element={
+              <WriteModeBoundary description="Missing file review is disabled while the system is in read-only mode.">
+                <MissingFilesPage />
+              </WriteModeBoundary>
+            }
+          />
         </Route>
       </Routes>
       {backgroundLocation && (

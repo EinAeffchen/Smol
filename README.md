@@ -2,6 +2,8 @@
   <img src="frontend/public/brand/omoide_header_dark.png" alt="logo" width="200"/>
 </div>
 
+[![Buy Me a Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow?logo=buymeacoffee&style=flat-square)](https://buymeacoffee.com/einaeffchen)
+
 ## Offline-first Memory Organization & Intelligent Discovery Engine
 
 Self‑hosted, offline‑capable photo & video library with AI features. No cloud services required. Everything runs locally after an initial one‑time model setup.
@@ -82,7 +84,12 @@ cp .env.template .env
 
 2) Adjust variables in `.env` (host media/data dirs, ports).
 
-3) Start:
+3) Add omoide.env for further customization
+E.g. to set the system to read only, set `OMOIDE_GENERAL__READ_ONLY=true`
+The env generally follows the pattern of `OMOIDE_` name of the config object, name of the variable. 
+For all configs see: [/app/config.py](/app/config.py#L579)
+
+4) Start:
 
 ```bash
 docker compose up -d
@@ -176,3 +183,15 @@ For precise attribution per release, you can generate machine‑readable reports
 - Frontend:
   - `npm i -g license-checker`
   - `license-checker --production --summary --json > THIRD_PARTY_LICENSES_JS.json`
+
+---
+## ❤️ Support Development
+
+Omoide is built and maintained in my free time.  
+If it helps you organize your memories, please consider supporting the project:  
+
+- [☕ Buy Me a Coffee](https://buymeacoffee.com/einaeffchen)  
+
+Your donations enable me to spend more time on optimizing Omoide and adding new features.
+
+---

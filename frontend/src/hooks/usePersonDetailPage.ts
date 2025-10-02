@@ -74,6 +74,29 @@ export const usePersonDetailPage = () => {
 
   const { fetchInitial, loadMore, removeItems, clearList } = useListStore();
 
+  const refreshDetectedFaces = useCallback(async () => {
+    if (!id || !detectedFacesListKey) return;
+    clearList(detectedFacesListKey);
+    await fetchInitial(detectedFacesListKey, () =>
+      getPersonFaces(Number(id), null, 20)
+    );
+  }, [id, detectedFacesListKey, clearList, fetchInitial]);
+
+  const refreshMediaAppearances = useCallback(async () => {
+    if (!id || !mediaListKey) return;
+    const filterIds = filterPeople.map((p) => p.id);
+    clearList(mediaListKey);
+    await fetchInitial(mediaListKey, () =>
+      getPersonMediaAppearances(Number(id), undefined, filterIds)
+    );
+  }, [
+    id,
+    mediaListKey,
+    filterPeople,
+    clearList,
+    fetchInitial,
+  ]);
+
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -220,10 +243,22 @@ export const usePersonDetailPage = () => {
     assignedToPersonId: number
   ) => {
     await assignFace(faceIds, assignedToPersonId);
-    clearList(mediaListKey);
+    setSuggestedFaces((prev) =>
+      prev.filter((face) => !faceIds.includes(face.id))
+    );
+
+    if (assignedToPersonId === Number(id)) {
+      await refreshDetectedFaces();
+    } else {
+      removeItems(detectedFacesListKey, faceIds);
+    }
+
+    await refreshMediaAppearances();
+
     if (id) {
-      loadSuggestedFaces();
-      loadDetail();
+      await Promise.all([loadDetail(), loadSuggestedFaces()]);
+    } else {
+      await loadSuggestedFaces();
     }
   };
 
@@ -231,15 +266,14 @@ export const usePersonDetailPage = () => {
     await deleteFace(faceIds);
     removeItems(detectedFacesListKey, faceIds);
     setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-    loadDetail();
+    await Promise.all([refreshMediaAppearances(), loadDetail()]);
   };
 
   const handleDetachWrapper = async (faceIds: number[]) => {
     await detachFace(faceIds);
-    clearList(mediaListKey);
     removeItems(detectedFacesListKey, faceIds);
     setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-    loadDetail();
+    await Promise.all([refreshMediaAppearances(), loadDetail()]);
   };
 
   const handleCreateWrapper = async (

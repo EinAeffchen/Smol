@@ -210,6 +210,8 @@ export function Header() {
     "/orphanfaces",
     "/maptagger",
     "/duplicates",
+    "/configuration",
+    "/missing",
   ];
   const pathsToExcludeInPeopleDisabled: string[] = ["/people"];
   const shouldHidePath = (path: string) =>

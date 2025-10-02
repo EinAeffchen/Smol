@@ -40,8 +40,8 @@ from app.api.processors import router as proc_router
 from app.api.tasks import _run_cleanup_and_chain
 from app.config import settings
 from app.database import ensure_vec_tables
-from app.logger import configure_file_logging, logger
 from app.ffmpeg import ensure_ffmpeg_available
+from app.logger import configure_file_logging, logger
 from app.models import ProcessingTask
 from app.processor_registry import load_processors
 
@@ -50,6 +50,7 @@ logging.getLogger("uvicorn.error").setLevel(logging.INFO)
 logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 scheduler = AsyncIOScheduler()
+SCAN_JOB_ID = "scan_job"
 
 
 def scheduled_scan_job():
@@ -84,6 +85,47 @@ def scheduled_scan_job():
 
         # Start the chain
         _run_cleanup_and_chain(task.id)
+
+
+def configure_auto_scan_job() -> None:
+    """Ensure the scheduler matches the current auto-scan settings."""
+    job = scheduler.get_job(SCAN_JOB_ID)
+    interval = settings.scan.scan_interval_minutes
+
+    if not settings.scan.auto_scan:
+        if job:
+            scheduler.remove_job(SCAN_JOB_ID)
+            logger.info("Auto scan disabled; removed scheduled job.")
+        else:
+            logger.info("Auto scan disabled; no scheduled job active.")
+        return
+
+    if job:
+        scheduler.reschedule_job(
+            SCAN_JOB_ID,
+            trigger="interval",
+            minutes=interval,
+        )
+        logger.info(
+            "Auto scan interval updated. Scan job now runs every %s minutes.",
+            interval,
+        )
+    else:
+        scheduler.add_job(
+            scheduled_scan_job,
+            "interval",
+            minutes=interval,
+            id=SCAN_JOB_ID,
+            misfire_grace_time=60,
+            replace_existing=True,
+        )
+        logger.info(
+            "Auto scan enabled. Scan job scheduled every %s minutes.", interval
+        )
+
+    if not scheduler.running:
+        scheduler.start()
+        logger.info("Scheduler started for auto scan job management.")
 
 
 def _cleanup_tasks_on_startup():
@@ -145,18 +187,7 @@ async def lifespan(app: FastAPI):
 
     # Clean up stale tasks from previous runs to avoid blocking actions
     _cleanup_tasks_on_startup()
-    if settings.scan.auto_scan:
-        scheduler.add_job(
-            scheduled_scan_job,
-            "interval",
-            minutes=settings.scan.scan_interval_minutes,
-            id="scan_job",
-            misfire_grace_time=60,
-        )
-        scheduler.start()
-        logger.info(
-            f"Scheduler started. Scan job scheduled every {settings.scan.scan_interval_minutes} minutes."
-        )
+    configure_auto_scan_job()
     yield
     # On shutdown, clean up tasks so next run starts cleanly
     _cleanup_tasks_on_shutdown()
@@ -292,9 +323,15 @@ async def spa_catch_all(full_path: str):
             html_content = f.read()
     except FileNotFoundError:
         return Response(content="Frontend not found", status_code=404)
+
+    def _bool_to_js(value: bool) -> str:
+        return "true" if value else "false"
+
     config = {
-        "VITE_API_READ_ONLY": os.environ.get("READ_ONLY", "false"),
-        "VITE_API_ENABLE_PEOPLE": os.environ.get("ENABLE_PEOPLE", "true"),
+        "VITE_API_READ_ONLY": _bool_to_js(bool(settings.general.read_only)),
+        "VITE_API_ENABLE_PEOPLE": _bool_to_js(
+            bool(settings.general.enable_people)
+        ),
     }
     config_script = (
         f"<script>window.runtimeConfig = {json.dumps(config)};</script>"

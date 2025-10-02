@@ -12,7 +12,7 @@ import yaml
 from pydantic import BaseModel, Field, PlainSerializer, computed_field
 from typing_extensions import Annotated
 
-from app.logger import logger, configure_file_logging
+from app.logger import configure_file_logging, logger
 
 E = TypeVar("E", bound=Enum)
 IS_DOCKER = os.getenv("IS_DOCKER", False)
@@ -298,7 +298,10 @@ class GeneralSettings(BaseModel):
         if not IS_DOCKER:
             legacy_models_dir = self.omoide_dir / "models"
             try:
-                if legacy_models_dir.exists() and legacy_models_dir != self.models_dir:
+                if (
+                    legacy_models_dir.exists()
+                    and legacy_models_dir != self.models_dir
+                ):
                     migrated_any = False
                     for item in legacy_models_dir.iterdir():
                         dest = self.models_dir / item.name
@@ -324,7 +327,9 @@ class GeneralSettings(BaseModel):
                     except OSError:
                         pass
             except Exception as e:
-                logger.warning("Could not migrate legacy models directory: %s", e)
+                logger.warning(
+                    "Could not migrate legacy models directory: %s", e
+                )
         if IS_DOCKER:
             self.media_dirs = [Path("/app/media")]
 
@@ -590,7 +595,11 @@ def load_config_from_file() -> dict:
     """Loads settings from the user's YAML file."""
     config_path = get_user_data_path() / "config.yaml"
     if not config_path.exists():
-        save_settings(AppSettings())
+        base_settings = AppSettings()
+        seeded_data = base_settings.model_dump(mode="json")
+        _apply_env_overrides(seeded_data)
+        seeded_settings = AppSettings.model_validate(seeded_data)
+        save_settings(seeded_settings)
     with open(config_path, "r") as f:
         return yaml.safe_load(f) or {}
 
@@ -620,10 +629,13 @@ def _apply_env_overrides(config_data: dict) -> None:
         if not key.startswith(ENV_PREFIX):
             continue
         path_segments = key[len(ENV_PREFIX) :].split("__")
+        logger.info("KEY: %s:%s", key, raw_value)
         if not path_segments:
             continue
+        logger.info("path_segments: %s", path_segments)
         target = config_data
         for segment in path_segments[:-1]:
+            logger.info("SEGMENT: %s", segment)
             segment_lower = segment.lower()
             current = target.get(segment_lower)
             if not isinstance(current, dict):
@@ -631,7 +643,9 @@ def _apply_env_overrides(config_data: dict) -> None:
                 target[segment_lower] = current
             target = current
         final_key = path_segments[-1].lower()
+        logger.info("FINAL KEY: %s", final_key)
         target[final_key] = _coerce_env_value(raw_value)
+        logger.info("SET TO: %s", target[final_key])
 
 
 def load_settings() -> AppSettings:
@@ -650,7 +664,7 @@ def load_settings() -> AppSettings:
         config_data.update(file_config)
 
     _apply_env_overrides(config_data)
-
+    logger.info(config_data)
     # 3. Load into Pydantic model. This applies defaults for any missing values.
     return AppSettings.model_validate(config_data)
 
@@ -878,5 +892,4 @@ def reload_settings():
 
 
 settings = load_settings()
-logger.info("DATA_DIR: %s", settings.general.data_dir)
-
+logger.info("settings: %s", settings)

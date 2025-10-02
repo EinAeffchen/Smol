@@ -4,6 +4,8 @@ services:
     container_name: omoide
     ports:
       - "${PORT}:8123"
+    env_file:
+      - ${ENV_FILE}
     # entrypoint: ["tail","-f", "/dev/null"]
     # to mount multipe volumes for processing, mount them into
     # various sub-folders of /app/media

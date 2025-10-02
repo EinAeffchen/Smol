@@ -13,6 +13,7 @@ import {
   Stack,
   Paper,
   Autocomplete,
+  Avatar,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import { useInView } from "react-intersection-observer";
@@ -26,6 +27,7 @@ import {
 import { searchPersonsByName } from "../services/personActions";
 import { Person } from "../types";
 import { FaceGrid } from "../components/FaceGrid"; // Import our DUMB grid component
+import { API } from "../config";
 
 export default function OrphanFacesPage() {
   const navigate = useNavigate();
@@ -48,6 +50,7 @@ export default function OrphanFacesPage() {
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newPersonName, setNewPersonName] = useState("");
   const [personOptions, setPersonOptions] = useState<Person[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
 
   // --- Infinite Scroll ---
   // The 'skip' option is a crucial fix: it disables the observer while data is loading.
@@ -58,9 +61,9 @@ export default function OrphanFacesPage() {
   });
 
   useEffect(() => {
-    // Only call fetchInitial once when the component mounts
+    clearList(listKey);
     fetchInitial(listKey, () => getOrphanFaces(null));
-  }, [fetchInitial, listKey, orphans.length]);
+  }, [clearList, fetchInitial, listKey]);
 
   useEffect(() => {
     if (inView) {
@@ -115,12 +118,38 @@ export default function OrphanFacesPage() {
     }
   };
 
-  const handleOpenAssignDialog = (name: string = "") => {
-    if (name) {
-      searchPersonsByName(name).then(setPersonOptions);
-    }
+  const openAssignDialog = () => {
+    setSearchTerm("");
+    setPersonOptions([]);
     setAssignDialogOpen(true);
   };
+
+  useEffect(() => {
+    if (!assignDialogOpen) {
+      return;
+    }
+    const trimmed = searchTerm.trim();
+    if (trimmed.length < 2) {
+      setPersonOptions([]);
+      return;
+    }
+    let active = true;
+    const handle = window.setTimeout(() => {
+      searchPersonsByName(trimmed)
+        .then((results) => {
+          if (active) {
+            setPersonOptions(results);
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to search persons:", err);
+        });
+    }, 300);
+    return () => {
+      active = false;
+      window.clearTimeout(handle);
+    };
+  }, [assignDialogOpen, searchTerm]);
 
   const handleConfirmAssign = async (person: Person | null) => {
     if (!person) return;
@@ -129,6 +158,8 @@ export default function OrphanFacesPage() {
       await assignFace(selectedFaceIds, person.id);
       removeItems(listKey, selectedFaceIds);
       setAssignDialogOpen(false);
+      setSearchTerm("");
+      setPersonOptions([]);
     } finally {
       setIsProcessing(false);
       setSelectedFaceIds([]);
@@ -193,7 +224,7 @@ export default function OrphanFacesPage() {
               variant="contained"
               size="small"
               disabled={isProcessing}
-              onClick={() => handleOpenAssignDialog()}
+              onClick={openAssignDialog}
             >
               Assign...
             </Button>
@@ -251,19 +282,65 @@ export default function OrphanFacesPage() {
           <Autocomplete
             options={personOptions}
             getOptionLabel={(o) => o.name || "Unknown"}
+            inputValue={searchTerm}
+            onInputChange={(_, value) => setSearchTerm(value)}
             onChange={(_, val) => handleConfirmAssign(val)}
+            renderOption={(props, option) => {
+              const thumbPath = option.profile_face?.thumbnail_path;
+              const thumbUrl = thumbPath
+                ? `${API}/thumbnails/${encodeURIComponent(thumbPath)}`
+                : undefined;
+              const initials = (option.name || "?")
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean)
+                .map((part) => part[0]?.toUpperCase())
+                .join("")
+                .slice(0, 2) || "?";
+              return (
+                <Box
+                  component="li"
+                  {...props}
+                  sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 0.5 }}
+                >
+                  <Avatar src={thumbUrl} alt={option.name || `Person ${option.id}`}>
+                    {thumbUrl ? null : initials}
+                  </Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap>{option.name || `Person ${option.id}`}</Typography>
+                    {option.appearance_count ? (
+                      <Typography variant="caption" color="text.secondary" noWrap>
+                        {option.appearance_count} media
+                      </Typography>
+                    ) : null}
+                  </Box>
+                </Box>
+              );
+            }}
             renderInput={(params) => (
               <TextField
                 {...params}
-                onChange={(event) => handleOpenAssignDialog(event.target.value)}
                 label="Search for a person"
                 autoFocus
+                helperText={
+                  searchTerm.length < 2
+                    ? "Type at least two characters to search"
+                    : undefined
+                }
               />
             )}
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAssignDialogOpen(false)}>Cancel</Button>
+          <Button
+            onClick={() => {
+              setAssignDialogOpen(false);
+              setSearchTerm("");
+              setPersonOptions([]);
+            }}
+          >
+            Cancel
+          </Button>
         </DialogActions>
       </Dialog>
       {/* Create Dialog */}

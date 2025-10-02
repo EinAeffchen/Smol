@@ -1,5 +1,6 @@
 import React, { useRef, useCallback, useState, useEffect } from "react";
 import {
+  Avatar,
   Box,
   Typography,
   CircularProgress,
@@ -13,6 +14,7 @@ import {
   TextField,
   DialogActions,
   List,
+  ListItemAvatar,
   ListItemButton,
   ListItemText,
 } from "@mui/material";
@@ -20,6 +22,7 @@ import { FaceRead, Person } from "../types";
 import FaceCard from "./FaceCard";
 import { useFaceSelection } from "../hooks/useFaceSelection";
 import { searchPersonsByName } from "../services/personActions";
+import config, { API } from "../config";
 
 interface DetectedFacesProps {
   isProcessing: boolean;
@@ -79,7 +82,22 @@ export default function DetectedFaces({
   const [openCreateDialog, setOpenCreateDialog] = useState(false);
   const [newPersonName, setNewPersonName] = useState("");
 
+  const canMutate = !config.READ_ONLY;
   const isAnythingSelected = selectedFaceIds.length > 0;
+
+  const resolveProfileThumb = useCallback((person: Person) => {
+    const thumbPath = person.profile_face?.thumbnail_path;
+    if (!thumbPath) return undefined;
+    return `${API}/thumbnails/${encodeURIComponent(thumbPath)}`;
+  }, []);
+
+  const getInitials = useCallback((name = "") => {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase() || "?";
+  }, []);
 
   const lastCardRef = useCallback(
     (node: HTMLDivElement | null) => {
@@ -109,6 +127,19 @@ export default function DetectedFaces({
   }, [personId]);
 
   useEffect(() => {
+    if (!canMutate) {
+      setIsAssignDialogOpen(false);
+      setOpenCreateDialog(false);
+      onClearSelection();
+    }
+  }, [canMutate, onClearSelection]);
+
+  useEffect(() => {
+    if (!canMutate) {
+      setAssignCandidates([]);
+      return;
+    }
+
     if (!assignSearchTerm.trim()) {
       setAssignCandidates([]);
       return;
@@ -130,7 +161,7 @@ export default function DetectedFaces({
     return () => {
       clearTimeout(handler);
     };
-  }, [assignSearchTerm]);
+  }, [assignSearchTerm, canMutate]);
 
   if (
     faces.length === 0 &&
@@ -149,11 +180,14 @@ export default function DetectedFaces({
     faceIds: number[],
     assignedToPersonId: number
   ) => {
+    if (!canMutate) {
+      return;
+    }
     onClearSelection();
     await onAssign(faceIds, assignedToPersonId);
   };
   const handleDetach = async () => {
-    if (!onDetach || selectedFaceIds.length === 0) {
+    if (!onDetach || selectedFaceIds.length === 0 || !canMutate) {
       return;
     }
     const faceIds = [...selectedFaceIds];
@@ -169,12 +203,15 @@ export default function DetectedFaces({
   };
 
   const handleConfirmAssign = async () => {
-    if (!assignTargetPerson) return;
+    if (!assignTargetPerson || !canMutate) return;
     await handleAssign(selectedFaceIds, assignTargetPerson.id);
     handleCloseAssignDialog();
   };
 
   const handleAssignClick = () => {
+    if (!canMutate) {
+      return;
+    }
     if (personId) {
       // Context: We are on a person's page. Assign directly.
       handleAssign(selectedFaceIds, personId);
@@ -210,7 +247,7 @@ export default function DetectedFaces({
         <Typography variant="h6" sx={{ flexGrow: 1 }}>
           {title}
         </Typography>
-        {isAnythingSelected && (
+        {isAnythingSelected && canMutate && (
           <Stack direction="row" spacing={1} alignItems="center">
             <Button size="small" onClick={onClearSelection}>
               {selectedFaceIds.length} selected
@@ -270,12 +307,16 @@ export default function DetectedFaces({
             {isProcessing && <CircularProgress size={20} />}
           </Stack>
         )}
-        <Button size="small" onClick={() => onSelectAll(faces)}>
+        <Button
+          size="small"
+          onClick={() => onSelectAll(faces)}
+          disabled={!canMutate}
+        >
           {selectedFaceIds.length < faces.length ? "Select All" : "Select None"}
         </Button>
       </Box>
       <Dialog
-        open={openCreateDialog}
+        open={canMutate && openCreateDialog}
         onClose={() => setOpenCreateDialog(false)}
       >
         <DialogTitle>Create New Person</DialogTitle>
@@ -296,6 +337,9 @@ export default function DetectedFaces({
           <Button
             onClick={async () => {
               if (onCreateMultiple) {
+                if (!canMutate) {
+                  return;
+                }
                 await onCreateMultiple(selectedFaceIds, newPersonName);
                 setOpenCreateDialog(false);
                 setSelectedFaceIds([]);
@@ -308,7 +352,7 @@ export default function DetectedFaces({
         </DialogActions>
       </Dialog>
       <Dialog
-        open={isAssignDialogOpen}
+        open={canMutate && isAssignDialogOpen}
         onClose={handleCloseAssignDialog}
         fullWidth
         maxWidth="xs"
@@ -337,7 +381,22 @@ export default function DetectedFaces({
                 selected={assignTargetPerson?.id === person.id}
                 onClick={() => setAssignTargetPerson(person)}
               >
-                <ListItemText primary={person.name} />
+                <ListItemAvatar>
+                  <Avatar
+                    src={resolveProfileThumb(person)}
+                    alt={person.name || `Person ${person.id}`}
+                  >
+                    {getInitials(person.name)}
+                  </Avatar>
+                </ListItemAvatar>
+                <ListItemText
+                  primary={person.name || `Person ${person.id}`}
+                  secondary={
+                    person.appearance_count
+                      ? `${person.appearance_count} media`
+                      : undefined
+                  }
+                />
               </ListItemButton>
             ))}
           </List>
@@ -383,9 +442,11 @@ export default function DetectedFaces({
                 <FaceCard
                   face={face}
                   isProfile={face.id === profileFaceId}
-                  onSetProfile={onSetProfile}
-                  selected={selectedFaceIds.includes(face.id)}
-                  onToggleSelect={onToggleSelect}
+                  onSetProfile={canMutate ? onSetProfile : undefined}
+                  selected={
+                    canMutate && selectedFaceIds.includes(face.id)
+                  }
+                  onToggleSelect={canMutate ? onToggleSelect : undefined}
                 />
               </div>
             ))}

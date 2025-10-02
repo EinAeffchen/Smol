@@ -1,4 +1,5 @@
 import {
+  Avatar,
   Box,
   Button,
   CircularProgress,
@@ -16,6 +17,16 @@ import Snackbar from "@mui/material/Snackbar";
 import { PersonContentTabs } from "../components/PersonContentTabs";
 import { PersonHero } from "../components/PersonHero";
 import { usePersonDetailPage } from "../hooks/usePersonDetailPage";
+import { API } from "../config";
+
+const getInitials = (name?: string) => {
+  if (!name) return "?";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  }
+  return parts[0]?.slice(0, 2).toUpperCase() || "?";
+};
 
 export default function PersonDetailPage() {
   const {
@@ -184,10 +195,37 @@ export default function PersonDetailPage() {
                   bgcolor: "background.paper",
                   borderRadius: 1,
                   cursor: "pointer",
-                  "&:hover": { bgcolor: "primary.dark" },
+                  "&:hover": { bgcolor: "primary.dark", color: "primary.contrastText" },
                 }}
               >
-                <Typography>{c.name ?? "Unknown"}</Typography>
+                <Stack direction="row" spacing={2} alignItems="center">
+                  <Avatar
+                    src={
+                      c.profile_face?.thumbnail_path
+                        ? `${API}/thumbnails/${encodeURIComponent(
+                            c.profile_face.thumbnail_path
+                          )}`
+                        : undefined
+                    }
+                    alt={c.name ?? `Person ${c.id}`}
+                  >
+                    {getInitials(c.name)}
+                  </Avatar>
+                  <Box sx={{ minWidth: 0 }}>
+                    <Typography noWrap sx={{ color: "inherit" }}>
+                      {c.name ?? "Unknown"}
+                    </Typography>
+                    {c.appearance_count ? (
+                      <Typography
+                        variant="caption"
+                        noWrap
+                        sx={{ color: "inherit", opacity: 0.75 }}
+                      >
+                        {c.appearance_count} media
+                      </Typography>
+                    ) : null}
+                  </Box>
+                </Stack>
               </Box>
             ))}
             {searchTerm && candidates.length === 0 && (

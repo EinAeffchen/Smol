@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { useLocation, Link } from "react-router-dom";
 import ReactPlayer from "react-player";
 import {
@@ -41,7 +41,9 @@ export default function MediaCard({
   const theme = useTheme();
   // This state now explicitly controls when the video player is active.
   const [isPlayerActive, setIsPlayerActive] = useState(false);
+  const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
+  const hasInitializedPlayerRef = useRef(false);
   const location = useLocation();
 
   const isVideo = media ? typeof media.duration === "number" : false;
@@ -66,8 +68,27 @@ export default function MediaCard({
     navigationContext,
   };
 
+  useEffect(() => {
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    // Reset player state when card content changes (e.g., reused component).
+    setIsPlayerActive(false);
+    setPlayerUrl(null);
+    hasInitializedPlayerRef.current = false;
+  }, [mediaId, mediaUrl]);
+
   const handleMouseEnter = () => {
     hoverTimeoutRef.current = window.setTimeout(() => {
+      if (!hasInitializedPlayerRef.current) {
+        hasInitializedPlayerRef.current = true;
+        setPlayerUrl(mediaUrl);
+      }
       setIsPlayerActive(true);
     }, 200);
   };
@@ -147,7 +168,7 @@ export default function MediaCard({
                 }}
               >
                 <ReactPlayer
-                  url={isPlayerActive ? mediaUrl : undefined}
+                  url={playerUrl ?? undefined}
                   playing={isPlayerActive}
                   loop
                   muted
