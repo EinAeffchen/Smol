@@ -10,6 +10,7 @@ from app.logger import logger
 import subprocess
 import ffmpeg
 from pathlib import Path
+from app.subprocess_helpers import popen_silent
 
 router = APIRouter()
 
@@ -108,7 +109,7 @@ def _run_conversion(task_id: str, media_path: str, media_id: int):
                 str(temp_output_path),
             ]
             logger.info(f"Running FFmpeg command: {' '.join(cmd)}")
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, text=True)
+            proc = popen_silent(cmd, stdout=subprocess.PIPE, text=True)
 
             for line in proc.stdout:
                 if line.startswith("out_time_ms="):

@@ -20,6 +20,7 @@ from sqlmodel import Session, select, update
 
 from tqdm import tqdm
 
+from app.subprocess_helpers import run_silent
 import app.database as db
 from app.config import settings
 from app.database import safe_commit
@@ -150,7 +151,7 @@ def _ffprobe_json(path: Path, timeout: int = 15) -> dict | None:
         os.fspath(path),
     ]
     try:
-        result = subprocess.run(
+        result = run_silent(
             cmd,
             capture_output=True,
             text=True,
@@ -441,7 +442,7 @@ def generate_thumbnail(media: Media) -> str | None:
             os.fspath(thumb_path),
         ]
         try:
-            subprocess.run(
+            run_silent(
                 cmd,
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -656,7 +657,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
                 "mjpeg",
                 "-",
             ]
-            result = subprocess.run(
+            result = run_silent(
                 cmd,
                 check=False,
                 stdout=subprocess.PIPE,
