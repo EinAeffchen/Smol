@@ -1,4 +1,3 @@
-import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -15,6 +14,7 @@ from app.config import (
 )
 from app.database import get_session
 from app.logger import logger
+from app.subprocess_helpers import popen_silent
 from app.models import ExifData, Face, Media, Person, Scene, Tag
 from app.schemas.face import FaceRead
 from app.schemas.media import (
@@ -304,12 +304,12 @@ def open_media_folder(
 
     try:
         if sys.platform.startswith("win"):
-            subprocess.Popen(["explorer", str(parent)])
+            popen_silent(["explorer", str(parent)])
         elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(parent)])
+            popen_silent(["open", str(parent)])
         else:
             # Linux and others
-            subprocess.Popen(["xdg-open", str(parent)])
+            popen_silent(["xdg-open", str(parent)])
     except Exception as e:
         raise HTTPException(500, f"Failed to open folder: {e}")
     return
