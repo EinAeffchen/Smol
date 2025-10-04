@@ -41,10 +41,12 @@ export const reloadConfig = async (): Promise<AppConfig> => {
   if (!import.meta.env.DEV) {
     const ro = String(!!latest.general.read_only);
     const people = String(!!latest.general.enable_people);
+    const meme = String(!!latest.general.meme_mode);
     window.runtimeConfig = {
       ...(window.runtimeConfig ?? {}),
       VITE_API_READ_ONLY: ro,
       VITE_API_ENABLE_PEOPLE: people,
+      VITE_API_MEME_MODE: meme,
     } as any;
 
     // Emit a lightweight event that components can listen to if they need

@@ -369,6 +369,7 @@ async def spa_catch_all(full_path: str):
         "VITE_API_ENABLE_PEOPLE": _bool_to_js(
             bool(settings.general.enable_people)
         ),
+        "VITE_API_MEME_MODE": _bool_to_js(bool(settings.general.meme_mode)),
     }
     config_script = (
         f"<script>window.runtimeConfig = {json.dumps(config)};</script>"

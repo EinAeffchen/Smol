@@ -10,7 +10,7 @@ import {
   useTheme,
 } from "@mui/material";
 import { MediaPreview } from "../types";
-import { API } from "../config";
+import appConfig, { API } from "../config";
 import PlayArrowIcon from "@mui/icons-material/PlayArrow";
 import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutline";
 
@@ -45,6 +45,13 @@ export default function MediaCard({
   const hoverTimeoutRef = useRef<number | null>(null);
   const hasInitializedPlayerRef = useRef(false);
   const location = useLocation();
+  const memeModeEnabled = appConfig.MEME_MODE;
+  const isGif =
+    media != null
+      ? media.filename.toLowerCase().endsWith(".gif") ||
+        media.path.toLowerCase().endsWith(".gif")
+      : false;
+  const useOriginalGif = memeModeEnabled && isGif;
 
   const isVideo = media ? typeof media.duration === "number" : false;
 
@@ -55,9 +62,13 @@ export default function MediaCard({
   const mediaId = media ? media.id : null;
   let thumbUrl;
   if (media) {
-    thumbUrl = media.thumbnail_path
-      ? `${API}/thumbnails/${media.thumbnail_path}`
-      : `${API}/thumbnails/${media.id}.jpg`;
+    if (useOriginalGif) {
+      thumbUrl = mediaUrl;
+    } else if (media.thumbnail_path) {
+      thumbUrl = `${API}/thumbnails/${media.thumbnail_path}`;
+    } else {
+      thumbUrl = `${API}/thumbnails/${media.id}.jpg`;
+    }
   } else {
     thumbUrl = `${API}/static/brand/404.png`;
   }

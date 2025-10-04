@@ -39,7 +39,6 @@ COPY --from=uv-installer /opt/uv/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/u
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PORT=8123 \
-    MEDIA_DIR=/app/media \
     DATA_DIR=/app/data
 
 # Further ENV VARS for application
@@ -62,7 +61,7 @@ COPY --chown=appuser:appgroup alembic.ini /app/alembic.ini
 COPY --from=frontend-builder --chown=appuser:appgroup /app/frontend/dist /app/static
 
 # 6. Create mount points for volumes and set permissions. This is a small final layer.
-RUN mkdir -p ${DATA_DIR} ${MEDIA_DIR}
+RUN mkdir -p ${DATA_DIR}
 ENV IS_DOCKER=true
 
 # 7. Switch to the non-root user

@@ -34,6 +34,16 @@ const config = {
     }
     return getBooleanEnv(window.runtimeConfig?.VITE_API_ENABLE_PEOPLE);
   },
+
+  /**
+   * When enabled, replace GIF thumbnails with originals so they animate in grids.
+   */
+  get MEME_MODE(): boolean {
+    if (import.meta.env.DEV) {
+      return getBooleanEnv(import.meta.env.VITE_API_MEME_MODE);
+    }
+    return getBooleanEnv(window.runtimeConfig?.VITE_API_MEME_MODE);
+  },
 };
 
 console.log(import.meta.env);
@@ -41,5 +51,6 @@ if (import.meta.env.DEV) {
   console.log("[App Config] API Base URL:", API);
   console.log("[App Config] Read-Only Mode:", config.READ_ONLY);
   console.log("[App Config] People tracking enabled:", config.ENABLE_PEOPLE);
+  console.log("[App Config] Meme mode:", config.MEME_MODE);
 }
 export default config;

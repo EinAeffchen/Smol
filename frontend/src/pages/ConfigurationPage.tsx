@@ -908,6 +908,23 @@ export default function ConfigurationPage() {
                 Enables face detection, recognition, and person clustering
                 features.
               </Typography>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={config.general.meme_mode}
+                    onChange={(e) =>
+                      handleValueChange("general", "meme_mode", e.target.checked)
+                    }
+                  />
+                }
+                label="Meme Mode"
+              />
+              <Typography
+                variant="caption"
+                sx={{ ml: 6, mt: -1, display: "block" }}
+              >
+                Displays animated GIFs in grids by loading the original files.
+              </Typography>
             </FormGroup>
           </Grid>
           <Grid size={{ xs: 12, sm: 6 }}>

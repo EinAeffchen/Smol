@@ -278,6 +278,7 @@ export interface AppConfig {
     port: number;
     read_only: boolean;
     enable_people: boolean;
+    meme_mode: boolean;
     is_docker: boolean;
     is_binary: boolean;
     domain: string;

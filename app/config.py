@@ -241,6 +241,7 @@ class GeneralSettings(BaseModel):
     read_only: bool = False
     # Enable face recognition and other person related features
     enable_people: bool = True
+    meme_mode: bool = False
     is_docker: bool = bool(os.environ.get("IS_DOCKER", False))
     # Whether the app is running as a packaged/binary executable (e.g., PyInstaller)
     is_binary: bool = bool(getattr(sys, "frozen", False))
@@ -369,6 +370,7 @@ class ScanSettings(BaseModel):
         ".mkv",
         ".webm",
         ".gp3",
+        ".gif",
         ".ts",
         ".mpeg",
     ]
@@ -377,7 +379,6 @@ class ScanSettings(BaseModel):
         ".jpeg",
         ".png",
         ".tiff",
-        ".gif",
         ".bmp",
     ]
 
