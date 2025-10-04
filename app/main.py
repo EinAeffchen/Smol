@@ -265,25 +265,62 @@ async def serve_thumbnail(file_path: str):
 
 @app.get("/originals/{file_path:path}", include_in_schema=False)
 async def serve_original_media(file_path: str):
-    file_path_obj = Path(file_path)
+    logger.info(file_path)
+    requested_path = Path(file_path)
 
-    # Security check to prevent accessing files outside the settings.general.media_dirs
-    if not file_path_obj.is_file() or not any(
-        str(file_path_obj).startswith(str(media_dir))
-        for media_dir in settings.general.media_dirs
-    ):
+    logger.info("PATH obj: %s", requested_path)
+    media_dirs = [
+        Path(media_dir).resolve() for media_dir in settings.general.media_dirs
+    ]
+    candidates: list[Path] = []
+
+    if requested_path.is_absolute():
+        candidates.append(requested_path)
+    else:
+        candidates.append(Path("/") / requested_path)
+
+    for media_dir in media_dirs:
+        candidates.append(media_dir / requested_path)
+
+    def _is_within(path: Path, base: Path) -> bool:
+        try:
+            path.relative_to(base)
+            return True
+        except ValueError:
+            return False
+
+    resolved_target: Path | None = None
+    seen: set[Path] = set()
+
+    for candidate in candidates:
+        try:
+            normalized = candidate.resolve(strict=False)
+        except RuntimeError:
+            continue
+
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+
+        if not any(
+            _is_within(normalized, media_dir) for media_dir in media_dirs
+        ):
+            continue
+
+        if not normalized.is_file():
+            continue
+
+        resolved_target = normalized
+        break
+
+    if resolved_target is None:
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Guess the MIME type from the file extension
-    mime_type, _ = mimetypes.guess_type(file_path_obj)
+    mime_type, _ = mimetypes.guess_type(resolved_target)
     if mime_type is None:
-        # Fallback if MIME type can't be guessed
         mime_type = "application/octet-stream"
 
-    # Create a FileResponse, which handles byte-range requests correctly
-    response = FileResponse(file_path_obj, media_type=mime_type)
-
-    # Manually add the header that Firefox requires
+    response = FileResponse(resolved_target, media_type=mime_type)
     response.headers["Accept-Ranges"] = "bytes"
 
     return response
