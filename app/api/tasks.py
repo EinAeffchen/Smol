@@ -1461,7 +1461,8 @@ def _run_scan(task_id: str):
             logger.error("Task %s not found.", task_id)
             return
         task.status = "running"
-        task.started_at = datetime.now()
+        task.processed = 0
+        task.started_at = datetime.now(timezone.utc)
         safe_commit(sess)
 
     # Helper to iterate all candidate files
@@ -1487,12 +1488,12 @@ def _run_scan(task_id: str):
     #    - Preload existing paths per media_dir using LIKE prefix
     #    - Build a list of new files in one pass over the filesystem
     #    - Update task.total periodically for responsiveness
-    BATCH_COMMIT = 150
+    BATCH_COMMIT = 1000
     new_files: list[Path] = []
     existing_paths: set[str] = set()
 
     with Session(db.engine) as sess:
-        # Preload existing paths for each configured media directory
+        # Preload existing paths000/dateor each configured media directory
         try:
             for d in settings.general.media_dirs:
                 # Use an index-friendly prefix range instead of LIKE.
@@ -1558,15 +1559,13 @@ def _run_scan(task_id: str):
             task = sess.get(ProcessingTask, task_id)
             processed = task.processed or 0
             batch_since_commit = 0
-            CANCEL_CHECK_EVERY = 20
-            checked = 0
+            CHECK_EVERY_SEC = 5
+            next_cancel_check = time.monotonic() + CHECK_EVERY_SEC
 
             for filepath in new_files:
-                # Re-check cancellation periodically, not on every iteration
-                checked += 1
-                if checked >= CANCEL_CHECK_EVERY:
+                if time.monotonic() >= next_cancel_check:
+                    next_cancel_check = time.monotonic() + CHECK_EVERY_SEC
                     sess.refresh(task, attribute_names=["status"])  # cheap
-                    checked = 0
                     if task.status == "cancelled":
                         logger.info("Scan cancelled by user.")
                         # Commit any pending batch before finalizing status
