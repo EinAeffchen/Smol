@@ -1491,6 +1491,7 @@ def _run_scan(task_id: str):
     BATCH_COMMIT = 1000
     new_files: list[Path] = []
     existing_paths: set[str] = set()
+    missing_candidates: dict[str, int] = {}
 
     with Session(db.engine) as sess:
         # Preload existing paths000/dateor each configured media directory
@@ -1508,12 +1509,17 @@ def _run_scan(task_id: str):
                 )  # upper bound for all strings with prefix
                 try:
                     rows = sess.exec(
-                        select(Media.path).where(
-                            Media.path >= lo, Media.path < hi
-                        )
+                        select(
+                            Media.id,
+                            Media.path,
+                            Media.missing_since,
+                            Media.missing_confirmed,
+                        ).where(Media.path >= lo, Media.path < hi)
                     ).all()
-                    for (p,) in rows:
+                    for media_id, p, missing_since, missing_confirmed in rows:
                         existing_paths.add(p)
+                        if missing_since is not None or missing_confirmed:
+                            missing_candidates[p] = media_id
                 except Exception:
                     # If range scan fails, skip preload for this dir
                     pass
@@ -1522,10 +1528,15 @@ def _run_scan(task_id: str):
 
         task = sess.get(ProcessingTask, task_id)
         since_update = 0
+        recovered_ids: set[int] = set()
         for path in walk_candidates():
             spath = str(path)
+            candidate_id = missing_candidates.pop(spath, None)
+            if candidate_id is not None:
+                recovered_ids.add(candidate_id)
             if spath in existing_paths:
                 continue
+            logger.debug("Handling: %s", path)
             new_files.append(path)
             existing_paths.add(spath)  # avoid duplicates from symlinks
             since_update += 1
@@ -1534,6 +1545,12 @@ def _run_scan(task_id: str):
                 sess.add(task)
                 safe_commit(sess)
                 since_update = 0
+        if recovered_ids:
+            sess.exec(
+                update(Media)
+                .where(Media.id.in_(tuple(recovered_ids)))
+                .values(missing_since=None, missing_confirmed=False)
+            )
         # Finalize total
         task.total = len(new_files)
         sess.add(task)
@@ -1576,22 +1593,9 @@ def _run_scan(task_id: str):
                             batch_since_commit = 0
                         break
 
-                # Defensive check in case DB changed between pre-count and now
-                existing_media = sess.exec(
-                    select(Media).where(Media.path == str(filepath)).limit(1)
-                ).first()
-                if existing_media:
-                    if (
-                        existing_media.missing_since is not None
-                        or existing_media.missing_confirmed
-                    ):
-                        existing_media.missing_since = None
-                        existing_media.missing_confirmed = False
-                        sess.add(existing_media)
-                    continue
-
                 media_obj = process_file(filepath)
                 if not media_obj:
+                    logger.info("Could not process file!")
                     # Could not probe/process – do not count as processed
                     continue
 
