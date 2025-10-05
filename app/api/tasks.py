@@ -1536,7 +1536,6 @@ def _run_scan(task_id: str):
                 recovered_ids.add(candidate_id)
             if spath in existing_paths:
                 continue
-            logger.debug("Handling: %s", path)
             new_files.append(path)
             existing_paths.add(spath)  # avoid duplicates from symlinks
             since_update += 1
@@ -1553,6 +1552,7 @@ def _run_scan(task_id: str):
             )
         # Finalize total
         task.total = len(new_files)
+        logger.info("Found %s new files!", len(new_files))
         sess.add(task)
         safe_commit(sess)
 
@@ -1580,6 +1580,7 @@ def _run_scan(task_id: str):
             next_cancel_check = time.monotonic() + CHECK_EVERY_SEC
 
             for filepath in new_files:
+                logger.debug("Parsing: %s", filepath)
                 if time.monotonic() >= next_cancel_check:
                     next_cancel_check = time.monotonic() + CHECK_EVERY_SEC
                     sess.refresh(task, attribute_names=["status"])  # cheap
