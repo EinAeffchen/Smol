@@ -17,10 +17,8 @@ from scenedetect import HistogramDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlalchemy import delete, distinct, func, text
 from sqlmodel import Session, select, update
-
 from tqdm import tqdm
 
-from app.subprocess_helpers import run_silent
 import app.database as db
 from app.config import settings
 from app.database import safe_commit
@@ -37,6 +35,7 @@ from app.models import (
     ProcessingTask,
     Scene,
 )
+from app.subprocess_helpers import run_silent
 
 
 def _coerce_vector_array(value: Any) -> np.ndarray | None:
@@ -110,6 +109,7 @@ def recalculate_person_appearance_counts(
         person.appearance_count = counts.get(pid, 0)
         session.add(person)
 
+
 def get_image_taken_date(img_path: Path | None = None) -> datetime:
     # fallback use creation time
     alt_time = datetime.fromtimestamp(img_path.stat().st_ctime)
@@ -123,6 +123,8 @@ def get_image_taken_date(img_path: Path | None = None) -> datetime:
     try:
         exif = img._getexif()
     except AttributeError:
+        exif = None
+    except SyntaxError:
         exif = None
     if exif and (creation_date := exif.get(36867)):
         try:
@@ -267,9 +269,12 @@ def fix_image_rotation(full_path: Path) -> None:
         return
 
     img = Image.open(full_path)
-    exif = img.getexif()
-    orientation = exif.get(274)
-    if not orientation or orientation == 1:
+    try:
+        exif = img.getexif()
+        orientation = exif.get(274)
+        if not orientation or orientation == 1:
+            return
+    except SyntaxError:
         return
     try:
         transposed = ImageOps.exif_transpose(img)
@@ -463,7 +468,6 @@ def generate_thumbnail(media: Media) -> str | None:
         try:
             fix_image_rotation(filepath)
             img = Image.open(filepath)
-            img = ImageOps.exif_transpose(img)
         except UnidentifiedImageError:
             logger.warning("Couldn't open %s", filepath)
             return
