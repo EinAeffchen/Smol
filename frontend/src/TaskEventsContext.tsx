@@ -23,6 +23,7 @@ type TaskEventsContextValue = {
   activeTasks: Task[];
   completionCounters: Record<TaskType, number>;
   globalCompletionCount: number;
+  lastCompletedTasks: Partial<Record<TaskType, Task>>;
   forceRefresh: () => Promise<void>;
   subscribe: () => () => void;
 };
@@ -47,6 +48,8 @@ export function TaskEventsProvider({
   const [completionCounters, setCompletionCounters] =
     useState<Record<TaskType, number>>(INITIAL_COUNTERS);
   const [globalCompletionCount, setGlobalCompletionCount] = useState(0);
+  const [lastCompletedTasks, setLastCompletedTasks] =
+    useState<Partial<Record<TaskType, Task>>>({});
 
   const prevTasksRef = useRef<Record<string, Task>>({});
   const pendingFetchRef = useRef<Promise<void> | null>(null);
@@ -65,11 +68,21 @@ export function TaskEventsProvider({
     if (!finished.length) return;
 
     const resolved = await Promise.all(finished.map((task) => safeFetchTask(task.id)));
-    const completedTypes = resolved
-      .filter((task): task is Task => Boolean(task && task.status === "completed"))
-      .map((task) => task.task_type as TaskType);
+    const completedTasks = resolved.filter(
+      (task): task is Task => Boolean(task && task.status === "completed")
+    );
 
-    if (!completedTypes.length || !isMountedRef.current) return;
+    if (!completedTasks.length || !isMountedRef.current) return;
+
+    const completedTypes = completedTasks.map((task) => task.task_type as TaskType);
+
+    setLastCompletedTasks((prev) => {
+      const next = { ...prev };
+      completedTasks.forEach((task) => {
+        next[task.task_type as TaskType] = task;
+      });
+      return next;
+    });
 
     setCompletionCounters((prev) => {
       const next: Record<TaskType, number> = { ...prev };
@@ -168,10 +181,18 @@ export function TaskEventsProvider({
       activeTasks,
       completionCounters,
       globalCompletionCount,
+      lastCompletedTasks,
       forceRefresh,
       subscribe,
     }),
-    [activeTasks, completionCounters, globalCompletionCount, forceRefresh, subscribe]
+    [
+      activeTasks,
+      completionCounters,
+      globalCompletionCount,
+      lastCompletedTasks,
+      forceRefresh,
+      subscribe,
+    ]
   );
 
   return (

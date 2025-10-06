@@ -43,10 +43,10 @@ backup:
 
 build-image:
 	docker build -t omoide .
-	docker tag omoide einaeffchen2/omoide
+	docker tag omoide einaeffchen/omoide
 
 push: build-image
-	docker push einaeffchen2/omoide
+	docker push einaeffchen/omoide
 
 alembic-generate:
 	echo ${DATA_DIR}

@@ -1,5 +1,5 @@
 import { API } from "../config";
-import { Task, TaskType } from "../types";
+import { Task, TaskFailure, TaskType } from "../types";
 
 export const getActiveTasks = async (): Promise<Task[]> => {
   const res = await fetch(`${API}/api/tasks/active`);
@@ -15,4 +15,10 @@ export const startTask = async (type: TaskType): Promise<void> => {
 export const cancelTask = async (id: string): Promise<void> => {
   const res = await fetch(`${API}/api/tasks/${id}/cancel`, { method: "POST" });
   if (!res.ok) throw new Error(`Failed to cancel task ${id}`);
+};
+
+export const getTaskFailures = async (id: string): Promise<TaskFailure[]> => {
+  const res = await fetch(`${API}/api/tasks/${id}/failures`);
+  if (!res.ok) throw new Error(`Failed to fetch failures for task ${id}`);
+  return res.json();
 };

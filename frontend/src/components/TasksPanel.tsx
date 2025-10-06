@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Box,
   Typography,
@@ -13,9 +13,17 @@ import {
   Divider,
   Snackbar,
   Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from "@mui/material";
-import { TaskType } from "../types";
-import { startTask as startTaskService, cancelTask as cancelTaskService } from "../services/taskActions";
+import { TaskFailure, TaskType } from "../types";
+import {
+  startTask as startTaskService,
+  cancelTask as cancelTaskService,
+  getTaskFailures,
+} from "../services/taskActions";
 import { useTaskEvents } from "../TaskEventsContext";
 
 import SyncIcon from "@mui/icons-material/Sync";
@@ -38,10 +46,50 @@ type TaskManagerProps = {
 };
 
 export default function TaskManager({ isActive }: TaskManagerProps) {
-  const { activeTasks, forceRefresh } = useTaskEvents(isActive);
-  const [snack, setSnack] = useState<{ open: boolean; msg: string; sev: "success" | "error" }>({ open: false, msg: "", sev: "success" });
+  const { activeTasks, forceRefresh, lastCompletedTasks } = useTaskEvents(isActive);
+  const [snack, setSnack] = useState<{
+    open: boolean;
+    msg: string;
+    sev: "success" | "error";
+    action?: React.ReactNode;
+  }>({ open: false, msg: "", sev: "success" });
+  const [failureEntries, setFailureEntries] = useState<TaskFailure[]>([]);
+  const [failureDialogOpen, setFailureDialogOpen] = useState(false);
+  const [failureTaskId, setFailureTaskId] = useState<string | null>(null);
+  const [lastSeenScanTaskId, setLastSeenScanTaskId] = useState<string | null>(null);
   // Track when each task last made progress to enable an indeterminate fallback
   const lastProgressRef = useRef<Record<string, { processed: number; changedAt: number }>>({});
+
+  const loadFailures = useCallback(
+    async (
+      taskId: string,
+      {
+        openDialog = true,
+        notifyEmpty = true,
+      }: { openDialog?: boolean; notifyEmpty?: boolean } = {}
+    ) => {
+      try {
+        const entries = await getTaskFailures(taskId);
+        if (!entries.length) {
+          if (notifyEmpty) {
+            setSnack({ open: true, msg: "No failures recorded for this task.", sev: "success" });
+          }
+          return entries;
+        }
+        setFailureEntries(entries);
+        setFailureTaskId(taskId);
+        if (openDialog) {
+          setFailureDialogOpen(true);
+        }
+        return entries;
+      } catch (err) {
+        console.error("Failed to load failures for task", taskId, err);
+        setSnack({ open: true, msg: "Failed to load failure details", sev: "error" });
+        return [] as TaskFailure[];
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     const now = Date.now();
@@ -65,6 +113,29 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
 
     lastProgressRef.current = nextMap;
   }, [activeTasks]);
+
+  useEffect(() => {
+    const completedScan = lastCompletedTasks.scan;
+    if (!completedScan || completedScan.id === lastSeenScanTaskId) {
+      return;
+    }
+    setLastSeenScanTaskId(completedScan.id);
+    loadFailures(completedScan.id, { notifyEmpty: false }).then((entries) => {
+      if (!entries.length) {
+        return;
+      }
+      setSnack({
+        open: true,
+        msg: `Scan skipped ${entries.length} file${entries.length === 1 ? "" : "s"}.`,
+        sev: "error",
+        action: (
+          <Button color="inherit" size="small" onClick={() => setFailureDialogOpen(true)}>
+            View
+          </Button>
+        ),
+      });
+    });
+  }, [lastCompletedTasks, lastSeenScanTaskId, loadFailures]);
 
   const startTask = async (type: TaskType) => {
     try {
@@ -98,10 +169,27 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
         onClose={() => setSnack({ ...snack, open: false })}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       >
-        <Alert severity={snack.sev} onClose={() => setSnack({ ...snack, open: false })}>
+        <Alert
+          severity={snack.sev}
+          onClose={() => setSnack({ ...snack, open: false })}
+          action={snack.action}
+        >
           {snack.msg}
         </Alert>
       </Snackbar>
+      {failureEntries.length > 0 && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => setFailureDialogOpen(true)}>
+              View
+            </Button>
+          }
+        >
+          Last scan skipped {failureEntries.length} file{failureEntries.length === 1 ? "" : "s"}.
+        </Alert>
+      )}
       {/* Active Tasks Section */}
       {activeTasks.length > 0 && (
         <Stack spacing={2} mb={2}>
@@ -121,6 +209,7 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
             // switch to an indeterminate bar to show activity.
             const showIndeterminate =
               t.status === "running" && (t.total === 0 || staleForMs > 8000);
+            const failureCount = t.failure_count ?? 0;
             return (
               <Box key={t.id}>
                 <Box
@@ -147,6 +236,25 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
                     "& .MuiLinearProgress-bar": { bgcolor: "primary.main" },
                   }}
                 />
+                {failureCount > 0 && (
+                  <Box
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                    mt={0.5}
+                  >
+                    <Typography variant="caption" color="error.main">
+                      {failureCount} file{failureCount === 1 ? "" : "s"} failed
+                    </Typography>
+                    <Button
+                      size="small"
+                      onClick={() => loadFailures(t.id, { notifyEmpty: false })}
+                      sx={{ ml: 1 }}
+                    >
+                      View
+                    </Button>
+                  </Box>
+                )}
                 {t.status === "running" && (
                   <Typography variant="caption" color="text.secondary">
                     {t.current_step ? `Step: ${t.current_step}` : showIndeterminate ? "Working..." : ""}
@@ -227,6 +335,42 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
           </ListItemButton>
         </ListItem>
       </List>
+      <Dialog
+        open={failureDialogOpen}
+        onClose={() => setFailureDialogOpen(false)}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>
+          Skipped Files ({failureEntries.length})
+        </DialogTitle>
+        <DialogContent dividers>
+          {failureEntries.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              No failures recorded.
+            </Typography>
+          ) : (
+            <List dense disablePadding>
+              {failureEntries.map((entry, idx) => (
+                <ListItem key={`${entry.path}-${idx}`} alignItems="flex-start" sx={{ py: 0.5 }}>
+                  <ListItemText
+                    primary={entry.path}
+                    secondary={entry.reason}
+                    primaryTypographyProps={{ variant: "body2" }}
+                    secondaryTypographyProps={{ variant: "caption", color: "text.secondary" }}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ justifyContent: "space-between" }}>
+          <Typography variant="caption" color="text.secondary">
+            {failureTaskId ? `Task: ${failureTaskId}` : ""}
+          </Typography>
+          <Button onClick={() => setFailureDialogOpen(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

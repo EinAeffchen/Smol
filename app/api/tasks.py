@@ -1,6 +1,6 @@
 import os
 import time
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -9,6 +9,7 @@ from typing import Literal
 import hdbscan
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from pydantic import BaseModel
 from PIL import Image, UnidentifiedImageError
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError, OperationalError
@@ -49,6 +50,37 @@ router = APIRouter()
 # In-memory progress map for transient, richer status (not persisted)
 # Maps task_id -> {"current_item": str|None, "current_step": str|None}
 _task_progress: dict[str, dict[str, str | None]] = {}
+
+
+class TaskFailure(BaseModel):
+    path: str
+    reason: str
+
+
+_MAX_TRACKED_FAILURE_TASKS = 5
+_MAX_FAILURES_PER_TASK = 500
+_task_failures: OrderedDict[str, list[TaskFailure]] = OrderedDict()
+
+
+def _record_task_failure(task_id: str, path: os.PathLike[str] | str, reason: str) -> None:
+    entry = TaskFailure(path=os.fspath(path), reason=reason)
+    failures = _task_failures.setdefault(task_id, [])
+    failures.append(entry)
+    _task_failures.move_to_end(task_id, last=True)
+    # Keep only a small window of recent tasks and limit per-task growth
+    while len(_task_failures) > _MAX_TRACKED_FAILURE_TASKS:
+        _task_failures.popitem(last=False)
+    if len(failures) > _MAX_FAILURES_PER_TASK:
+        failures.pop(0)
+    _set_task_progress(task_id, current_item=entry.path, current_step="error")
+
+
+def _get_task_failures(task_id: str) -> list[TaskFailure]:
+    return list(_task_failures.get(task_id, []))
+
+
+def _get_failure_count(task_id: str) -> int:
+    return len(_task_failures.get(task_id, []))
 
 
 def _set_task_progress(
@@ -1209,6 +1241,7 @@ def list_active_tasks(session: Session = Depends(get_session)):
             base = t.model_dump()
             extra = _task_progress.get(t.id, {})
             base.update(extra)
+            base["failure_count"] = _get_failure_count(t.id)
             result.append(ProcessingTaskRead(**base))
         return result
     except OperationalError:
@@ -1217,13 +1250,33 @@ def list_active_tasks(session: Session = Depends(get_session)):
 
 
 @router.get(
-    "/{task_id}", response_model=ProcessingTask, summary="Get task status"
+    "/{task_id}/failures",
+    response_model=list[TaskFailure],
+    summary="List captured errors for a task",
+)
+def get_task_failures_endpoint(
+    task_id: str, session: Session = Depends(get_session)
+):
+    task = session.get(ProcessingTask, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    return _get_task_failures(task_id)
+
+
+@router.get(
+    "/{task_id}",
+    response_model=ProcessingTaskRead,
+    summary="Get task status",
 )
 def get_task(task_id: str, session: Session = Depends(get_session)):
     task = session.get(ProcessingTask, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    return task
+    base = task.model_dump()
+    transient = _task_progress.get(task_id, {})
+    base.update(transient)
+    base["failure_count"] = _get_failure_count(task_id)
+    return ProcessingTaskRead(**base)
 
 
 # ─── 4) SCAN FOLDER  ─────────────────────────────────────────────
@@ -1594,9 +1647,15 @@ def _run_scan(task_id: str):
                             batch_since_commit = 0
                         break
 
-                media_obj = process_file(filepath)
+                media_obj, process_error = process_file(filepath)
                 if not media_obj:
-                    logger.info("Could not process file!")
+                    reason = process_error or "Failed to extract media metadata."
+                    logger.warning(
+                        "Skipping %s due to processing error: %s",
+                        filepath,
+                        reason,
+                    )
+                    _record_task_failure(task_id, filepath, reason)
                     # Could not probe/process – do not count as processed
                     continue
 
@@ -1610,8 +1669,15 @@ def _run_scan(task_id: str):
                     sess.rollback()
                     continue
 
-                thumb = generate_thumbnail(media_obj)
+                thumb, thumb_error = generate_thumbnail(media_obj)
                 if not thumb:
+                    reason = thumb_error or "Failed to generate thumbnail."
+                    logger.warning(
+                        "Thumbnail generation failed for %s: %s",
+                        filepath,
+                        reason,
+                    )
+                    _record_task_failure(task_id, filepath, reason)
                     # Remove the record if we failed to thumbnail
                     try:
                         sess.delete(media_obj)

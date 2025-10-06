@@ -195,6 +195,7 @@ class ProcessingTask(SQLModel, table=True):
 class ProcessingTaskRead(ProcessingTask, table=False):
     current_item: str | None = None
     current_step: str | None = None
+    failure_count: int | None = None
 
 
 class PersonSimilarity(SQLModel, table=True):

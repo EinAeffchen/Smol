@@ -92,6 +92,12 @@ export interface Task {
   processed: number;
   current_item?: string;
   current_step?: string;
+  failure_count?: number;
+}
+
+export interface TaskFailure {
+  path: string;
+  reason: string;
 }
 
 export interface SimilarPersonWithDetails {

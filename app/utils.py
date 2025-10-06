@@ -173,68 +173,78 @@ def _ffprobe_json(path: Path, timeout: int = 15) -> dict | None:
         return None
 
 
-def process_file(filepath: Path) -> Media | None:
+def process_file(filepath: Path) -> tuple[Media | None, str | None]:
     """Reads metadata from the file and prepares a Media record.
 
-    Adds timeouts to external probing to avoid hangs.
+    Adds timeouts to external probing to avoid hangs and returns a tuple of
+    (Media | None, error message | None).
     """
-    size = os.path.getsize(filepath)
-    suffix = filepath.suffix.lower()
-
-    duration: float | None = None
-    width: int | None = None
-    height: int | None = None
-
-    if suffix in settings.scan.VIDEO_SUFFIXES:
-        # Prefer ffprobe with a timeout for videos
-        probe = _ffprobe_json(filepath, timeout=15)
-        if probe:
-            try:
-                duration = float(probe.get("format", {}).get("duration", 0))
-            except Exception:
-                duration = 0.0
-            try:
-                vs = [
-                    s
-                    for s in probe.get("streams", [])
-                    if s.get("codec_type") == "video"
-                ]
-                if vs:
-                    width = int(vs[0].get("width") or 0) or None
-                    height = int(vs[0].get("height") or 0) or None
-            except Exception:
-                width = width or None
-                height = height or None
-        else:
-            logger.warning("Skipping video probe metadata for %s", filepath)
-    else:
-        # Images: avoid ffprobe entirely; use PIL for dimensions if possible
+    try:
         try:
-            with Image.open(filepath) as im:
-                width, height = im.size
-        except UnidentifiedImageError:
-            logger.warning("Skipping %s, not an image!", filepath)
-        except OSError as e:
-            logger.warning("Image %s could not be opened: %s", filepath, e)
+            size = os.path.getsize(filepath)
+        except OSError as exc:
+            logger.warning("Could not stat %s: %s", filepath, exc)
+            return None, f"Unable to read file information: {exc}"
 
-    media = Media(
-        path=str(filepath),
-        filename=filepath.name,
-        size=size,
-        duration=duration,
-        width=width,
-        height=height,
-        faces_extracted=False,
-        embeddings_created=False,
-        created_at=get_image_taken_date(img_path=filepath),
-        embedding=None,
-        phash=None,
-    )
-    if media.duration is None:
-        media.phash = generate_perceptual_hash(media, type="image")
-    else:
-        media.phash = generate_perceptual_hash(media, type="video")
-    return media
+        suffix = filepath.suffix.lower()
+
+        duration: float | None = None
+        width: int | None = None
+        height: int | None = None
+
+        if suffix in settings.scan.VIDEO_SUFFIXES:
+            # Prefer ffprobe with a timeout for videos
+            probe = _ffprobe_json(filepath, timeout=15)
+            if probe:
+                try:
+                    duration = float(probe.get("format", {}).get("duration", 0))
+                except Exception:
+                    duration = 0.0
+                try:
+                    vs = [
+                        s
+                        for s in probe.get("streams", [])
+                        if s.get("codec_type") == "video"
+                    ]
+                    if vs:
+                        width = int(vs[0].get("width") or 0) or None
+                        height = int(vs[0].get("height") or 0) or None
+                except Exception:
+                    width = width or None
+                    height = height or None
+            else:
+                logger.warning("Skipping video probe metadata for %s", filepath)
+        else:
+            # Images: avoid ffprobe entirely; use PIL for dimensions if possible
+            try:
+                with Image.open(filepath) as im:
+                    width, height = im.size
+            except UnidentifiedImageError:
+                logger.warning("Skipping %s, not an image!", filepath)
+            except OSError as exc:
+                logger.warning("Image %s could not be opened: %s", filepath, exc)
+
+        media = Media(
+            path=str(filepath),
+            filename=filepath.name,
+            size=size,
+            duration=duration,
+            width=width,
+            height=height,
+            faces_extracted=False,
+            embeddings_created=False,
+            created_at=get_image_taken_date(img_path=filepath),
+            embedding=None,
+            phash=None,
+        )
+        if media.duration is None:
+            media.phash = generate_perceptual_hash(media, type="image")
+        else:
+            media.phash = generate_perceptual_hash(media, type="video")
+        return media, None
+    except Exception as exc:  # pragma: no cover - defensive safeguard
+        logger.exception("Failed to process file %s: %s", filepath, exc)
+        return None, str(exc)
 
 
 def to_posix_str(s: Path) -> str:
@@ -424,7 +434,7 @@ def generate_perceptual_hash(
         )
 
 
-def generate_thumbnail(media: Media) -> str | None:
+def generate_thumbnail(media: Media) -> tuple[str | None, str | None]:
     thumb_folder = get_thumb_folder(settings.general.thumb_dir / "media")
     thumb_path = thumb_folder / f"{media.id}.jpg"
     filepath = Path(media.path)
@@ -458,33 +468,53 @@ def generate_thumbnail(media: Media) -> str | None:
             logger.error(
                 "ffmpeg timed out generating thumbnail for %s (20s)", filepath
             )
-            return None
+            return None, "ffmpeg timed out while generating thumbnail"
         except subprocess.CalledProcessError as e:
             logger.error(
                 "ffmpeg failed to generate thumbnail for %s: %s", filepath, e
             )
-            return None
+            return None, f"ffmpeg failed to generate thumbnail: {e}"
+        except Exception as exc:  # pragma: no cover - defensive safeguard
+            logger.exception(
+                "Unexpected ffmpeg error while thumbnailing %s: %s",
+                filepath,
+                exc,
+            )
+            return None, f"Unexpected ffmpeg error: {exc}"
+        if not thumb_path.exists():
+            return None, "ffmpeg did not produce a thumbnail file"
     else:
         try:
             fix_image_rotation(filepath)
-            img = Image.open(filepath)
+            with Image.open(filepath) as img:
+                img.thumbnail((360, -1))
+                try:
+                    img.save(thumb_path, format="JPEG")
+                except OSError as exc:
+                    try:
+                        img.convert("RGB").save(thumb_path, format="JPEG")
+                    except OSError as rgb_exc:
+                        logger.warning(
+                            "Failed to save thumbnail for %s: %s",
+                            filepath,
+                            rgb_exc,
+                        )
+                        return None, f"Unable to save thumbnail: {rgb_exc}"
         except UnidentifiedImageError:
             logger.warning("Couldn't open %s", filepath)
-            return
-        except OSError as e:
+            return None, "File is not a valid image"
+        except OSError as exc:
             logger.warning(
-                "Failed to process image %s, because of: %s", filepath, e
+                "Failed to process image %s, because of: %s", filepath, exc
             )
-            return
-        img.thumbnail((360, -1))
-        try:
-            img.save(thumb_path, format="JPEG")
-        except OSError:
-            img = img.convert("RGB")
-            img.save(thumb_path, format="JPEG")
+            return None, f"Unable to read image: {exc}"
 
-        assert thumb_path.is_file()
-    return to_posix_str(thumb_path.relative_to(settings.general.thumb_dir))
+        if not thumb_path.is_file():
+            return None, "Thumbnail file was not created"
+    return (
+        to_posix_str(thumb_path.relative_to(settings.general.thumb_dir)),
+        None,
+    )
 
 
 def get_person_embedding(

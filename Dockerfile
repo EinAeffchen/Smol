@@ -38,7 +38,6 @@ COPY --from=uv-installer /opt/uv/uv-x86_64-unknown-linux-gnu/uv /usr/local/bin/u
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    PORT=8123 \
     DATA_DIR=/app/data
 
 # Further ENV VARS for application
