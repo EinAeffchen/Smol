@@ -9,8 +9,8 @@ from typing import Literal
 import hdbscan
 import numpy as np
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from pydantic import BaseModel
 from PIL import Image, UnidentifiedImageError
+from pydantic import BaseModel
 from sqlalchemy import func, or_
 from sqlalchemy.exc import IntegrityError, OperationalError
 from sqlmodel import Session, delete, select, text, update
@@ -28,8 +28,10 @@ from app.models import (
     Media,
     Person,
     PersonSimilarity,
+    PersonTagLink,
     ProcessingTask,
     ProcessingTaskRead,
+    TimelineEvent,
 )
 from app.processor_registry import load_processors, processors
 from app.processors.duplicates import DuplicateProcessor
@@ -62,7 +64,9 @@ _MAX_FAILURES_PER_TASK = 500
 _task_failures: OrderedDict[str, list[TaskFailure]] = OrderedDict()
 
 
-def _record_task_failure(task_id: str, path: os.PathLike[str] | str, reason: str) -> None:
+def _record_task_failure(
+    task_id: str, path: os.PathLike[str] | str, reason: str
+) -> None:
     entry = TaskFailure(path=os.fspath(path), reason=reason)
     failures = _task_failures.setdefault(task_id, [])
     failures.append(entry)
@@ -354,7 +358,9 @@ def _get_or_extract_scenes(
     return scenes
 
 
-def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
+def _apply_processors(
+    media: Media, scenes: list, session: Session, task_id: str | None = None
+) -> bool:
     """
     Applies all active processors to the media and its scenes.
     Returns True if all processors succeeded, False otherwise.
@@ -367,12 +373,21 @@ def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
         media.faces_extracted = True
         media.ran_auto_tagging = True
         media.embeddings_created = True
+        session.add(media)
         return True
 
+    success = True
+    current_item = os.fspath(media.path) if media.path else None
     for proc in processors:
         if not proc.active:
             continue
         try:
+            if task_id and current_item:
+                _set_task_progress(
+                    task_id,
+                    current_item=current_item,
+                    current_step=proc.name,
+                )
             if not proc.process(media, session, scenes=scenes):
                 logger.error(
                     "Processor '%s' failed for media %s.",
@@ -391,8 +406,8 @@ def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
                 media.ran_auto_tagging = True
                 media.embeddings_created = True
                 session.add(media)
-                safe_commit(session)
-                return True
+                success = False
+                break
         except Exception as e:
             logger.exception(
                 "Processor '%s' raised an exception on media %s: %s",
@@ -410,13 +425,22 @@ def _apply_processors(media: Media, scenes: list, session: Session) -> bool:
             media.ran_auto_tagging = True
             media.embeddings_created = True
             session.add(media)
-            safe_commit(session)
-            return True
-    return True
+            success = False
+            break
+    return success
 
 
 def _run_media_processing(task_id: str):
-    BATCH_SIZE = 100
+    configured_batch_size = getattr(
+        settings.processors, "media_batch_size", None
+    )
+    try:
+        batch_size = int(configured_batch_size or 0)
+    except (TypeError, ValueError):
+        batch_size = 0
+    if batch_size <= 0:
+        batch_size = 100
+
     with Session(db.engine) as session:
         task = session.get(ProcessingTask, task_id)
         if not task:
@@ -481,7 +505,7 @@ def _run_media_processing(task_id: str):
                     break
 
                 medias_batch = _fetch_media_batch_to_process(
-                    session, BATCH_SIZE
+                    session, batch_size
                 )
                 if not medias_batch:
                     logger.info("No more media to process. Finishing.")
@@ -492,6 +516,9 @@ def _run_media_processing(task_id: str):
                     len(medias_batch),
                 )
 
+                batch_dirty = False
+                cancelled_mid_batch = False
+
                 for media in medias_batch:
                     # Check for cancellation before starting potentially heavy work
                     session.refresh(
@@ -499,20 +526,23 @@ def _run_media_processing(task_id: str):
                     )  # check cancel
                     if task.status == "cancelled":
                         logger.info("Task cancelled mid-batch. Stopping.")
+                        cancelled_mid_batch = True
                         break
 
-                    if not Path(media.path).exists():
+                    media_path = Path(media.path) if media.path else None
+
+                    if media_path is None or not media_path.exists():
                         if not media.missing_since:
                             media.missing_since = datetime.now(timezone.utc)
                             session.add(media)
-                            safe_commit(session)
-                            continue
-                    else:
-                        if media.missing_since:
-                            media.missing_since = None
-                            media.missing_confirmed = False
-                            session.add(media)
-                            safe_commit(session)
+                            batch_dirty = True
+                        continue
+                    if media.missing_since:
+                        media.missing_since = None
+                        media.missing_confirmed = False
+                        session.add(media)
+                        batch_dirty = True
+
                     logger.info("Processing: %s", media.filename)
                     _set_task_progress(
                         task_id,
@@ -525,53 +555,27 @@ def _run_media_processing(task_id: str):
                         media.filename,
                         len(scenes) if scenes is not None else 0,
                     )
-                    if not scenes and not Path(media.path).exists():
-                        # If scenes are empty because the file was deleted, commit and continue
-                        safe_commit(session)
+                    if not scenes and (
+                        media_path is None or not media_path.exists()
+                    ):
+                        batch_dirty = True
+                        _set_task_progress(task_id, current_step="idle")
                         continue
 
-                    # Execute each processor while updating transient step
-                    all_processors_succeeded = True
-                    for proc in processors:
-                        if not proc.active:
-                            continue
-                        try:
-                            _set_task_progress(
-                                task_id,
-                                current_item=os.fspath(media.path),
-                                current_step=proc.name,
-                            )
-                            ok = proc.process(media, session, scenes=scenes)
-                            if ok is False:
-                                all_processors_succeeded = False
-                                break
-                        except Exception:
-                            # Let existing helper handle marking as processed + logging
-                            logger.exception(
-                                "Processor '%s' failed for %s",
-                                proc.name,
-                                media.filename,
-                            )
-                            all_processors_succeeded = False
-                            # Fallback to previous behavior to avoid re-try loops
-                            media.faces_extracted = True
-                            media.ran_auto_tagging = True
-                            media.embeddings_created = True
-                            session.add(media)
-                            safe_commit(session)
-                            break
-
-                    if all_processors_succeeded:
-                        session.add(media)  # Add the updated media object
+                    _apply_processors(media, scenes, session, task_id=task_id)
+                    session.add(media)
 
                     task.processed += 1
+                    batch_dirty = True
                     session.add(task)
-                    # Commit after each media item is fully processed
-                    safe_commit(session)
                     # Reset per-item step to a neutral state between items
                     _set_task_progress(task_id, current_step="idle")
 
-                # end for media in batch
+                if batch_dirty:
+                    safe_commit(session)
+
+                if cancelled_mid_batch:
+                    break
 
             # Allow processors to unload if they need, but keep instances warm
             for proc in processors:
@@ -582,6 +586,8 @@ def _run_media_processing(task_id: str):
 
             # Finalize Task
             session.refresh(task)  # Get final status before updating
+            remaining = _count_media_to_process(session)
+            task.total = task.processed + remaining
             task.status = (
                 "completed" if task.status != "cancelled" else "cancelled"
             )
@@ -589,9 +595,6 @@ def _run_media_processing(task_id: str):
             session.add(task)
             safe_commit(session)
             _clear_task_progress(task_id)
-
-
-# ─── 2) CLUSTER PERSONS ────────────────────────────────────────────────────────
 
 
 @router.post(
@@ -772,6 +775,202 @@ def _group_faces_by_cluster(
             clusters[label][0].append(face)
             clusters[label][1].append(emb)
     return clusters
+
+
+def _rebuild_person_embedding(session: Session, person_id: int) -> None:
+    """Recompute and store the centroid embedding for the given person."""
+    rows = session.exec(
+        text(
+            "SELECT embedding FROM face_embeddings WHERE person_id = :pid"
+        ).bindparams(pid=person_id)
+    ).all()
+    vectors: list[np.ndarray] = []
+    for (stored,) in rows:
+        vec = vector_from_stored(stored)
+        if vec is None or vec.size == 0:
+            continue
+        norm = float(np.linalg.norm(vec))
+        if not np.isfinite(norm) or norm == 0.0:
+            continue
+        vectors.append((vec / norm).astype(np.float32, copy=False))
+
+    session.exec(
+        text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
+            pid=person_id
+        )
+    )
+
+    if not vectors:
+        # No embeddings left; drop the person entirely.
+        person = session.get(Person, person_id)
+        if person:
+            session.delete(person)
+        return
+
+    centroid = np.vstack(vectors).mean(axis=0)
+    norm = float(np.linalg.norm(centroid))
+    if norm > 0.0 and np.isfinite(norm):
+        centroid = (centroid / norm).astype(np.float32, copy=False)
+    else:
+        centroid = centroid.astype(np.float32, copy=False)
+
+    blob = vector_to_blob(centroid)
+    if blob is not None:
+        session.exec(
+            text(
+                """
+                INSERT INTO person_embeddings(person_id, embedding)
+                VALUES (:pid, :emb)
+                """
+            ).bindparams(pid=person_id, emb=blob)
+        )
+
+
+def _merge_person_pair(session: Session, id_a: int, id_b: int) -> int | None:
+    """Merge two persons and return the identifier that was removed."""
+    if id_a == id_b:
+        return None
+
+    person_a = session.get(Person, id_a)
+    person_b = session.get(Person, id_b)
+    if not person_a or not person_b:
+        return None
+
+    count_a = int(person_a.appearance_count or 0)
+    count_b = int(person_b.appearance_count or 0)
+    if count_b > count_a:
+        keep, drop = person_b, person_a
+    else:
+        keep, drop = person_a, person_b
+
+    keep_id = int(keep.id)
+    drop_id = int(drop.id)
+    if keep_id == drop_id:
+        return None
+
+    # Reassign faces and embeddings
+    session.exec(
+        update(Face)
+        .where(Face.person_id == drop_id)
+        .values(person_id=keep_id)
+    )
+    session.exec(
+        text(
+            "UPDATE face_embeddings SET person_id = :keep WHERE person_id = :drop"
+        ).bindparams(keep=keep_id, drop=drop_id)
+    )
+
+    # Remove duplicate similarity entries referencing the dropped person
+    session.exec(
+        delete(PersonSimilarity).where(
+            or_(
+                PersonSimilarity.person_id == drop_id,
+                PersonSimilarity.match_person_id == drop_id,
+            )
+        )
+    )
+
+    session.exec(
+        text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
+            pid=drop_id
+        )
+    )
+    session.delete(drop)
+
+    recalculate_person_appearance_counts(session, [keep_id])
+    _rebuild_person_embedding(session, keep_id)
+    safe_commit(session)
+    return drop_id
+
+
+def _merge_similar_persons(task_id: str) -> int:
+    """Merge highly similar persons produced across clustering batches."""
+    try:
+        cosine_threshold = float(
+            getattr(
+                settings.face_recognition,
+                "person_merge_cosine_threshold",
+                0.0,
+            )
+        )
+    except (TypeError, ValueError):
+        return 0
+
+    if cosine_threshold <= 0.0:
+        return 0
+
+    cosine_threshold = min(cosine_threshold, 0.999999)
+    l2_threshold = float(np.sqrt(max(0.0, 2.0 * (1.0 - cosine_threshold))))
+
+    total_merged = 0
+
+    while True:
+        merged_in_pass = 0
+        with Session(db.engine) as session:
+            task = session.get(ProcessingTask, task_id)
+            if task and task.status == "cancelled":
+                break
+
+            rows = session.exec(
+                text("SELECT person_id, embedding FROM person_embeddings")
+            ).all()
+
+            restart_pass = False
+            for person_id, stored in rows:
+                if person_id is None:
+                    continue
+
+                vec = vector_from_stored(stored)
+                if vec is None or vec.size == 0:
+                    continue
+                norm = float(np.linalg.norm(vec))
+                if not np.isfinite(norm) or norm == 0.0:
+                    continue
+                normed_vec = (vec / norm).astype(np.float32, copy=False)
+                blob = vector_to_blob(normed_vec)
+                if blob is None:
+                    continue
+
+                candidates = session.exec(
+                    text(
+                        """
+                        SELECT person_id, distance
+                          FROM person_embeddings
+                         WHERE person_id != :pid
+                           AND embedding MATCH :vec
+                         ORDER BY distance
+                         LIMIT 5
+                        """
+                    ).bindparams(pid=person_id, vec=blob)
+                ).all()
+
+                for candidate_id, distance in candidates:
+                    if candidate_id is None or candidate_id == person_id:
+                        continue
+                    if distance is None or float(distance) > l2_threshold:
+                        continue
+
+                    removed = _merge_person_pair(
+                        session, int(person_id), int(candidate_id)
+                    )
+                    if removed is not None:
+                        total_merged += 1
+                        merged_in_pass += 1
+                        restart_pass = True
+                        break
+
+                if restart_pass:
+                    break
+
+        if merged_in_pass == 0:
+            break
+
+    if total_merged:
+        logger.info(
+            "Merged %d person clusters after initial batching pass",
+            total_merged,
+        )
+    return total_merged
 
 
 def _filter_embeddings_by_id(
@@ -1187,6 +1386,8 @@ def run_person_clustering(task_id: str):
             ):
                 break
 
+        _merge_similar_persons(task_id)
+
         with Session(db.engine) as session:
             task = session.get(ProcessingTask, task_id)
             logger.info("FINISHED CLUSTERING!")
@@ -1378,18 +1579,34 @@ def reset_processing(session: Session = Depends(get_session)):
             detail="Not allowed in settings.general.read_only mode.",
         )
     with heavy_writer(name="reset_processing"):
+        face_rows = list(session.exec(select(Face.id, Face.thumbnail_path)))
+
         session.exec(update(Media).values(faces_extracted=False))
         session.exec(update(Media).values(embeddings_created=False))
+        session.exec(update(Face).values(person_id=None))
+
+        session.exec(delete(PersonSimilarity))
+        session.exec(delete(PersonTagLink))
+        session.exec(delete(TimelineEvent))
+        session.exec(delete(Person))
+
         session.exec(text("DELETE FROM face_embeddings"))
         session.exec(text("DELETE FROM media_embeddings"))
-        for face in tqdm(session.exec(select(Face)).all()):
-            path = face.thumbnail_path
-            if path:
-                path = Path(path)
-            if path and path.exists():
-                path.unlink()
-            session.exec(delete(Face).where(Face.id == face.id))
+        session.exec(delete(Face))
         safe_commit(session)
+
+        for _, thumb_path in face_rows:
+            if not thumb_path:
+                continue
+            try:
+                path_obj = Path(thumb_path)
+            except Exception:
+                continue
+            if path_obj.exists():
+                try:
+                    path_obj.unlink()
+                except Exception:
+                    logger.debug("Failed to remove face thumbnail %s", path_obj)
     return "OK"
 
 
@@ -1649,7 +1866,9 @@ def _run_scan(task_id: str):
 
                 media_obj, process_error = process_file(filepath)
                 if not media_obj:
-                    reason = process_error or "Failed to extract media metadata."
+                    reason = (
+                        process_error or "Failed to extract media metadata."
+                    )
                     logger.warning(
                         "Skipping %s due to processing error: %s",
                         filepath,

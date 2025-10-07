@@ -436,8 +436,9 @@ FACE_RECOGNITION_PRESETS: dict[
         "person_min_face_count": 3,
         "person_min_media_count": 2,
         "person_cluster_max_l2_radius": 0.7,
+        "person_merge_cosine_threshold": 0.96,
         "cluster_batch_size": 15000,
-        "hdbscan_min_cluster_size": 7,
+        "hdbscan_min_cluster_size": 12,
         "hdbscan_min_samples": 12,
         "hdbscan_cluster_selection_method": "leaf",
         "hdbscan_cluster_selection_epsilon": 0.07,
@@ -452,8 +453,9 @@ FACE_RECOGNITION_PRESETS: dict[
         "person_min_face_count": 2,
         "person_min_media_count": 2,
         "person_cluster_max_l2_radius": 0.85,
+        "person_merge_cosine_threshold": 0.92,
         "cluster_batch_size": 15000,
-        "hdbscan_min_cluster_size": 6,
+        "hdbscan_min_cluster_size": 10,
         "hdbscan_min_samples": 10,
         "hdbscan_cluster_selection_method": "leaf",
         "hdbscan_cluster_selection_epsilon": 0.10,
@@ -468,8 +470,9 @@ FACE_RECOGNITION_PRESETS: dict[
         "person_min_face_count": 2,
         "person_min_media_count": 2,
         "person_cluster_max_l2_radius": 1,
+        "person_merge_cosine_threshold": 0.88,
         "cluster_batch_size": 15000,
-        "hdbscan_min_cluster_size": 4,
+        "hdbscan_min_cluster_size": 8,
         "hdbscan_min_samples": 6,
         "hdbscan_cluster_selection_method": "leaf",
         "hdbscan_cluster_selection_epsilon": 0.13,
@@ -499,6 +502,8 @@ class FaceRecognitionSettings(BaseModel):
     # enforce intra-cluster compactness when forming a new person
     # maximum allowed L2 radius around centroid (normalized vectors)
     person_cluster_max_l2_radius: float = 0.65
+    # merge previously created persons when their embeddings are extremely similar
+    person_merge_cosine_threshold: float = 0.9
     # reduce if ram is an issue, the higher the more accurate the clustering.
     cluster_batch_size: int = 10000
     # HDBSCAN tuning to reduce over-merged clusters (e.g., side profiles)
@@ -574,6 +579,8 @@ class ContentProcessorSettings(BaseModel):
     # image embedding creator active. Needed for all AI related features
     # if you want to deactivate all smart features, set this to False
     image_embedding_processor_active: bool = True
+    # number of media rows processed per batch when running the heavy pipeline
+    media_batch_size: int = 125
 
 
 class AppSettings(BaseModel):

@@ -202,9 +202,7 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
           {snack.msg}
         </Alert>
       </Snackbar>
-      <Box
-        sx={{ display: "flex", flexDirection: "column", height: "100%" }}
-      >
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
         <Box sx={{ flexGrow: 1 }}>
           {failureEntries.length > 0 && (
             <Alert
@@ -244,7 +242,8 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
                 // If we haven't seen progress in a bit (e.g., long video/scenes/model load),
                 // switch to an indeterminate bar to show activity.
                 const showIndeterminate =
-                  t.status === "running" && (t.total === 0 || staleForMs > 8000);
+                  t.status === "running" &&
+                  (t.total === 0 || staleForMs > 8000);
                 const failureCount = t.failure_count ?? 0;
                 return (
                   <Box key={t.id}>
@@ -285,7 +284,8 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
                         mt={0.5}
                       >
                         <Typography variant="caption" color="error.main">
-                          {failureCount} file{failureCount === 1 ? "" : "s"} failed
+                          {failureCount} file{failureCount === 1 ? "" : "s"}{" "}
+                          failed
                         </Typography>
                         <Button
                           size="small"
@@ -359,17 +359,19 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
                 <ListItemText primary="Process New Media" />
               </ListItemButton>
             </ListItem>
-            <ListItem disablePadding>
-              <ListItemButton
-                onClick={() => startTask("cluster_persons")}
-                disabled={isTaskRunning("cluster_persons")}
-              >
-                <ListItemIcon>
-                  <Diversity3Icon />
-                </ListItemIcon>
-                <ListItemText primary="Cluster All Persons" />
-              </ListItemButton>
-            </ListItem>
+            {config.ENABLE_PEOPLE && (
+              <ListItem disablePadding>
+                <ListItemButton
+                  onClick={() => startTask("cluster_persons")}
+                  disabled={isTaskRunning("cluster_persons")}
+                >
+                  <ListItemIcon>
+                    <Diversity3Icon />
+                  </ListItemIcon>
+                  <ListItemText primary="Cluster All Persons" />
+                </ListItemButton>
+              </ListItem>
+            )}
             <ListItem disablePadding>
               <ListItemButton
                 onClick={() => startTask("find_duplicates")}

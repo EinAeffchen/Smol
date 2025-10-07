@@ -213,7 +213,7 @@ export function Header() {
     "/configuration",
     "/missing",
   ];
-  const pathsToExcludeInPeopleDisabled: string[] = ["/people"];
+  const pathsToExcludeInPeopleDisabled: string[] = ["/people", "/orphanfaces"];
   const shouldHidePath = (path: string) =>
     (config.READ_ONLY && pathsToExcludeInReadOnly.includes(path)) ||
     (!config.ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path));

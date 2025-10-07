@@ -67,6 +67,7 @@ const facePresets: Record<
     person_min_face_count: 3,
     person_min_media_count: 2,
     person_cluster_max_l2_radius: 0.55,
+    person_merge_cosine_threshold: 0.96,
     cluster_batch_size: 8000,
     hdbscan_min_cluster_size: 7,
     hdbscan_min_samples: 12,
@@ -83,6 +84,7 @@ const facePresets: Record<
     person_min_face_count: 2,
     person_min_media_count: 2,
     person_cluster_max_l2_radius: 0.65,
+    person_merge_cosine_threshold: 0.92,
     cluster_batch_size: 10000,
     hdbscan_min_cluster_size: 6,
     hdbscan_min_samples: 10,
@@ -99,6 +101,7 @@ const facePresets: Record<
     person_min_face_count: 2,
     person_min_media_count: 2,
     person_cluster_max_l2_radius: 0.7,
+    person_merge_cosine_threshold: 0.88,
     cluster_batch_size: 12000,
     hdbscan_min_cluster_size: 4,
     hdbscan_min_samples: 6,
@@ -1428,6 +1431,25 @@ export default function ConfigurationPage() {
                     type="number"
                     inputProps={{ step: 0.01 }}
                     helperText="Max allowed L2 distance around centroid when forming a new person"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Person Merge Cosine Threshold"
+                    value={
+                      config.face_recognition.person_merge_cosine_threshold
+                    }
+                    onChange={(e) =>
+                      setFaceValue(
+                        "person_merge_cosine_threshold",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    inputProps={{ step: 0.01, min: 0, max: 1 }}
+                    helperText="After clustering, merge two persons when their centroid similarity exceeds this cosine threshold"
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>

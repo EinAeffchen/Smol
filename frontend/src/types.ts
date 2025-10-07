@@ -333,6 +333,7 @@ export interface AppConfig {
     person_min_face_count: number;
     person_min_media_count: number;
     person_cluster_max_l2_radius: number;
+    person_merge_cosine_threshold: number;
     cluster_batch_size: number;
     hdbscan_min_cluster_size: number;
     hdbscan_min_samples: number;
@@ -351,6 +352,7 @@ export interface AppConfig {
     exif_processor_active: boolean;
     face_processor_active: boolean;
     image_embedding_processor_active: boolean;
+    media_batch_size: number;
   };
 }
 
