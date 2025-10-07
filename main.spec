@@ -94,6 +94,7 @@ datas = [
     # Optionally bundle a recognition ONNX model if present in repo
     ('app/models/face_recognition_sface_2021dec.onnx', '.'),
     ('app/models/scrfd_2.5g_bnkps.onnx', '.'),
+    ('app/VERSION', 'app'),
 ]
 datas += collect_data_files('open_clip', include_py_files=True)
 

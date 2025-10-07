@@ -59,6 +59,18 @@ jobs:
           echo "OMOIDE_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "APP_VERSION_SAFE=${SAFE_VERSION}" >> $GITHUB_ENV
 
+      - name: Stamp packaged version file
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          version = os.environ["APP_VERSION"]
+          Path("app").mkdir(parents=True, exist_ok=True)
+          Path("app/VERSION").write_text(version, encoding="utf-8")
+          PY
+
       - name: Linux dependencies (Qt / WebEngine)
         if: runner.os == 'Linux'
         shell: bash
