@@ -56,6 +56,7 @@ jobs:
           fi
           SAFE_VERSION=$(printf '%s' "${VERSION}" | tr -c '[:alnum:]._-' '_')
           echo "APP_VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "OMOIDE_VERSION=${VERSION}" >> $GITHUB_ENV
           echo "APP_VERSION_SAFE=${SAFE_VERSION}" >> $GITHUB_ENV
 
       - name: Linux dependencies (Qt / WebEngine)
@@ -110,6 +111,7 @@ jobs:
       - name: Build binary with PyInstaller (macOS workaround)
         env:
           APP_VERSION: ${{ env.APP_VERSION }}
+          OMOIDE_VERSION: ${{ env.OMOIDE_VERSION }}
         if: runner.os == 'macOS'
         run: |
           export PYINSTALLER_STRIP_SYMLINKS=1
@@ -119,6 +121,7 @@ jobs:
         if: runner.os != 'macOS'
         env:
           APP_VERSION: ${{ env.APP_VERSION }}
+          OMOIDE_VERSION: ${{ env.OMOIDE_VERSION }}
         run: |
           pyinstaller --clean --noconfirm main.spec
 

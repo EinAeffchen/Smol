@@ -44,6 +44,12 @@ const config = {
     }
     return getBooleanEnv(window.runtimeConfig?.VITE_API_MEME_MODE);
   },
+  get APP_VERSION(): string {
+    if (import.meta.env.DEV) {
+      return import.meta.env.VITE_APP_VERSION ?? "dev";
+    }
+    return window.runtimeConfig?.APP_VERSION ?? "dev";
+  },
 };
 
 console.log(import.meta.env);

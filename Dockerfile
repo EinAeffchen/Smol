@@ -17,9 +17,11 @@ RUN npm run build
 
 # ---- Stage 2: Optimized Final Python Application ----
 FROM python:3.12-slim
+ARG APP_VERSION=0.0.0-dev
 ENV UV_PYTHON_DOWNLOADS=never \
     UV_LINK_MODE=copy \
-    UV_PROJECT_ENVIRONMENT=/usr/local 
+    UV_PROJECT_ENVIRONMENT=/usr/local \
+    OMOIDE_VERSION=${APP_VERSION}
 # Create a non-root user and group first
 RUN groupadd --gid 1000 appgroup && \
     useradd --uid 1000 --gid appgroup -s /bin/sh -m appuser

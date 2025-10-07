@@ -9,6 +9,8 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from app.version import get_app_version
+
 os.environ["QT_API"] = "pyside6"
 import socket
 
@@ -51,6 +53,7 @@ logging.getLogger("uvicorn.access").setLevel(logging.INFO)
 
 scheduler = AsyncIOScheduler()
 SCAN_JOB_ID = "scan_job"
+APP_VERSION = get_app_version()
 
 
 def scheduled_scan_job():
@@ -350,6 +353,11 @@ def resolve_path(path):
     return base_path / path
 
 
+@app.get("/api/version", tags=["meta"])
+async def get_version():
+    return {"version": APP_VERSION}
+
+
 @app.get("/{full_path:path}", include_in_schema=False)
 async def spa_catch_all(full_path: str):
     index_html_path = settings.general.static_dir / "index.html"
@@ -370,6 +378,7 @@ async def spa_catch_all(full_path: str):
             bool(settings.general.enable_people)
         ),
         "VITE_API_MEME_MODE": _bool_to_js(bool(settings.general.meme_mode)),
+        "APP_VERSION": APP_VERSION,
     }
     config_script = (
         f"<script>window.runtimeConfig = {json.dumps(config)};</script>"

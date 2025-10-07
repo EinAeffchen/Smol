@@ -2,7 +2,7 @@
 # .SHELLFLAGS := -ec
 
 ENV_FILE ?= omoide.env
-
+VERSION :=0.0.0
 DOCKER_TARGETS := docker-start docker-down push
 
 ifneq (,$(filter $(DOCKER_TARGETS),$(MAKECMDGOALS)))
@@ -42,11 +42,14 @@ backup:
 	sqlite3 ".backup ${HOST_DATA_DIR}/omoide.db '${HOST_MEDIA_DIR}/db.backup'"
 
 build-image:
-	docker build -t omoide .
+	docker build --build-arg APP_VERSION=${VERSION} -t omoide .
 	docker tag omoide einaeffchen/omoide
+	docker tag omoide einaeffchen/omoide:${VERSION}
+
 
 push: build-image
 	docker push einaeffchen/omoide
+	docker push einaeffchen/omoide:${VERSION}
 
 alembic-generate:
 	echo ${DATA_DIR}
