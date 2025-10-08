@@ -1435,7 +1435,7 @@ export default function ConfigurationPage() {
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
-                    label="Person Merge Cosine Threshold"
+                    label="Person Merge  Similarity % Threshold"
                     value={
                       config.face_recognition.person_merge_percent_similarity
                     }

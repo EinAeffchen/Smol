@@ -39,7 +39,7 @@ from app.api import (
     tasks,
 )
 from app.api.processors import router as proc_router
-from app.api.tasks import _run_cleanup_and_chain
+from app.tasks import run_cleanup_and_chain
 from app.config import settings
 from app.database import ensure_vec_tables
 from app.ffmpeg import ensure_ffmpeg_available
@@ -87,7 +87,7 @@ def scheduled_scan_job():
         session.refresh(task)
 
         # Start the chain
-        _run_cleanup_and_chain(task.id)
+        run_cleanup_and_chain(task.id)
 
 
 def configure_auto_scan_job() -> None:
