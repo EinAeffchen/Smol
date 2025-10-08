@@ -59,15 +59,15 @@ const facePresets: Record<
 > = {
   strict: {
     face_recognition_min_confidence: 0.6,
-    face_match_cosine_threshold: 0.78,
+    face_match_min_percent: 80,
     existing_person_cosine_threshold: 0.86,
     existing_person_min_cosine_margin: 0.07,
     existing_person_min_appearances: 4,
     face_recognition_min_face_pixels: 1600,
     person_min_face_count: 3,
     person_min_media_count: 2,
-    person_cluster_max_l2_radius: 0.7,
-    person_merge_percent_similarity: 90,
+    person_cluster_max_l2_radius: 0.95,
+    person_merge_percent_similarity: 80,
     cluster_batch_size: 15000,
     hdbscan_min_cluster_size: 6,
     hdbscan_min_samples: 12,
@@ -76,15 +76,15 @@ const facePresets: Record<
   },
   normal: {
     face_recognition_min_confidence: 0.5,
-    face_match_cosine_threshold: 0.7,
+    face_match_min_percent: 75,
     existing_person_cosine_threshold: 0.8,
     existing_person_min_cosine_margin: 0.05,
     existing_person_min_appearances: 3,
     face_recognition_min_face_pixels: 1600,
     person_min_face_count: 2,
     person_min_media_count: 2,
-    person_cluster_max_l2_radius: 0.85,
-    person_merge_percent_similarity: 82,
+    person_cluster_max_l2_radius: 1,
+    person_merge_percent_similarity: 75,
     cluster_batch_size: 15000,
     hdbscan_min_cluster_size: 6,
     hdbscan_min_samples: 10,
@@ -93,15 +93,15 @@ const facePresets: Record<
   },
   loose: {
     face_recognition_min_confidence: 0.4,
-    face_match_cosine_threshold: 0.65,
+    face_match_min_percent: 70,
     existing_person_cosine_threshold: 0.75,
     existing_person_min_cosine_margin: 0.03,
     existing_person_min_appearances: 2,
     face_recognition_min_face_pixels: 1200,
     person_min_face_count: 2,
     person_min_media_count: 2,
-    person_cluster_max_l2_radius: 1,
-    person_merge_percent_similarity: 75,
+    person_cluster_max_l2_radius: 1.02,
+    person_merge_percent_similarity: 70,
     cluster_batch_size: 15000,
     hdbscan_min_cluster_size: 4,
     hdbscan_min_samples: 4,
@@ -1295,18 +1295,18 @@ export default function ConfigurationPage() {
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
-                    label="Match Cosine Threshold"
-                    value={config.face_recognition.face_match_cosine_threshold}
+                    label="Face Match Similarity % Threshold"
+                    value={config.face_recognition.face_match_min_percent}
                     onChange={(e) =>
                       setFaceValue(
-                        "face_match_cosine_threshold",
-                        parseFloat(e.target.value)
+                        "face_match_min_percent",
+                        parseInt(e.target.value)
                       )
                     }
                     fullWidth
                     margin="normal"
                     type="number"
-                    helperText="Similarity threshold for attaching a face to a known person"
+                    helperText="Similarity percent threshold for attaching a face to a known person"
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>

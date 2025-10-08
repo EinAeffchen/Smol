@@ -23,6 +23,8 @@ from app.utils import (
     vector_to_blob,
 )
 
+from .state import clear_task_progress, set_task_progress
+
 __all__ = [
     "assign_to_existing_persons",
     "merge_similar_persons",
@@ -261,7 +263,6 @@ def _merge_person_pair(
 
     count_a = int(person_a.appearance_count or 0)
     count_b = int(person_b.appearance_count or 0)
-    logger.info("Expected count: %s", count_a + count_b)
     if count_b > count_a:
         keep, drop = person_b, person_a
     else:
@@ -309,21 +310,6 @@ def merge_similar_persons(
 ) -> int:
     logger.debug("Merging similar persons")
 
-    try:
-        cosine_threshold = float(
-            getattr(
-                settings.face_recognition,
-                "person_merge_cosine_threshold",
-                0.0,
-            )
-        )
-    except Exception:
-        cosine_threshold = 0.0
-    if cosine_threshold > 0.0:
-        cosine_threshold = min(cosine_threshold, 0.999999)
-        l2_threshold = float(np.sqrt(max(0.0, 2.0 * (1.0 - cosine_threshold))))
-    else:
-        l2_threshold = float("inf")
     percent_threshold = float(
         getattr(
             settings.face_recognition,
@@ -332,156 +318,109 @@ def merge_similar_persons(
         )
     )
 
-    total_merged = 0
-
     candidate_ids: set[int] = {
         int(pid) for pid in (candidate_person_ids or []) if pid is not None
     }
 
-    if candidate_ids:
-        pending = deque(candidate_ids)
-        while pending:
-            person_id = pending.popleft()
-            with Session(db.engine) as session:
-                task = session.get(ProcessingTask, task_id)
-                if task and task.status == "cancelled":
-                    return total_merged
-
-                row = session.exec(
-                    text(
-                        "SELECT embedding FROM person_embeddings WHERE person_id = :pid"
-                    ).bindparams(pid=person_id)
-                ).first()
-                if not row:
-                    continue
-
-                vec = vector_from_stored(row[0])
-                if vec is None or vec.size == 0:
-                    continue
-                norm = float(np.linalg.norm(vec))
-                if not np.isfinite(norm) or norm == 0.0:
-                    continue
-                normed_vec = (vec / norm).astype(np.float32, copy=False)
-                blob = vector_to_blob(normed_vec)
-                if blob is None:
-                    continue
-
-                candidates = session.exec(
-                    text(
-                        """
-                        SELECT person_id, ROUND(
-                            (1.0 - (MIN(distance) * MIN(distance)) / 2.0) * 100,
-                            2
-                        ) AS similarity_pct
-                          FROM person_embeddings
-                         WHERE person_id != :pid
-                           AND embedding MATCH :vec
-                           and k = 5
-                         ORDER BY similarity_pct desc
-                        """
-                    ).bindparams(pid=person_id, vec=blob)
-                ).all()
-
-                merged_this_round = False
-                for candidate_id, similarity in candidates:
-                    if candidate_id is None or similarity is None:
-                        continue
-                    if float(similarity) < percent_threshold:
-                        continue
-                    logger.debug(
-                        "Merging candidate persons %s and %s (similarity %.2f%%)",
-                        person_id,
-                        candidate_id,
-                        similarity,
-                    )
-                    merge_result = _merge_person_pair(
-                        session, int(person_id), int(candidate_id)
-                    )
-                    if merge_result is not None:
-                        keep_id, _ = merge_result
-                        total_merged += 1
-                        pending.appendleft(keep_id)
-                        merged_this_round = True
-                        break
-
-                if merged_this_round:
-                    continue
-        if total_merged:
-            logger.info(
-                "Merged %d newly created person clusters after targeted pass",
-                total_merged,
+    set_task_progress(
+        task_id,
+        current_step="merging_similar_persons",
+        current_item=None,
+    )
+    total_merged = 0
+    try:
+        if candidate_ids:
+            pending = deque(candidate_ids)
+            set_task_progress(
+                task_id,
+                current_step="merging_similar_persons",
+                current_item=f"queued: {len(pending)}",
             )
-        return total_merged
+            while pending:
+                person_id = pending.popleft()
+                set_task_progress(
+                    task_id,
+                    current_step="merging_similar_persons",
+                    current_item=f"queued: {len(pending)} (merged {total_merged})",
+                )
+                with Session(db.engine) as session:
+                    task = session.get(ProcessingTask, task_id)
+                    if task and task.status == "cancelled":
+                        return total_merged
 
-    while True:
-        merged_in_pass = 0
-        with Session(db.engine) as session:
-            task = session.get(ProcessingTask, task_id)
-            if task and task.status == "cancelled":
-                break
-
-            rows = session.exec(
-                text("SELECT person_id, embedding FROM person_embeddings")
-            ).all()
-
-            restart_pass = False
-            for person_id, stored in rows:
-                if person_id is None:
-                    continue
-
-                vec = vector_from_stored(stored)
-                if vec is None or vec.size == 0:
-                    continue
-                norm = float(np.linalg.norm(vec))
-                if not np.isfinite(norm) or norm == 0.0:
-                    continue
-                normed_vec = (vec / norm).astype(np.float32, copy=False)
-                blob = vector_to_blob(normed_vec)
-                if blob is None:
-                    continue
-
-                candidates = session.exec(
-                    text(
-                        """
-                        SELECT person_id, distance
-                          FROM person_embeddings
-                         WHERE person_id != :pid
-                           AND embedding MATCH :vec
-                         ORDER BY distance
-                         LIMIT 5
-                        """
-                    ).bindparams(pid=person_id, vec=blob)
-                ).all()
-
-                for candidate_id, distance in candidates:
-                    if candidate_id is None or candidate_id == person_id:
-                        continue
-                    if distance is None or float(distance) > l2_threshold:
+                    row = session.exec(
+                        text(
+                            "SELECT embedding FROM person_embeddings WHERE person_id = :pid"
+                        ).bindparams(pid=person_id)
+                    ).first()
+                    if not row:
                         continue
 
-                    merge_result = _merge_person_pair(
-                        session, int(person_id), int(candidate_id)
-                    )
-                    if merge_result is not None:
-                        keep_id, _ = merge_result
-                        person_id = keep_id
-                        total_merged += 1
-                        merged_in_pass += 1
-                        restart_pass = True
-                        break
+                    vec = vector_from_stored(row[0])
+                    if vec is None or vec.size == 0:
+                        continue
+                    norm = float(np.linalg.norm(vec))
+                    if not np.isfinite(norm) or norm == 0.0:
+                        continue
+                    normed_vec = (vec / norm).astype(np.float32, copy=False)
+                    blob = vector_to_blob(normed_vec)
+                    if blob is None:
+                        continue
 
-                if restart_pass:
-                    break
+                    candidates = session.exec(
+                        text(
+                            """
+                            SELECT person_id, ROUND(
+                                (1.0 - (MIN(distance) * MIN(distance)) / 2.0) * 100,
+                                2
+                            ) AS similarity_pct
+                              FROM person_embeddings
+                             WHERE person_id != :pid
+                               AND embedding MATCH :vec
+                               and k = 5
+                             ORDER BY similarity_pct desc
+                            """
+                        ).bindparams(pid=person_id, vec=blob)
+                    ).all()
 
-        if merged_in_pass == 0:
-            break
+                    merged_this_round = False
+                    for candidate_id, similarity in candidates:
+                        if candidate_id is None or similarity is None:
+                            continue
+                        if float(similarity) < percent_threshold:
+                            continue
+                        logger.debug(
+                            "Merging candidate persons %s and %s (similarity %.2f%%)",
+                            person_id,
+                            candidate_id,
+                            similarity,
+                        )
+                        merge_result = _merge_person_pair(
+                            session, int(person_id), int(candidate_id)
+                        )
+                        if merge_result is not None:
+                            keep_id, _ = merge_result
+                            total_merged += 1
+                            pending.appendleft(keep_id)
+                            set_task_progress(
+                                task_id,
+                                current_step="merging_similar_persons",
+                                current_item=f"queued: {len(pending)} (merged {total_merged})",
+                            )
+                            merged_this_round = True
+                            break
 
-    if total_merged:
-        logger.info(
-            "Merged %d person clusters after initial batching pass",
-            total_merged,
-        )
-    return total_merged
+                    if merged_this_round:
+                        continue
+            if total_merged:
+                logger.info(
+                    "Merged %d newly created person clusters after targeted pass",
+                    total_merged,
+                )
+            return total_merged
+
+    finally:
+        clear_task_progress(task_id)
 
 
 def _filter_embeddings_by_id(
@@ -598,19 +537,9 @@ def _assign_faces_to_clusters(
 
 
 def assign_to_existing_persons(
-    face_ids: list[int], embs: np.ndarray, task_id: str, threshold: float
+    face_ids: list[int], embs: np.ndarray, task_id: str, threshold_per: float
 ) -> list[int]:
     unassigned: list[int] = []
-    try:
-        strict_cos_thr = getattr(
-            settings.face_recognition,
-            "existing_person_cosine_threshold",
-            threshold,
-        )
-        cos_thr = float(strict_cos_thr)
-        l2_thr = float(np.sqrt(max(0.0, 2.0 * (1.0 - cos_thr))))
-    except Exception:
-        l2_thr = 0.8
 
     with Session(db.engine) as session:
         affected_person_ids: set[int] = set()
@@ -638,18 +567,22 @@ def assign_to_existing_persons(
                     session.add(task)
                     safe_commit(session)
                 continue
+
             sql = text(
                 """
-                    SELECT person_id, distance
-                      FROM person_embeddings
-                     WHERE embedding MATCH :vec
-                     ORDER BY distance
-                     LIMIT 2
+                SELECT person_id, ROUND(
+                    (1.0 - (MIN(distance) * MIN(distance)) / 2.0) * 100,
+                    2
+                ) AS similarity_pct
+                    FROM person_embeddings
+                    WHERE embedding MATCH :vec
+                    and k = 2
+                    ORDER BY similarity_pct desc
                 """
             ).bindparams(vec=vec_param)
             rows = session.exec(sql).all()
 
-            if rows and rows[0][1] <= l2_thr:
+            if rows and rows[0][1] >= threshold_per:
                 person_id = rows[0][0]
 
                 if len(rows) > 1:
@@ -840,15 +773,11 @@ def run_person_clustering(task_id: str) -> None:
                 )
 
             if person_exists:
-                logger.debug(
-                    "Trying to assign faces to known persons: thresh: %s",
-                    settings.face_recognition.face_match_cosine_threshold,
-                )
                 unassigned_face_ids = assign_to_existing_persons(
                     batch_face_ids,
                     batch_embeddings,
                     task_id,
-                    threshold=settings.face_recognition.face_match_cosine_threshold,
+                    threshold_per=settings.face_recognition.face_match_min_percent,
                 )
                 if not unassigned_face_ids:
                     logger.info(

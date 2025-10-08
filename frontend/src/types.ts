@@ -51,12 +51,14 @@ export interface Face {
   media_id: number;
   person_id?: number;
   thumbnail_path: string;
+  similarity?: number;
   person?: Person;
 }
 export interface FaceRead {
   id: number;
   media_id: number;
   thumbnail_path: string;
+  similarity?: number;
 }
 
 export interface SceneSearchResult {
@@ -325,7 +327,7 @@ export interface AppConfig {
   face_recognition: {
     preset: "strict" | "normal" | "loose" | "custom";
     face_recognition_min_confidence: number;
-    face_match_cosine_threshold: number;
+    face_match_min_percent: number;
     existing_person_cosine_threshold: number;
     existing_person_min_cosine_margin: number;
     existing_person_min_appearances: number;

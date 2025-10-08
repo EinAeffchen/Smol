@@ -331,16 +331,27 @@ def suggest_faces(
     ).bindparams(vec=target, k=limit)
     rows = session.exec(sql).all()
     face_ids = [r[0] for r in rows]
+    distance_map = {int(row[0]): float(row[1]) for row in rows if row[1] is not None}
 
     faces = session.exec(select(Face).where(Face.id.in_(face_ids))).all()
     id_map = {f.id: f for f in faces}
     ordered = [id_map[f] for f in face_ids if f in id_map]
+
+    def _distance_to_similarity(dist: float | None) -> float | None:
+        if dist is None:
+            return None
+        try:
+            similarity = (1.0 - (float(dist) * float(dist)) / 2.0) * 100.0
+        except Exception:
+            return None
+        return round(max(0.0, min(100.0, similarity)), 2)
 
     return [
         FaceRead(
             id=f.id,
             media_id=f.media_id,
             thumbnail_path=f.thumbnail_path,
+            similarity=_distance_to_similarity(distance_map.get(f.id)),
         )
         for f in ordered
     ]

@@ -155,7 +155,6 @@ def get_static_assets_dir() -> Path:
 
     # 3. Fallback to local development path
     static_dir.mkdir(exist_ok=True, parents=True)
-    logger.debug("StATIC DIR: %s", static_dir)
     return static_dir
 
 
@@ -428,15 +427,15 @@ FACE_RECOGNITION_PRESETS: dict[
 ] = {
     FaceClusteringPreset.STRICT: {
         "face_recognition_min_confidence": 0.6,
-        "face_match_cosine_threshold": 0.78,
+        "face_match_min_percent": 80,
         "existing_person_cosine_threshold": 0.86,
         "existing_person_min_cosine_margin": 0.07,
         "existing_person_min_appearances": 4,
         "face_recognition_min_face_pixels": 1600,
         "person_min_face_count": 3,
         "person_min_media_count": 2,
-        "person_cluster_max_l2_radius": 0.7,
-        "person_merge_percent_similarity": 90,
+        "person_cluster_max_l2_radius": 0.95,
+        "person_merge_percent_similarity": 80,
         "cluster_batch_size": 15000,
         "hdbscan_min_cluster_size": 6,
         "hdbscan_min_samples": 12,
@@ -445,15 +444,15 @@ FACE_RECOGNITION_PRESETS: dict[
     },
     FaceClusteringPreset.NORMAL: {
         "face_recognition_min_confidence": 0.5,
-        "face_match_cosine_threshold": 0.70,
+        "face_match_min_percent": 75,
         "existing_person_cosine_threshold": 0.80,
         "existing_person_min_cosine_margin": 0.05,
         "existing_person_min_appearances": 3,
         "face_recognition_min_face_pixels": 1600,
         "person_min_face_count": 2,
         "person_min_media_count": 2,
-        "person_cluster_max_l2_radius": 0.85,
-        "person_merge_percent_similarity": 82,
+        "person_cluster_max_l2_radius": 1,
+        "person_merge_percent_similarity": 75,
         "cluster_batch_size": 15000,
         "hdbscan_min_cluster_size": 6,
         "hdbscan_min_samples": 10,
@@ -462,15 +461,15 @@ FACE_RECOGNITION_PRESETS: dict[
     },
     FaceClusteringPreset.LOOSE: {
         "face_recognition_min_confidence": 0.4,
-        "face_match_cosine_threshold": 0.65,
+        "face_match_min_percent": 70,
         "existing_person_cosine_threshold": 0.75,
         "existing_person_min_cosine_margin": 0.03,
         "existing_person_min_appearances": 2,
         "face_recognition_min_face_pixels": 1200,
         "person_min_face_count": 2,
         "person_min_media_count": 2,
-        "person_cluster_max_l2_radius": 1.05,
-        "person_merge_percent_similarity": 75,
+        "person_cluster_max_l2_radius": 1.02,
+        "person_merge_percent_similarity": 70,
         "cluster_batch_size": 15000,
         "hdbscan_min_cluster_size": 4,
         "hdbscan_min_samples": 4,
@@ -485,7 +484,7 @@ class FaceRecognitionSettings(BaseModel):
     # minimum confidence needed to extract a face
     face_recognition_min_confidence: float = 0.5
     # minimum threshold for a face needed to be matched to a person
-    face_match_cosine_threshold: float = 0.70
+    face_match_min_percent: int = 70
     # stricter threshold for assigning new faces to existing persons (vs general usage)
     existing_person_cosine_threshold: float = 0.80
     # requires a margin between best and second-best match (cosine space)
@@ -501,7 +500,7 @@ class FaceRecognitionSettings(BaseModel):
     person_min_media_count: int = 2
     # enforce intra-cluster compactness when forming a new person
     # maximum allowed L2 radius around centroid (normalized vectors)
-    person_cluster_max_l2_radius: float = 0.65
+    person_cluster_max_l2_radius: float = 1.02
     # merge previously created persons when their embeddings are extremely similar
     person_merge_percent_similarity: int = 80
     # reduce if ram is an issue, the higher the more accurate the clustering.

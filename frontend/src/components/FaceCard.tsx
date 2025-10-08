@@ -1,7 +1,16 @@
 // components/FaceCard.tsx
 
 import React from "react";
-import { Avatar, Box, Card, IconButton, Tooltip, Checkbox, useTheme } from "@mui/material";
+import {
+  Avatar,
+  Box,
+  Card,
+  IconButton,
+  Tooltip,
+  Checkbox,
+  Typography,
+  useTheme,
+} from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { useNavigate, useLocation } from "react-router-dom";
 import StarIcon from "@mui/icons-material/Star";
@@ -99,6 +108,26 @@ export default function FaceCard({
           </Tooltip>
         )}
       </Box>
+      {typeof face.similarity === "number" && (
+        <Box
+          sx={{
+            position: "absolute",
+            bottom: 4,
+            left: 4,
+            bgcolor: (theme) => alpha(theme.palette.common.black, 0.6),
+            borderRadius: 1,
+            px: 0.5,
+            py: 0.25,
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{ color: (theme) => theme.palette.common.white, fontWeight: 600 }}
+          >
+            {`${face.similarity.toFixed(1)}%`}
+          </Typography>
+        </Box>
+      )}
     </Card>
   );
 }
