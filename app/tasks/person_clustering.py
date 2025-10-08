@@ -22,6 +22,7 @@ from app.utils import (
     vector_from_stored,
     vector_to_blob,
 )
+from .relationships import rebuild_person_relationships
 
 from .state import clear_task_progress, set_task_progress
 
@@ -819,3 +820,4 @@ def run_person_clustering(task_id: str) -> None:
             task = session.get(ProcessingTask, task_id)
             logger.info("FINISHED CLUSTERING!")
             complete_task(session, task)
+    rebuild_person_relationships()

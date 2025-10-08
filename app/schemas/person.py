@@ -73,6 +73,26 @@ class SimilarPerson(SQLModel):
     thumbnail: str | None = None
 
 
+class RelationshipNode(BaseModel):
+    id: int
+    name: str | None
+    profile_thumbnail: str | None = None
+    depth: int
+
+
+class RelationshipEdge(BaseModel):
+    source: int
+    target: int
+    weight: int
+
+
+class RelationshipGraph(BaseModel):
+    nodes: list[RelationshipNode]
+    edges: list[RelationshipEdge]
+    root_id: int
+    max_depth: int
+
+
 class CursorPage(BaseModel):
     items: list[PersonRead]
     next_cursor: str | None

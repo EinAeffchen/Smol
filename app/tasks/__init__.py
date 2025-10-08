@@ -23,6 +23,7 @@ from .person_clustering import (
     rebuild_person_embedding,
     run_person_clustering,
 )
+from .relationships import rebuild_person_relationships
 from .pipeline import run_cleanup_and_chain, run_scan_and_chain
 from .scan import run_scan
 
@@ -40,6 +41,7 @@ __all__ = [
     "run_media_processing",
     "run_media_processing_and_chain",
     "run_person_clustering",
+    "rebuild_person_relationships",
     "run_scan",
     "run_scan_and_chain",
     "state",

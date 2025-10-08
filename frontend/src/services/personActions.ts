@@ -1,5 +1,5 @@
 import { API } from "../config";
-import { Person } from "../types";
+import { Person, PersonRelationshipGraph } from "../types";
 
 export const updatePerson = async (
   personId: number,
@@ -58,6 +58,22 @@ export const getSimilarPersons = async (
     signal,
   });
   if (!res.ok) throw new Error("Failed to fetch similar persons");
+  return res.json();
+};
+
+export const getPersonRelationshipGraph = async (
+  personId: number,
+  depth: number,
+  signal?: AbortSignal
+): Promise<PersonRelationshipGraph> => {
+  const params = new URLSearchParams({ depth: depth.toString() });
+  const res = await fetch(
+    `${API}/api/person/${personId}/relationships?${params.toString()}`,
+    { signal }
+  );
+  if (!res.ok) {
+    throw new Error("Failed to fetch person relationship graph");
+  }
   return res.json();
 };
 

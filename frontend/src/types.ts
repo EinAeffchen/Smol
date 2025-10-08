@@ -54,6 +54,25 @@ export interface Face {
   similarity?: number;
   person?: Person;
 }
+export interface PersonRelationshipNode {
+  id: number;
+  name?: string | null;
+  profile_thumbnail?: string | null;
+  depth: number;
+}
+
+export interface PersonRelationshipEdge {
+  source: number;
+  target: number;
+  weight: number;
+}
+
+export interface PersonRelationshipGraph {
+  nodes: PersonRelationshipNode[];
+  edges: PersonRelationshipEdge[];
+  root_id: number;
+  max_depth: number;
+}
 export interface FaceRead {
   id: number;
   media_id: number;

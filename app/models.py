@@ -233,3 +233,19 @@ class DuplicateMedia(SQLModel, table=True):
 
     group: DuplicateGroup = Relationship(back_populates="media_links")
     media: Media = Relationship(back_populates="duplicate_entries")
+
+
+class PersonRelationship(SQLModel, table=True):
+    __tablename__ = "person_relationship"
+
+    person_a_id: int = Field(
+        foreign_key="person.id", primary_key=True
+    )
+    person_b_id: int = Field(
+        foreign_key="person.id", primary_key=True
+    )
+    coappearance_count: int = Field(default=0, index=True)
+    last_media_id: int | None = Field(
+        default=None, foreign_key="media.id"
+    )
+    updated_at: datetime = Field(default_factory=datetime.utcnow)

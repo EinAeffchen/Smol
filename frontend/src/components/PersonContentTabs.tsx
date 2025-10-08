@@ -1,25 +1,28 @@
-import React, { Suspense, useState, useEffect } from "react";
+import React, { Suspense, useEffect, useState } from "react";
 import {
   Box,
-  Tabs,
-  Tab,
-  CircularProgress,
-  Typography,
   Button,
+  CircularProgress,
+  Tab,
+  Tabs,
+  Typography,
 } from "@mui/material";
 import Grid from "@mui/material/Grid";
 import {
-  Person,
   FaceRead,
-  SimilarPerson,
-  PersonReadSimple,
-  Tag,
   Media,
+  Person,
+  PersonReadSimple,
+  PersonRelationshipGraph as PersonRelationshipGraphData,
+  SimilarPerson,
+  Tag,
 } from "../types";
 import { TimelineTab } from "./TimelineTab";
 import MediaAppearances from "./MediaAppearances";
 import SimilarPersonCard from "./SimilarPersonCard";
 import { TagsSection } from "./TagsSection";
+import PersonRelationshipGraph from "./PersonRelationshipGraph";
+
 const DetectedFaces = React.lazy(() => import("./DetectedFaces"));
 
 interface TabPanelProps {
@@ -28,8 +31,7 @@ interface TabPanelProps {
   value: number;
 }
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
+function TabPanel({ children, value, index, ...other }: TabPanelProps) {
   return (
     <div
       role="tabpanel"
@@ -58,20 +60,55 @@ interface PersonContentTabsProps {
   similarPersons: SimilarPerson[];
   onTagUpdate: (obj: Person | Media) => void;
   onRefreshSuggestions: () => void;
-  onLoadSimilar: () => void;
+  onLoadSimilar: () => Promise<void> | void;
   filterPeople: PersonReadSimple[];
-  onFilterPeopleChange: () => void;
+  onFilterPeopleChange: (people: PersonReadSimple[]) => void;
   mediaListKey: string;
+  relationshipGraph: PersonRelationshipGraphData | null;
+  relationshipDepth: number;
+  isLoadingRelationships: boolean;
+  hasLoadedRelationships: boolean;
+  onLoadRelationships: (depth?: number) => Promise<void> | void;
 }
 
-export function PersonContentTabs(props: PersonContentTabsProps) {
+export function PersonContentTabs({
+  person,
+  detectedFacesList,
+  hasMoreFaces,
+  loadingMoreFaces,
+  onTagAdded,
+  loadMoreDetectedFaces,
+  handleProfileAssignmentWrapper,
+  handleAssignWrapper,
+  handleCreateWrapper,
+  handleDeleteWrapper,
+  handleDetachWrapper,
+  suggestedFaces,
+  similarPersons,
+  onTagUpdate,
+  onRefreshSuggestions,
+  onLoadSimilar,
+  filterPeople,
+  onFilterPeopleChange,
+  mediaListKey,
+  relationshipGraph,
+  relationshipDepth,
+  isLoadingRelationships,
+  hasLoadedRelationships,
+  onLoadRelationships,
+}: PersonContentTabsProps) {
   const [tabValue, setTabValue] = useState(0);
   const [faceTabValue, setFaceTabValue] = useState(0);
   const [hasLoadedSimilar, setHasLoadedSimilar] = useState(false);
+  const [hasRequestedRelationships, setHasRequestedRelationships] =
+    useState(false);
   const [isProcessingFaces, setIsProcessingFaces] = useState(false);
+  const [isLoadingSimilarTab, setIsLoadingSimilarTab] = useState(false);
 
-  const createActionHandler = <T extends (...args: any[]) => Promise<any> | void>(
-    action: T
+  const createActionHandler = <
+    T extends (...args: any[]) => Promise<unknown> | void,
+  >(
+    action: T,
   ): ((...args: Parameters<T>) => Promise<void>) => {
     return async (...args: Parameters<T>) => {
       setIsProcessingFaces(true);
@@ -79,35 +116,60 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
         await Promise.resolve(action(...args));
       } catch (error) {
         console.error("An error occurred during the face action:", error);
-        // Optionally, show an error toast to the user here
       } finally {
         setIsProcessingFaces(false);
       }
     };
   };
-  const handleAssign = createActionHandler(props.handleAssignWrapper);
-  const handleCreate = createActionHandler(props.handleCreateWrapper);
-  const handleDelete = createActionHandler(props.handleDeleteWrapper);
-  const handleDetach = createActionHandler(props.handleDetachWrapper);
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+  const handleAssign = createActionHandler(handleAssignWrapper);
+  const handleCreate = createActionHandler(handleCreateWrapper);
+  const handleDelete = createActionHandler(handleDeleteWrapper);
+  const handleDetach = createActionHandler(handleDetachWrapper);
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
+
     if (newValue === 2 && !hasLoadedSimilar) {
-      props.onLoadSimilar();
       setHasLoadedSimilar(true);
+      setIsLoadingSimilarTab(true);
+      Promise.resolve(onLoadSimilar())
+        .catch((error) =>
+          console.error("Failed to load similar persons:", error),
+        )
+        .finally(() => setIsLoadingSimilarTab(false));
+    }
+
+    if (
+      newValue === 3 &&
+      !hasRequestedRelationships &&
+      !hasLoadedRelationships
+    ) {
+      setHasRequestedRelationships(true);
+      Promise.resolve(onLoadRelationships())
+        .catch((error) =>
+          console.error("Failed to load relationship graph:", error),
+        )
+        .finally(() => {
+          /* request state stored upstream */
+        });
     }
   };
 
   const handleFaceTabChange = (
-    event: React.SyntheticEvent,
-    newValue: number
+    _event: React.SyntheticEvent,
+    newValue: number,
   ) => {
     setFaceTabValue(newValue);
   };
+
   useEffect(() => {
     setHasLoadedSimilar(false);
+    setHasRequestedRelationships(false);
+    setIsLoadingSimilarTab(false);
     setTabValue(0);
-  }, [props.person.id]);
+    setFaceTabValue(0);
+  }, [person.id]);
 
   return (
     <Box sx={{ width: "100%" }}>
@@ -119,9 +181,10 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
           variant="scrollable"
           scrollButtons="auto"
         >
-          <Tab label={`Media Appearances (${props.person.appearance_count})`} />
+          <Tab label={`Media Appearances (${person.appearance_count})`} />
           <Tab label="Faces" />
           <Tab label="Similar People" />
+          <Tab label="Relationship Graph" />
           <Tab label="Timeline" />
           <Tab label="Tags" />
         </Tabs>
@@ -130,10 +193,10 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
       <TabPanel value={tabValue} index={0}>
         <Suspense fallback={<CircularProgress />}>
           <MediaAppearances
-            person={props.person}
-            filterPeople={props.filterPeople}
-            onFilterPeopleChange={props.onFilterPeopleChange}
-            mediaListKey={props.mediaListKey}
+            person={person}
+            filterPeople={filterPeople}
+            onFilterPeopleChange={onFilterPeopleChange}
+            mediaListKey={mediaListKey}
           />
         </Suspense>
       </TabPanel>
@@ -149,27 +212,29 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
             <Tab label="Suggested" />
           </Tabs>
         </Box>
+
         <TabPanel value={faceTabValue} index={0}>
           <Suspense fallback={<CircularProgress />}>
             <DetectedFaces
               isProcessing={isProcessingFaces}
               title="Confirmed Faces"
-              faces={props.detectedFacesList}
-              profileFaceId={props.person.profile_face_id}
+              faces={detectedFacesList}
+              profileFaceId={person.profile_face_id}
               onSetProfile={(faceId) =>
-                props.handleProfileAssignmentWrapper(faceId, props.person.id)
+                handleProfileAssignmentWrapper(faceId, person.id)
               }
               onAssign={handleAssign}
               onDelete={handleDelete}
               onDetach={handleDetach}
               onCreateMultiple={handleCreate}
-              onLoadMore={props.loadMoreDetectedFaces}
-              hasMore={props.hasMoreFaces}
-              isLoadingMore={props.loadingMoreFaces}
-              personId={props.person.id}
+              onLoadMore={loadMoreDetectedFaces}
+              hasMore={hasMoreFaces}
+              isLoadingMore={loadingMoreFaces}
+              personId={person.id}
             />
           </Suspense>
         </TabPanel>
+
         <TabPanel value={faceTabValue} index={1}>
           <Box
             sx={{
@@ -183,7 +248,7 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
             <Button
               variant="outlined"
               size="small"
-              onClick={() => props.onRefreshSuggestions()}
+              onClick={onRefreshSuggestions}
             >
               Refresh Suggestions
             </Button>
@@ -192,40 +257,57 @@ export function PersonContentTabs(props: PersonContentTabsProps) {
             <DetectedFaces
               isProcessing={isProcessingFaces}
               title="Suggested Faces"
-              faces={props.suggestedFaces}
+              faces={suggestedFaces}
               onAssign={handleAssign}
               onDelete={handleDelete}
               onDetach={handleDetach}
               onCreateMultiple={handleCreate}
-              personId={props.person.id}
+              personId={person.id}
             />
           </Suspense>
         </TabPanel>
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
-        {props.similarPersons.length > 0 ? (
+        {similarPersons.length > 0 ? (
           <Grid container spacing={2}>
-            {props.similarPersons.map((p) => (
-              <Grid key={p.id} size={{ xs: 6, sm: 3, md: 2 }}>
-                <SimilarPersonCard {...p} />
+            {similarPersons.map((similar) => (
+              <Grid key={similar.id} size={{ xs: 6, sm: 3, md: 2 }}>
+                <SimilarPersonCard {...similar} />
               </Grid>
             ))}
           </Grid>
-        ) : (
-          hasLoadedSimilar && <CircularProgress />
-        )}
+        ) : isLoadingSimilarTab ? (
+          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+            <CircularProgress size={32} />
+          </Box>
+        ) : hasLoadedSimilar ? (
+          <Typography color="text.secondary">
+            No similar people found yet.
+          </Typography>
+        ) : null}
       </TabPanel>
+
       <TabPanel value={tabValue} index={3}>
+        <PersonRelationshipGraph
+          graph={relationshipGraph}
+          depth={relationshipDepth}
+          isLoading={isLoadingRelationships}
+          onDepthChange={(depthValue) => onLoadRelationships(depthValue)}
+        />
+      </TabPanel>
+
+      <TabPanel value={tabValue} index={4}>
         <Suspense fallback={<CircularProgress />}>
-          <TimelineTab person={props.person} />
+          <TimelineTab person={person} />
         </Suspense>
       </TabPanel>
-      <TabPanel value={tabValue} index={4}>
+
+      <TabPanel value={tabValue} index={5}>
         <TagsSection
-          person={props.person}
-          onTagAdded={(person) => props.onTagAdded(person)}
-          onUpdate={props.onTagUpdate}
+          person={person}
+          onTagAdded={(newTag) => onTagAdded(newTag)}
+          onUpdate={onTagUpdate}
         />
       </TabPanel>
     </Box>

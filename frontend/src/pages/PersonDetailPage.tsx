@@ -42,6 +42,10 @@ export default function PersonDetailPage() {
     candidates,
     similarPersons,
     suggestedFaces,
+    relationshipGraph,
+    relationshipDepth,
+    isLoadingRelationships,
+    hasLoadedRelationships,
     filterPeople,
     setFilterPeople,
     mediaListKey,
@@ -53,6 +57,7 @@ export default function PersonDetailPage() {
     confirmDelete,
     setConfirmDelete,
     loadSimilar,
+    loadRelationshipGraph,
     loadSuggestedFaces,
     loadMoreDetectedFaces,
     handleAssignWrapper,
@@ -111,8 +116,13 @@ export default function PersonDetailPage() {
         onRefreshSuggestions={loadSuggestedFaces}
         handleCreateWrapper={handleCreateWrapper}
         filterPeople={filterPeople}
-        onFilterPeopleChange={setFilterPeople}
+        onFilterPeopleChange={(people) => setFilterPeople(people)}
         mediaListKey={mediaListKey}
+        relationshipGraph={relationshipGraph}
+        relationshipDepth={relationshipDepth}
+        isLoadingRelationships={isLoadingRelationships}
+        hasLoadedRelationships={hasLoadedRelationships}
+        onLoadRelationships={(depth) => loadRelationshipGraph(depth)}
       />
 
       <Snackbar
@@ -174,54 +184,60 @@ export default function PersonDetailPage() {
 
       {/* Merge Dialog */}
       <Dialog open={mergeOpen} onClose={() => setMergeOpen(false)}>
-        <DialogTitle>Merge "{person.name}" into…</DialogTitle>
+        <DialogTitle>Merge "{person.name}" into...</DialogTitle>
         <DialogContent>
           <TextField
-            label="Search by name…"
+            label="Search by name..."
             fullWidth
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             sx={{ mb: 2 }}
           />
           <Stack spacing={1}>
-            {candidates.map((c) => (
+            {candidates.map((candidate) => (
               <Box
-                key={c.id}
+                key={candidate.id}
                 onClick={() =>
-                  setMergeTarget({ id: c.id, name: c.name ?? "Unknown" })
+                  setMergeTarget({
+                    id: candidate.id,
+                    name: candidate.name ?? "Unknown",
+                  })
                 }
                 sx={{
                   p: 1,
                   bgcolor: "background.paper",
                   borderRadius: 1,
                   cursor: "pointer",
-                  "&:hover": { bgcolor: "primary.dark", color: "primary.contrastText" },
+                  "&:hover": {
+                    bgcolor: "primary.dark",
+                    color: "primary.contrastText",
+                  },
                 }}
               >
                 <Stack direction="row" spacing={2} alignItems="center">
                   <Avatar
                     src={
-                      c.profile_face?.thumbnail_path
+                      candidate.profile_face?.thumbnail_path
                         ? `${API}/thumbnails/${encodeURIComponent(
-                            c.profile_face.thumbnail_path
+                            candidate.profile_face.thumbnail_path,
                           )}`
                         : undefined
                     }
-                    alt={c.name ?? `Person ${c.id}`}
+                    alt={candidate.name ?? `Person ${candidate.id}`}
                   >
-                    {getInitials(c.name)}
+                    {getInitials(candidate.name)}
                   </Avatar>
                   <Box sx={{ minWidth: 0 }}>
                     <Typography noWrap sx={{ color: "inherit" }}>
-                      {c.name ?? "Unknown"}
+                      {candidate.name ?? "Unknown"}
                     </Typography>
-                    {c.appearance_count ? (
+                    {candidate.appearance_count ? (
                       <Typography
                         variant="caption"
                         noWrap
                         sx={{ color: "inherit", opacity: 0.75 }}
                       >
-                        {c.appearance_count} media
+                        {candidate.appearance_count} media
                       </Typography>
                     ) : null}
                   </Box>
