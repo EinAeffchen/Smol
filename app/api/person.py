@@ -21,7 +21,13 @@ from sqlmodel import Session, delete, distinct, select, text, update
 from app.config import settings
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
-from app.models import Face, Media, Person, PersonSimilarity, PersonTagLink, TimelineEvent
+from app.models import (
+    Face,
+    Media,
+    Person,
+    PersonTagLink,
+    TimelineEvent,
+)
 from app.schemas.face import CursorPage as FaceCursorPage
 from app.schemas.person import (
     CursorPage,
@@ -43,7 +49,6 @@ from app.schemas.timeline import (
 from app.utils import (
     get_person_embedding,
     recalculate_person_appearance_counts,
-    refresh_similarities_for_person,
     update_person_embedding,
 )
 
@@ -586,23 +591,14 @@ def merge_persons(
     if source_tag_ids:
         target_tag_ids = set(
             session.exec(
-                select(PersonTagLink.tag_id).where(PersonTagLink.person_id == tid)
+                select(PersonTagLink.tag_id).where(
+                    PersonTagLink.person_id == tid
+                )
             ).all()
         )
         for tag_id in source_tag_ids - target_tag_ids:
             session.add(PersonTagLink(person_id=tid, tag_id=tag_id))
-    session.exec(
-        delete(PersonTagLink).where(PersonTagLink.person_id == sid)
-    )
-
-    session.exec(
-        delete(PersonSimilarity).where(
-            or_(
-                PersonSimilarity.person_id == sid,
-                PersonSimilarity.other_id == sid,
-            )
-        )
-    )
+    session.exec(delete(PersonTagLink).where(PersonTagLink.person_id == sid))
 
     if target.profile_face_id is None and source.profile_face_id is not None:
         target.profile_face_id = source.profile_face_id
@@ -660,14 +656,6 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
     session.exec(sql)
     session.exec(
         delete(PersonTagLink).where(PersonTagLink.person_id == person_id)
-    )
-    session.exec(
-        delete(PersonSimilarity).where(
-            or_(
-                PersonSimilarity.person_id == person_id,
-                PersonSimilarity.other_id == person_id,
-            )
-        )
     )
     session.exec(
         delete(TimelineEvent).where(TimelineEvent.person_id == person_id)
@@ -745,25 +733,3 @@ def get_similarities(
         )
 
     return similar_persons_list
-
-
-@router.post(
-    "/{person_id}/refresh-similarities",
-    summary="Recompute similarity scores for a person",
-    status_code=status.HTTP_202_ACCEPTED,
-)
-def refresh_similarities(
-    person_id: int,
-    session: Session = Depends(get_session),
-):
-    if settings.general.read_only:
-        return HTTPException(
-            status_code=403,
-            detail="Not allowed in settings.general.read_only mode.",
-        )
-    if not session.get(Person, person_id):
-        raise HTTPException(404, "Person not found")
-
-    # enqueue the compute in the background
-    refresh_similarities_for_person(person_id)
-    return {"detail": "Similarity refresh started"}

@@ -1,10 +1,10 @@
 import os
 import time
-from collections import OrderedDict, defaultdict
+from collections import OrderedDict, defaultdict, deque
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Iterable, Literal
 
 import hdbscan
 import numpy as np
@@ -27,7 +27,6 @@ from app.models import (
     Face,
     Media,
     Person,
-    PersonSimilarity,
     PersonTagLink,
     ProcessingTask,
     ProcessingTaskRead,
@@ -795,9 +794,9 @@ def _rebuild_person_embedding(session: Session, person_id: int) -> None:
         vectors.append((vec / norm).astype(np.float32, copy=False))
 
     session.exec(
-        text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
-            pid=person_id
-        )
+        text(
+            "DELETE FROM person_embeddings WHERE person_id = :pid"
+        ).bindparams(pid=person_id)
     )
 
     if not vectors:
@@ -826,8 +825,10 @@ def _rebuild_person_embedding(session: Session, person_id: int) -> None:
         )
 
 
-def _merge_person_pair(session: Session, id_a: int, id_b: int) -> int | None:
-    """Merge two persons and return the identifier that was removed."""
+def _merge_person_pair(
+    session: Session, id_a: int, id_b: int
+) -> tuple[int, int] | None:
+    """Merge two persons and return (keep_id, removed_id)."""
     if id_a == id_b:
         return None
 
@@ -850,9 +851,7 @@ def _merge_person_pair(session: Session, id_a: int, id_b: int) -> int | None:
 
     # Reassign faces and embeddings
     session.exec(
-        update(Face)
-        .where(Face.person_id == drop_id)
-        .values(person_id=keep_id)
+        update(Face).where(Face.person_id == drop_id).values(person_id=keep_id)
     )
     session.exec(
         text(
@@ -861,30 +860,28 @@ def _merge_person_pair(session: Session, id_a: int, id_b: int) -> int | None:
     )
 
     # Remove duplicate similarity entries referencing the dropped person
-    session.exec(
-        delete(PersonSimilarity).where(
-            or_(
-                PersonSimilarity.person_id == drop_id,
-                PersonSimilarity.match_person_id == drop_id,
-            )
-        )
-    )
 
     session.exec(
-        text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
-            pid=drop_id
-        )
+        text(
+            "DELETE FROM person_embeddings WHERE person_id = :pid"
+        ).bindparams(pid=drop_id)
     )
     session.delete(drop)
 
     recalculate_person_appearance_counts(session, [keep_id])
     _rebuild_person_embedding(session, keep_id)
     safe_commit(session)
-    return drop_id
+    return keep_id, drop_id
 
 
-def _merge_similar_persons(task_id: str) -> int:
-    """Merge highly similar persons produced across clustering batches."""
+def _merge_similar_persons(
+    task_id: str, candidate_person_ids: Iterable[int] | None = None
+) -> int:
+    """Merge highly similar persons produced across clustering batches.
+
+    When `candidate_person_ids` is provided we only re-evaluate those persons,
+    which keeps the post-processing step fast even for very large datasets.
+    """
     try:
         cosine_threshold = float(
             getattr(
@@ -904,6 +901,78 @@ def _merge_similar_persons(task_id: str) -> int:
 
     total_merged = 0
 
+    candidate_ids: set[int] = {
+        int(pid) for pid in (candidate_person_ids or []) if pid is not None
+    }
+
+    if candidate_ids:
+        pending = deque(candidate_ids)
+        while pending:
+            person_id = pending.popleft()
+            with Session(db.engine) as session:
+                task = session.get(ProcessingTask, task_id)
+                if task and task.status == "cancelled":
+                    return total_merged
+
+                row = session.exec(
+                    text(
+                        "SELECT embedding FROM person_embeddings WHERE person_id = :pid"
+                    ).bindparams(pid=person_id)
+                ).first()
+                if not row:
+                    continue
+
+                vec = vector_from_stored(row[0])
+                if vec is None or vec.size == 0:
+                    continue
+                norm = float(np.linalg.norm(vec))
+                if not np.isfinite(norm) or norm == 0.0:
+                    continue
+                normed_vec = (vec / norm).astype(np.float32, copy=False)
+                blob = vector_to_blob(normed_vec)
+                if blob is None:
+                    continue
+
+                candidates = session.exec(
+                    text(
+                        """
+                        SELECT person_id, distance
+                          FROM person_embeddings
+                         WHERE person_id != :pid
+                           AND embedding MATCH :vec
+                         ORDER BY distance
+                         LIMIT 5
+                        """
+                    ).bindparams(pid=person_id, vec=blob)
+                ).all()
+
+                merged_this_round = False
+                for candidate_id, distance in candidates:
+                    if candidate_id is None or distance is None:
+                        continue
+                    if float(distance) > l2_threshold:
+                        continue
+
+                    merge_result = _merge_person_pair(
+                        session, int(person_id), int(candidate_id)
+                    )
+                    if merge_result is not None:
+                        keep_id, _ = merge_result
+                        total_merged += 1
+                        pending.append(keep_id)
+                        merged_this_round = True
+                        break
+
+                if merged_this_round:
+                    continue
+        if total_merged:
+            logger.info(
+                "Merged %d newly created person clusters after targeted pass",
+                total_merged,
+            )
+        return total_merged
+
+    # Fallback to a full scan (used when no specific candidates are provided)
     while True:
         merged_in_pass = 0
         with Session(db.engine) as session:
@@ -950,10 +1019,12 @@ def _merge_similar_persons(task_id: str) -> int:
                     if distance is None or float(distance) > l2_threshold:
                         continue
 
-                    removed = _merge_person_pair(
+                    merge_result = _merge_person_pair(
                         session, int(person_id), int(candidate_id)
                     )
-                    if removed is not None:
+                    if merge_result is not None:
+                        keep_id, _ = merge_result
+                        person_id = keep_id
                         total_merged += 1
                         merged_in_pass += 1
                         restart_pass = True
@@ -985,8 +1056,9 @@ def _filter_embeddings_by_id(
 
 def _assign_faces_to_clusters(
     clusters: dict[int, tuple[list[int], list[np.ndarray]]], task_id: str
-) -> int:
+) -> tuple[int, list[int]]:
     created = 0
+    new_person_ids: list[int] = []
     for face_ids, embeddings in tqdm(clusters.values()):
         if len(face_ids) < settings.face_recognition.person_min_face_count:
             logger.debug(
@@ -1045,6 +1117,7 @@ def _assign_faces_to_clusters(
             session.flush()  # Get new_person.id
 
             created += 1
+            new_person_ids.append(new_person.id)
 
             for face_id in face_ids:
                 face = session.get(Face, face_id)
@@ -1083,7 +1156,7 @@ def _assign_faces_to_clusters(
             task.processed += len(face_ids)
             session.add(task)
             safe_commit(session)
-    return created
+    return created, new_person_ids
 
 
 def assign_to_existing_persons(
@@ -1317,6 +1390,7 @@ def run_person_clustering(task_id: str):
 
     with heavy_writer(name="cluster_persons", cancelled=is_cancelled):
         last_id = 0
+        new_person_candidates: list[int] = []
         while True:
             logger.info("--- Starting new Clustering Batch ---")
             with Session(db.engine) as session:
@@ -1374,7 +1448,11 @@ def run_person_clustering(task_id: str):
                 clusters = _group_faces_by_cluster(
                     labels, new_faces_ids, new_embs
                 )
-                created_count = _assign_faces_to_clusters(clusters, task_id)
+                created_count, created_person_ids = _assign_faces_to_clusters(
+                    clusters, task_id
+                )
+                if created_person_ids:
+                    new_person_candidates.extend(created_person_ids)
                 logger.info(
                     "Cluster batch produced %d new persons out of %d candidate clusters",
                     created_count,
@@ -1386,7 +1464,7 @@ def run_person_clustering(task_id: str):
             ):
                 break
 
-        _merge_similar_persons(task_id)
+        _merge_similar_persons(task_id, new_person_candidates)
 
         with Session(db.engine) as session:
             task = session.get(ProcessingTask, task_id)
@@ -1585,7 +1663,6 @@ def reset_processing(session: Session = Depends(get_session)):
         session.exec(update(Media).values(embeddings_created=False))
         session.exec(update(Face).values(person_id=None))
 
-        session.exec(delete(PersonSimilarity))
         session.exec(delete(PersonTagLink))
         session.exec(delete(TimelineEvent))
         session.exec(delete(Person))
@@ -1606,7 +1683,9 @@ def reset_processing(session: Session = Depends(get_session)):
                 try:
                     path_obj.unlink()
                 except Exception:
-                    logger.debug("Failed to remove face thumbnail %s", path_obj)
+                    logger.debug(
+                        "Failed to remove face thumbnail %s", path_obj
+                    )
     return "OK"
 
 
@@ -1618,7 +1697,6 @@ def reset_clustering(session: Session = Depends(get_session)):
             detail="Not allowed in settings.general.read_only mode.",
         )
     with heavy_writer(name="reset_clustering"):
-        session.exec(delete(PersonSimilarity))
         session.exec(
             update(Face).values(person_id=None).where(Face.person_id != None)
         )

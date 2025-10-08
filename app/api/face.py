@@ -12,7 +12,7 @@ from sqlmodel import Session, delete, select, text
 from app.config import settings
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
-from app.models import Face, Person, PersonSimilarity, PersonTagLink
+from app.models import Face, Person, PersonTagLink
 from app.schemas.face import CursorPage, FaceAssign
 from app.schemas.person import PersonMinimal
 from app.utils import (
@@ -34,7 +34,8 @@ async def assign_faces(
 ):
     if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in settings.general.read_only mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     new_person_id = body.person_id
     new_person = session.get(Person, new_person_id)
@@ -48,7 +49,9 @@ async def assign_faces(
     for face_id in body.face_ids:
         face = session.get(Face, face_id)
         if not face:
-            logger.warning(f"Face with ID {face_id} not found, skipping assignment.")
+            logger.warning(
+                f"Face with ID {face_id} not found, skipping assignment."
+            )
             continue
 
         original_person_id = face.person_id
@@ -82,7 +85,8 @@ async def detach_faces(
 ):
     if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in settings.general.read_only mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
 
     affected_person_ids: set[int] = set()
@@ -90,7 +94,9 @@ async def detach_faces(
     for face_id in face_ids:
         face = session.get(Face, face_id)
         if not face:
-            logger.warning(f"Face with ID {face_id} not found, skipping detachment.")
+            logger.warning(
+                f"Face with ID {face_id} not found, skipping detachment."
+            )
             continue
 
         person_id = face.person_id
@@ -122,7 +128,8 @@ def update_face_embedding(
 ):
     if settings.general.read_only:
         return HTTPException(
-            status_code=403, detail="Not allowed in settings.general.read_only mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     if not delete_face and person_id:
         sql = text(
@@ -145,16 +152,22 @@ def update_face_embedding(
     summary="Delete multiple face records (and their thumbnail files)",
     status_code=status.HTTP_200_OK,
 )
-def delete_faces(face_ids: list[int] = Query(..., alias="face_ids"), session: Session = Depends(get_session)):
+def delete_faces(
+    face_ids: list[int] = Query(..., alias="face_ids"),
+    session: Session = Depends(get_session),
+):
     if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in settings.general.read_only mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     affected_person_ids: set[int] = set()
     for face_id in face_ids:
         face = session.get(Face, face_id)
         if not face:
-            logger.warning(f"Face with ID {face_id} not found, skipping deletion.")
+            logger.warning(
+                f"Face with ID {face_id} not found, skipping deletion."
+            )
             continue
 
         # remove thumbnail from disk
@@ -197,9 +210,7 @@ def get_orphans(
     if cursor:
         before_id = int(cursor)
     query = (
-        select(Face)
-        .where(Face.person_id.is_(None))
-        .order_by(Face.id.desc())
+        select(Face).where(Face.person_id.is_(None)).order_by(Face.id.desc())
     )
     if before_id:
         query = query.where(Face.id < before_id)
@@ -225,7 +236,8 @@ async def create_person_from_faces(
 ):
     if settings.general.read_only:
         raise HTTPException(
-            status_code=403, detail="Not allowed in settings.general.read_only mode."
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
         )
     if not face_ids:
         raise HTTPException(status_code=400, detail="No face IDs provided")
@@ -285,16 +297,6 @@ def old_person_can_be_deleted(session: Session, person_id: int | None):
     safe_execute(
         session,
         delete(PersonTagLink).where(PersonTagLink.person_id == person_id),
-    )
-    safe_execute(
-        session,
-        delete(PersonSimilarity).where(
-            PersonSimilarity.person_id == person_id
-        ),
-    )
-    safe_execute(
-        session,
-        delete(PersonSimilarity).where(PersonSimilarity.other_id == person_id),
     )
     person = session.get(Person, person_id)
     session.delete(person)

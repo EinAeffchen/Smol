@@ -19,7 +19,6 @@ from sqlalchemy import delete, distinct, func, text
 from sqlmodel import Session, select, update
 from tqdm import tqdm
 
-import app.database as db
 from app.config import settings
 from app.database import safe_commit
 from app.ffmpeg import ensure_ffmpeg_available
@@ -31,7 +30,6 @@ from app.models import (
     Media,
     MediaTagLink,
     Person,
-    PersonSimilarity,
     ProcessingTask,
     Scene,
 )
@@ -197,7 +195,9 @@ def process_file(filepath: Path) -> tuple[Media | None, str | None]:
             probe = _ffprobe_json(filepath, timeout=15)
             if probe:
                 try:
-                    duration = float(probe.get("format", {}).get("duration", 0))
+                    duration = float(
+                        probe.get("format", {}).get("duration", 0)
+                    )
                 except Exception:
                     duration = 0.0
                 try:
@@ -213,7 +213,9 @@ def process_file(filepath: Path) -> tuple[Media | None, str | None]:
                     width = width or None
                     height = height or None
             else:
-                logger.warning("Skipping video probe metadata for %s", filepath)
+                logger.warning(
+                    "Skipping video probe metadata for %s", filepath
+                )
         else:
             # Images: avoid ffprobe entirely; use PIL for dimensions if possible
             try:
@@ -222,7 +224,9 @@ def process_file(filepath: Path) -> tuple[Media | None, str | None]:
             except UnidentifiedImageError:
                 logger.warning("Skipping %s, not an image!", filepath)
             except OSError as exc:
-                logger.warning("Image %s could not be opened: %s", filepath, exc)
+                logger.warning(
+                    "Image %s could not be opened: %s", filepath, exc
+                )
 
         media = Media(
             path=str(filepath),
@@ -490,7 +494,7 @@ def generate_thumbnail(media: Media) -> tuple[str | None, str | None]:
                 img.thumbnail((360, -1))
                 try:
                     img.save(thumb_path, format="JPEG")
-                except OSError as exc:
+                except OSError:
                     try:
                         img.convert("RGB").save(thumb_path, format="JPEG")
                     except OSError as rgb_exc:
@@ -822,45 +826,6 @@ def split_video(
         return _split_by_scenes(media, scenes)
     else:
         return _split_by_frames(media)
-
-
-def refresh_similarities_for_person(person_id: int) -> None:
-    with Session(db.engine) as session:
-        target_blob = get_person_embedding(session, person_id)
-        if target_blob is None:
-            return
-        target_vec = vector_from_stored(target_blob)
-        if target_vec is None:
-            return
-
-        # load all other person ids
-        other_ids = session.exec(select(Person.id)).all()
-        for oid in other_ids:
-            if oid == person_id:
-                continue
-            emb_blob = get_person_embedding(session, oid)
-            if emb_blob is None:
-                continue
-            emb_vec = vector_from_stored(emb_blob)
-            if emb_vec is None:
-                continue
-            sim = cosine_similarity(
-                target_vec,
-                emb_vec,
-            )
-            # upsert into PersonSimilarity
-            existing = session.get(PersonSimilarity, (person_id, oid))
-            if existing:
-                existing.similarity = sim
-                existing.calculated_at = datetime.now(timezone.utc)
-                session.add(existing)
-            else:
-                session.add(
-                    PersonSimilarity(
-                        person_id=person_id, other_id=oid, similarity=sim
-                    )
-                )
-        safe_commit(session)
 
 
 def delete_record(media_id, session: Session):

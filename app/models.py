@@ -198,17 +198,6 @@ class ProcessingTaskRead(ProcessingTask, table=False):
     failure_count: int | None = None
 
 
-class PersonSimilarity(SQLModel, table=True):
-    # composite PK: for person → other person
-    person_id: int = Field(foreign_key="person.id", primary_key=True)
-    other_id: int = Field(foreign_key="person.id", primary_key=True)
-    similarity: float
-    calculated_at: datetime = Field(default_factory=datetime.now)
-
-    class Config:
-        from_attributes = True
-
-
 class ExifData(SQLModel, table=True):
     id: int = Field(default=None, primary_key=True)
     media_id: int = Field(foreign_key="media.id", index=True)
