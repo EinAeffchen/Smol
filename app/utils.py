@@ -835,7 +835,9 @@ def _limit_scene_results(
     if duration_seconds <= 0:
         target_count = min(max_total, max(len(scenes), min_total))
     else:
-        max_by_density = int(math.ceil(duration_seconds / density_window_seconds))
+        max_by_density = int(
+            math.ceil(duration_seconds / density_window_seconds)
+        )
         target_count = min(max_total, max(min_total, max_by_density))
 
     if len(scenes) <= target_count:
@@ -852,7 +854,7 @@ def _limit_scene_results(
     limited = [scenes[i] for i in selected_indices]
     if len(limited) < min_total and len(scenes) >= min_total:
         # Ensure we don't fall below the desired minimum due to rounding.
-        limited = scenes[:min(len(scenes), max(min_total, len(limited)))]
+        limited = scenes[: min(len(scenes), max(min_total, len(limited)))]
     return limited
 
 
@@ -860,35 +862,35 @@ def split_video(
     media: Media, path: Path
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
     """Returns select frames from a video and a list of scenes"""
+    if settings.video.auto_scene_detection:
+        scenes = detect(
+            str(path),
+            HistogramDetector(
+                threshold=0.2,
+                min_scene_len=500,
+                # adaptive_threshold=3, window_width=5, min_scene_len=500
+            ),
+            show_progress=True,
+        )
+        logger.debug("Detecting scenes...")
 
-    scenes = detect(
-        str(path),
-        HistogramDetector(
-            threshold=0.2,
-            min_scene_len=500,
-            # adaptive_threshold=3, window_width=5, min_scene_len=500
-        ),
-        show_progress=True,
-    )
-    logger.debug("Detecting scenes...")
+        duration_seconds: float | None = None
+        try:
+            if media.duration is not None:
+                duration_seconds = float(media.duration)
+        except Exception:
+            duration_seconds = None
 
-    duration_seconds: float | None = None
-    try:
-        if media.duration is not None:
-            duration_seconds = float(media.duration)
-    except Exception:
-        duration_seconds = None
-
-    limited_scenes = _limit_scene_results(scenes, duration_seconds)
-    if len(limited_scenes) >= 3:
-        if len(limited_scenes) < len(scenes):
-            logger.debug(
-                "Trimming scene list from %d to %d entries (duration≈%.2fs)",
-                len(scenes),
-                len(limited_scenes),
-                (duration_seconds or 0.0),
-            )
-        return _split_by_scenes(media, limited_scenes)
+        limited_scenes = _limit_scene_results(scenes, duration_seconds)
+        if len(limited_scenes) >= 3:
+            if len(limited_scenes) < len(scenes):
+                logger.debug(
+                    "Trimming scene list from %d to %d entries (duration≈%.2fs)",
+                    len(scenes),
+                    len(limited_scenes),
+                    (duration_seconds or 0.0),
+                )
+            return _split_by_scenes(media, limited_scenes)
 
     return _split_by_frames(media)
 

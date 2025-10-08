@@ -479,11 +479,11 @@ def _assign_faces_to_clusters(
             media_count = int(media_count or 0)
 
             if media_count < settings.face_recognition.person_min_media_count:
-                logger.debug(
-                    "Skipping cluster with %d media (< person_min_media_count %d)",
-                    media_count,
-                    settings.face_recognition.person_min_media_count,
-                )
+                # logger.debug(
+                #     "Skipping cluster with %d media (< person_min_media_count %d)",
+                #     media_count,
+                #     settings.face_recognition.person_min_media_count,
+                # )
                 continue
             new_person = Person(
                 name=None,

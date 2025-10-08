@@ -56,7 +56,9 @@ def reset_processing(session: Session) -> str:
                 try:
                     path_obj.unlink()
                 except Exception:
-                    logger.debug("Failed to remove face thumbnail %s", path_obj)
+                    logger.debug(
+                        "Failed to remove face thumbnail %s", path_obj
+                    )
     return "OK"
 
 
@@ -65,9 +67,11 @@ def reset_clustering(session: Session) -> str:
         session.exec(
             update(Face).values(person_id=None).where(Face.person_id != None)
         )
-        session.exec(delete(Person))
         session.exec(text("UPDATE face_embeddings SET person_id=-1"))
         session.exec(text("DELETE FROM person_embeddings"))
+        session.exec(delete(TimelineEvent))
+        session.exec(delete(PersonTagLink))
+        session.exec(delete(Person))
         safe_commit(session)
     return "OK"
 
