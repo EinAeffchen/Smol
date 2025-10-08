@@ -238,8 +238,8 @@ export interface MissingResetResponse {
 }
 
 export interface DuplicatePage {
-  items: MediaPreview[][];
-  next_cursor: number | null;
+  items: DuplicateGroup[];
+  next_cursor: string | null;
 }
 
 // Timeline

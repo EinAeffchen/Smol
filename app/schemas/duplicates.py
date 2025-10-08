@@ -15,7 +15,7 @@ class DuplicateGroup(BaseModel):
 
 class DuplicatePage(BaseModel):
     items: list[DuplicateGroup]
-    next_cursor: int | None
+    next_cursor: str | None
 
 
 class DuplicateTypeSummary(BaseModel):

@@ -2,12 +2,12 @@ import { API } from "../config";
 import { DuplicatePage, Task, DuplicateStats } from "../types";
 
 export const getDuplicates = async (
-  cursor: number | null = null,
+  cursor: string | null = null,
   limit: number = 10
 ): Promise<DuplicatePage> => {
   const params = new URLSearchParams();
   if (cursor) {
-    params.append("cursor", cursor.toString());
+    params.append("cursor", cursor);
   }
   params.append("limit", limit.toString());
 

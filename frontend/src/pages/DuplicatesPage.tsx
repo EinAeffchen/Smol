@@ -49,6 +49,12 @@ const DuplicatesPage: React.FC = () => {
   }, [inView, hasMore, isLoading, loadMore, listKey]);
 
   useEffect(() => {
+    if (!isLoading && hasMore && duplicateGroups.length === 0) {
+      loadMore(listKey, (cursor) => getDuplicates(cursor));
+    }
+  }, [duplicateGroups.length, hasMore, isLoading, loadMore, listKey]);
+
+  useEffect(() => {
     let isActive = true;
 
     const loadStats = async () => {

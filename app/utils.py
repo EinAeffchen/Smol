@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import subprocess
 from collections.abc import Iterable
@@ -13,7 +14,7 @@ import numpy as np
 import piexif
 from fastapi import HTTPException
 from PIL import Image, ImageOps, UnidentifiedImageError
-from scenedetect import HistogramDetector, detect
+from scenedetect import FrameTimecode, HistogramDetector, detect
 from scenedetect.video_splitter import TimecodePair
 from sqlalchemy import delete, distinct, func, text
 from sqlmodel import Session, select, update
@@ -807,6 +808,54 @@ def complete_task(session: Session, task: ProcessingTask):
     safe_commit(session)
 
 
+def _limit_scene_results(
+    scenes: list[tuple[FrameTimecode, FrameTimecode]],
+    duration_seconds: float | None,
+    *,
+    max_total: int = 50,
+    min_total: int = 3,
+    density_window_seconds: float = 5.0,
+) -> list[tuple[FrameTimecode, FrameTimecode]]:
+    """Clamp the number of detected scenes to keep UX predictable.
+
+    - Never exceed `max_total` scenes.
+    - Roughly limit density to one scene every `density_window_seconds`.
+    - Always keep at least `min_total` scenes when possible so short videos
+      still receive good search coverage.
+    """
+    if not scenes:
+        return []
+
+    if duration_seconds is None or duration_seconds <= 0:
+        try:
+            duration_seconds = float(scenes[-1][1].get_seconds())
+        except Exception:
+            duration_seconds = 0.0
+
+    if duration_seconds <= 0:
+        target_count = min(max_total, max(len(scenes), min_total))
+    else:
+        max_by_density = int(math.ceil(duration_seconds / density_window_seconds))
+        target_count = min(max_total, max(min_total, max_by_density))
+
+    if len(scenes) <= target_count:
+        return scenes
+
+    step = (len(scenes) - 1) / max(target_count - 1, 1)
+    selected_indices: list[int] = []
+    for i in range(target_count):
+        idx = int(round(i * step))
+        idx = max(0, min(idx, len(scenes) - 1))
+        if not selected_indices or idx != selected_indices[-1]:
+            selected_indices.append(idx)
+
+    limited = [scenes[i] for i in selected_indices]
+    if len(limited) < min_total and len(scenes) >= min_total:
+        # Ensure we don't fall below the desired minimum due to rounding.
+        limited = scenes[:min(len(scenes), max(min_total, len(limited)))]
+    return limited
+
+
 def split_video(
     media: Media, path: Path
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
@@ -822,10 +871,26 @@ def split_video(
         show_progress=True,
     )
     logger.debug("Detecting scenes...")
-    if len(scenes) >= 10:
-        return _split_by_scenes(media, scenes)
-    else:
-        return _split_by_frames(media)
+
+    duration_seconds: float | None = None
+    try:
+        if media.duration is not None:
+            duration_seconds = float(media.duration)
+    except Exception:
+        duration_seconds = None
+
+    limited_scenes = _limit_scene_results(scenes, duration_seconds)
+    if len(limited_scenes) >= 3:
+        if len(limited_scenes) < len(scenes):
+            logger.debug(
+                "Trimming scene list from %d to %d entries (duration≈%.2fs)",
+                len(scenes),
+                len(limited_scenes),
+                (duration_seconds or 0.0),
+            )
+        return _split_by_scenes(media, limited_scenes)
+
+    return _split_by_frames(media)
 
 
 def delete_record(media_id, session: Session):
