@@ -333,7 +333,7 @@ export interface AppConfig {
     person_min_face_count: number;
     person_min_media_count: number;
     person_cluster_max_l2_radius: number;
-    person_merge_cosine_threshold: number;
+    person_merge_percent_similarity: number;
     cluster_batch_size: number;
     hdbscan_min_cluster_size: number;
     hdbscan_min_samples: number;

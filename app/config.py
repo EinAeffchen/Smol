@@ -436,11 +436,11 @@ FACE_RECOGNITION_PRESETS: dict[
         "person_min_face_count": 3,
         "person_min_media_count": 2,
         "person_cluster_max_l2_radius": 0.7,
-        "person_merge_cosine_threshold": 0.96,
+        "person_merge_percent_similarity": 90,
         "cluster_batch_size": 15000,
         "hdbscan_min_cluster_size": 6,
         "hdbscan_min_samples": 12,
-        "hdbscan_cluster_selection_method": "leaf",
+        "hdbscan_cluster_selection_method": "eom",
         "hdbscan_cluster_selection_epsilon": 0.07,
     },
     FaceClusteringPreset.NORMAL: {
@@ -453,11 +453,11 @@ FACE_RECOGNITION_PRESETS: dict[
         "person_min_face_count": 2,
         "person_min_media_count": 2,
         "person_cluster_max_l2_radius": 0.85,
-        "person_merge_cosine_threshold": 0.92,
+        "person_merge_percent_similarity": 82,
         "cluster_batch_size": 15000,
         "hdbscan_min_cluster_size": 6,
         "hdbscan_min_samples": 10,
-        "hdbscan_cluster_selection_method": "leaf",
+        "hdbscan_cluster_selection_method": "eom",
         "hdbscan_cluster_selection_epsilon": 0.10,
     },
     FaceClusteringPreset.LOOSE: {
@@ -469,13 +469,13 @@ FACE_RECOGNITION_PRESETS: dict[
         "face_recognition_min_face_pixels": 1200,
         "person_min_face_count": 2,
         "person_min_media_count": 2,
-        "person_cluster_max_l2_radius": 1,
-        "person_merge_cosine_threshold": 0.88,
+        "person_cluster_max_l2_radius": 1.05,
+        "person_merge_percent_similarity": 75,
         "cluster_batch_size": 15000,
         "hdbscan_min_cluster_size": 4,
-        "hdbscan_min_samples": 6,
-        "hdbscan_cluster_selection_method": "leaf",
-        "hdbscan_cluster_selection_epsilon": 0.13,
+        "hdbscan_min_samples": 4,
+        "hdbscan_cluster_selection_method": "eom",
+        "hdbscan_cluster_selection_epsilon": 0.11,
     },
 }
 
@@ -503,7 +503,7 @@ class FaceRecognitionSettings(BaseModel):
     # maximum allowed L2 radius around centroid (normalized vectors)
     person_cluster_max_l2_radius: float = 0.65
     # merge previously created persons when their embeddings are extremely similar
-    person_merge_cosine_threshold: float = 0.9
+    person_merge_percent_similarity: int = 80
     # reduce if ram is an issue, the higher the more accurate the clustering.
     cluster_batch_size: int = 10000
     # HDBSCAN tuning to reduce over-merged clusters (e.g., side profiles)

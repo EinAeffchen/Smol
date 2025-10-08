@@ -793,18 +793,38 @@ def _rebuild_person_embedding(session: Session, person_id: int) -> None:
             continue
         vectors.append((vec / norm).astype(np.float32, copy=False))
 
+    if not vectors:
+        # If no embeddings remain but faces still point at this person, keep the
+        # record and leave centroid generation for a later pass. Only remove the
+        # person when they truly have no faces anymore.
+        faces_count_row = session.exec(
+            select(func.count(Face.id)).where(Face.person_id == person_id)
+        ).one()
+        if isinstance(faces_count_row, tuple):
+            faces_count = int(faces_count_row[0] or 0)
+        else:
+            faces_count = int(faces_count_row or 0)
+        if faces_count == 0:
+            session.exec(
+                text(
+                    "DELETE FROM person_embeddings WHERE person_id = :pid"
+                ).bindparams(pid=person_id)
+            )
+            person = session.get(Person, person_id)
+            if person:
+                session.delete(person)
+        else:
+            logger.debug(
+                "Skipping centroid rebuild for person %s; no embeddings available yet",
+                person_id,
+            )
+        return
+
     session.exec(
         text(
             "DELETE FROM person_embeddings WHERE person_id = :pid"
         ).bindparams(pid=person_id)
     )
-
-    if not vectors:
-        # No embeddings left; drop the person entirely.
-        person = session.get(Person, person_id)
-        if person:
-            session.delete(person)
-        return
 
     centroid = np.vstack(vectors).mean(axis=0)
     norm = float(np.linalg.norm(centroid))
@@ -839,6 +859,7 @@ def _merge_person_pair(
 
     count_a = int(person_a.appearance_count or 0)
     count_b = int(person_b.appearance_count or 0)
+    logger.info("Expected count: %s", count_a + count_b)
     if count_b > count_a:
         keep, drop = person_b, person_a
     else:
@@ -857,6 +878,17 @@ def _merge_person_pair(
         text(
             "UPDATE face_embeddings SET person_id = :keep WHERE person_id = :drop"
         ).bindparams(keep=keep_id, drop=drop_id)
+    )
+
+    # Preserve profile picture when the surviving person lacks one
+    if drop.profile_face_id and not keep.profile_face_id:
+        keep.profile_face_id = drop.profile_face_id
+        session.add(keep)
+
+    session.exec(
+        update(TimelineEvent)
+        .where(TimelineEvent.person_id == drop_id)
+        .values(person_id=keep_id)
     )
 
     # Remove duplicate similarity entries referencing the dropped person
@@ -882,22 +914,7 @@ def _merge_similar_persons(
     When `candidate_person_ids` is provided we only re-evaluate those persons,
     which keeps the post-processing step fast even for very large datasets.
     """
-    try:
-        cosine_threshold = float(
-            getattr(
-                settings.face_recognition,
-                "person_merge_cosine_threshold",
-                0.0,
-            )
-        )
-    except (TypeError, ValueError):
-        return 0
-
-    if cosine_threshold <= 0.0:
-        return 0
-
-    cosine_threshold = min(cosine_threshold, 0.999999)
-    l2_threshold = float(np.sqrt(max(0.0, 2.0 * (1.0 - cosine_threshold))))
+    logger.debug("Merging similar persons")
 
     total_merged = 0
 
@@ -936,30 +953,41 @@ def _merge_similar_persons(
                 candidates = session.exec(
                     text(
                         """
-                        SELECT person_id, distance
+                        SELECT person_id, ROUND(
+                            (1.0 - (MIN(distance) * MIN(distance)) / 2.0) * 100,
+                            2
+                        ) AS similarity_pct
                           FROM person_embeddings
                          WHERE person_id != :pid
                            AND embedding MATCH :vec
-                         ORDER BY distance
-                         LIMIT 5
+                           and k = 5
+                         ORDER BY similarity_pct desc
                         """
                     ).bindparams(pid=person_id, vec=blob)
                 ).all()
 
                 merged_this_round = False
-                for candidate_id, distance in candidates:
-                    if candidate_id is None or distance is None:
+                for candidate_id, similarity in candidates:
+                    if candidate_id is None or similarity is None:
                         continue
-                    if float(distance) > l2_threshold:
+                    if (
+                        float(similarity)
+                        < settings.face_recognition.person_merge_percent_similarity
+                    ):
                         continue
-
+                    logger.debug(
+                        "Merging candidate persons %s and %s (similarity %.2f%%)",
+                        person_id,
+                        candidate_id,
+                        similarity,
+                    )
                     merge_result = _merge_person_pair(
                         session, int(person_id), int(candidate_id)
                     )
                     if merge_result is not None:
                         keep_id, _ = merge_result
                         total_merged += 1
-                        pending.append(keep_id)
+                        pending.appendleft(keep_id)
                         merged_this_round = True
                         break
 
@@ -1463,7 +1491,6 @@ def run_person_clustering(task_id: str):
                 < settings.face_recognition.cluster_batch_size
             ):
                 break
-
         _merge_similar_persons(task_id, new_person_candidates)
 
         with Session(db.engine) as session:
