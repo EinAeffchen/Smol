@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import hdbscan
 import numpy as np
-from sqlalchemy import func, text, update
+from sqlalchemy import delete, func, or_, text, update
 from sqlmodel import Session, select
 from tqdm import tqdm
 
@@ -15,15 +15,21 @@ from app.concurrency import heavy_writer
 from app.config import settings
 from app.database import safe_commit
 from app.logger import logger
-from app.models import Face, Person, ProcessingTask, TimelineEvent
+from app.models import (
+    Face,
+    Person,
+    PersonRelationship,
+    ProcessingTask,
+    TimelineEvent,
+)
 from app.utils import (
     complete_task,
     recalculate_person_appearance_counts,
     vector_from_stored,
     vector_to_blob,
 )
-from .relationships import rebuild_person_relationships
 
+from .relationships import rebuild_person_relationships
 from .state import clear_task_progress, set_task_progress
 
 __all__ = [
@@ -218,6 +224,14 @@ def rebuild_person_embedding(session: Session, person_id: int) -> None:
             )
             person = session.get(Person, person_id)
             if person:
+                session.exec(
+                    delete(PersonRelationship).where(
+                        or_(
+                            PersonRelationship.person_a_id == person_id,
+                            PersonRelationship.person_b_id == person_id,
+                        )
+                    )
+                )
                 session.delete(person)
         else:
             logger.debug(

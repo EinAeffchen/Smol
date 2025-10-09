@@ -16,6 +16,7 @@ from app.models import (
     Face,
     Media,
     Person,
+    PersonRelationship,
     PersonTagLink,
     ProcessingTask,
     TimelineEvent,
@@ -38,6 +39,7 @@ def reset_processing(session: Session) -> str:
 
         session.exec(delete(PersonTagLink))
         session.exec(delete(TimelineEvent))
+        session.exec(delete(PersonRelationship))
         session.exec(delete(Person))
 
         session.exec(text("DELETE FROM face_embeddings"))
@@ -71,6 +73,7 @@ def reset_clustering(session: Session) -> str:
         session.exec(text("DELETE FROM person_embeddings"))
         session.exec(delete(TimelineEvent))
         session.exec(delete(PersonTagLink))
+        session.exec(delete(PersonRelationship))
         session.exec(delete(Person))
         safe_commit(session)
     return "OK"
