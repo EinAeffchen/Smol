@@ -125,6 +125,7 @@ On first start, open Settings → Profiles and set your media folder(s). Click S
 - Library grid: ![Library grid](docs/screenshots/library-grid.png)
 - Media detail (faces, tags, EXIF): ![Media detail](docs/screenshots/media-detail.png)
 - Search by text: ![Text search](docs/screenshots/search-text.png)
+- Search for scenes ![Scene search](docs/screenshots/search-scene.PNG)
 - People overview: ![People overview](docs/screenshots/people-list.png)
 - Person detail: ![Perosn Detailview](docs/screenshots/person-detail.png)
 - Duplicates: ![Duplicates](docs/screenshots/duplicates.png)

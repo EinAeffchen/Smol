@@ -41,10 +41,10 @@ from app.schemas.person import (
     PersonReadSimple,
     PersonUpdate,
     ProfileFace,
-    SimilarPerson,
     RelationshipEdge,
     RelationshipGraph,
     RelationshipNode,
+    SimilarPerson,
 )
 from app.schemas.timeline import (
     TimelineEventCreate,
@@ -336,7 +336,9 @@ def suggest_faces(
     ).bindparams(vec=target, k=limit)
     rows = session.exec(sql).all()
     face_ids = [r[0] for r in rows]
-    distance_map = {int(row[0]): float(row[1]) for row in rows if row[1] is not None}
+    distance_map = {
+        int(row[0]): float(row[1]) for row in rows if row[1] is not None
+    }
 
     faces = session.exec(select(Face).where(Face.id.in_(face_ids))).all()
     id_map = {f.id: f for f in faces}
@@ -619,6 +621,28 @@ def merge_persons(
     if target.profile_face_id is None and source.profile_face_id is not None:
         target.profile_face_id = source.profile_face_id
 
+    session.exec(
+        delete(PersonRelationship).where(
+            PersonRelationship.person_a_id == source.id,
+            PersonRelationship.person_b_id == target.id,
+        )
+    )
+    session.exec(
+        delete(PersonRelationship).where(
+            PersonRelationship.person_b_id == source.id,
+            PersonRelationship.person_a_id == target.id,
+        )
+    )
+    session.exec(
+        update(PersonRelationship)
+        .where(PersonRelationship.person_a_id == source.id)
+        .values(person_a_id=target.id)
+    )
+    session.exec(
+        update(PersonRelationship)
+        .where(PersonRelationship.person_b_id == source.id)
+        .values(person_b_id=target.id)
+    )
     session.delete(source)
     safe_commit(session)
 
@@ -749,13 +773,17 @@ def get_similarities(
         )
 
     return similar_persons_list
+
+
 @router.get(
     "/{person_id}/relationships",
     response_model=RelationshipGraph,
 )
 def get_person_relationships(
     person_id: int,
-    depth: int = Query(3, ge=1, le=5, description="Number of generations to include"),
+    depth: int = Query(
+        3, ge=1, le=5, description="Number of generations to include"
+    ),
     max_nodes: int = Query(
         50, ge=1, le=200, description="Maximum number of nodes to include"
     ),
@@ -873,4 +901,3 @@ def get_person_relationships(
         root_id=person_id,
         max_depth=depth,
     )
-

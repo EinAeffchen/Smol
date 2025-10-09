@@ -45,11 +45,13 @@ build-image:
 	docker build --build-arg APP_VERSION=${VERSION} -t omoide .
 	docker tag omoide einaeffchen/omoide
 	docker tag omoide einaeffchen/omoide:${VERSION}
+	git tag v${VERSION} -m "Release v${VERSION}"
 
 
 push: build-image
 	docker push einaeffchen/omoide
 	docker push einaeffchen/omoide:${VERSION}
+	git push origin v${VERSION}
 
 alembic-generate:
 	echo ${DATA_DIR}
