@@ -700,7 +700,14 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
     session.exec(
         delete(TimelineEvent).where(TimelineEvent.person_id == person_id)
     )
-
+    session.exec(
+        delete(PersonRelationship).where(
+            or_(
+                PersonRelationship.person_a_id == person_id,
+                PersonRelationship.person_b_id == person_id,
+            )
+        )
+    )
     session.delete(person)
     safe_commit(session)
 

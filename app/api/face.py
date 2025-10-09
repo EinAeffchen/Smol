@@ -7,12 +7,13 @@ from fastapi import (
     status,
 )
 from pydantic import BaseModel
+from sqlalchemy import or_
 from sqlmodel import Session, delete, select, text
 
 from app.config import settings
 from app.database import get_session, safe_commit, safe_execute
 from app.logger import logger
-from app.models import Face, Person, PersonTagLink
+from app.models import Face, Person, PersonRelationship, PersonTagLink
 from app.schemas.face import CursorPage, FaceAssign
 from app.schemas.person import PersonMinimal
 from app.utils import (
@@ -299,6 +300,14 @@ def old_person_can_be_deleted(session: Session, person_id: int | None):
         delete(PersonTagLink).where(PersonTagLink.person_id == person_id),
     )
     person = session.get(Person, person_id)
+    session.exec(
+        delete(PersonRelationship).where(
+            or_(
+                PersonRelationship.person_a_id == person_id,
+                PersonRelationship.person_b_id == person_id,
+            )
+        )
+    )
     session.delete(person)
     safe_commit(session)
     return True
