@@ -58,7 +58,7 @@ Self‑hosted, offline‑capable photo & video library with AI features. No clou
 - **Tasks**: Background tasks for scan, process media, cluster persons, find duplicates, clean missing files. Safe cancel and progress reporting.
 - **Profiles**: Multiple library roots; add/switch/remove profiles from Settings.
 - **Read‑only mode**: Serve an immutable library safely.
-
+- **Co-appearance graph**: See the relationships between the people in your media through their co-appearances.
 ---
 
 ## Offline Operation
@@ -132,6 +132,7 @@ On first start, open Settings → Profiles and set your media folder(s). Click S
 - Map view: ![Map](docs/screenshots/map.png)
 - Orphan faces review: ![Orphan faces](docs/screenshots/orphan-faces.png)
 - Configuration / Profiles: ![Profiles](docs/screenshots/settings-profiles.png)
+- Co-appearance graph: ![Co-Appearance Graph](docs/screenshots/coappearance-graph.png)
 
 ---
 
