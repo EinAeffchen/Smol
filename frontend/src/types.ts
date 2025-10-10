@@ -300,6 +300,19 @@ export interface EventDisplayItem {
 export type TimelineItem = TimelineMediaItem | TimelineEventItem;
 export type TimelineDisplayItem = MediaItemGroup | EventDisplayItem;
 
+export interface VersionUpdateInfo {
+  update_check_enabled: boolean;
+  current_version: string;
+  latest_version?: string | null;
+  latest_tag?: string | null;
+  update_available?: boolean;
+  release_url?: string | null;
+  published_at?: string | null;
+  checked_at?: string | null;
+  repo?: string | null;
+  error?: string | null;
+}
+
 export interface AppConfig {
   general: {
     port: number;
@@ -318,6 +331,9 @@ export interface AppConfig {
     static_dir: string;
     models_dir: string;
     database_url: string;
+    update_check_repo: string | null;
+    update_check_cache_minutes: number;
+    update_check_timeout_seconds: number;
   };
   scan: {
     auto_scan: boolean;

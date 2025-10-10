@@ -1,10 +1,17 @@
 from sqlmodel import Session, select, delete, update
 import app.database as db
 from app.logger import logger
-from app.models import Media, ProcessingTask, DuplicateGroup, DuplicateMedia
+from app.models import (
+    Media,
+    ProcessingTask,
+    DuplicateGroup,
+    DuplicateMedia,
+    Blacklist,
+)
 from sqlalchemy import func
 from datetime import datetime, timezone
-from app.config import settings, DuplicateHandlingRule
+from app.config import settings, DuplicateHandlingRule, DuplicateKeepRule
+from app.utils import delete_file, delete_record
 import imagehash
 
 class UnionFind:
@@ -56,6 +63,114 @@ class DuplicateProcessor:
             session.commit()
             session.refresh(task)
 
+    def _media_resolution(self, media: Media) -> int:
+        width = media.width or 0
+        height = media.height or 0
+        return int(width) * int(height)
+
+    def _media_timestamp(self, media: Media) -> datetime:
+        for candidate in (media.created_at, media.inserted_at):
+            if isinstance(candidate, datetime):
+                if candidate.tzinfo is not None:
+                    return candidate.replace(tzinfo=None)
+                return candidate
+        return datetime.min
+
+    def _select_master_media(self, media_items: list[Media]) -> Media | None:
+        if not media_items:
+            return None
+        rule = settings.duplicates.duplicate_auto_keep_rule
+        if rule == DuplicateKeepRule.BIGGEST:
+            return max(
+                media_items,
+                key=lambda m: ((m.size or 0), m.id),
+            )
+        if rule == DuplicateKeepRule.SMALLEST:
+            return min(
+                media_items,
+                key=lambda m: ((m.size or 0), m.id),
+            )
+        if rule == DuplicateKeepRule.HIGHEST_RES:
+            return max(
+                media_items,
+                key=lambda m: (self._media_resolution(m), m.id),
+            )
+        if rule == DuplicateKeepRule.LOWEST_RES:
+            return min(
+                media_items,
+                key=lambda m: (self._media_resolution(m), m.id),
+            )
+        if rule == DuplicateKeepRule.NEWEST:
+            return max(
+                media_items,
+                key=lambda m: (self._media_timestamp(m), m.id),
+            )
+        # Default to OLDEST
+        return min(
+            media_items,
+            key=lambda m: (self._media_timestamp(m), m.id),
+        )
+
+    def _apply_duplicate_action(self, session: Session, media: Media) -> None:
+        rule = settings.duplicates.duplicate_auto_handling
+        if rule is DuplicateHandlingRule.REMOVE:
+            logger.info("Auto-removing duplicate record id=%s path=%s", media.id, media.path)
+            delete_record(media.id, session)
+            return
+        if rule is DuplicateHandlingRule.BLACKLIST:
+            if media.path:
+                existing = session.exec(
+                    select(Blacklist).where(Blacklist.path == media.path)
+                ).first()
+                if not existing:
+                    session.add(Blacklist(path=media.path))
+            logger.info("Auto-blacklisting duplicate record id=%s path=%s", media.id, media.path)
+            delete_record(media.id, session)
+            return
+        if rule is DuplicateHandlingRule.DELETE:
+            logger.info("Auto-deleting duplicate file id=%s path=%s", media.id, media.path)
+            delete_file(session, media.id)
+            return
+
+    def _auto_resolve_media_items(
+        self, session: Session, media_items: list[Media]
+    ) -> None:
+        if (
+            settings.duplicates.duplicate_auto_handling
+            is DuplicateHandlingRule.KEEP
+        ):
+            return
+        unique_media = {media.id: media for media in media_items if media is not None}
+        if len(unique_media) <= 1:
+            return
+        master = self._select_master_media(list(unique_media.values()))
+        if master is None:
+            return
+        processed = 0
+        for media_id, media in unique_media.items():
+            if media_id == master.id:
+                continue
+            self._apply_duplicate_action(session, media)
+            processed += 1
+        logger.info(
+            "Duplicate auto-handling applied rule=%s (kept id=%s, processed=%s others)",
+            settings.duplicates.duplicate_auto_handling.value,
+            master.id if master else None,
+            processed,
+        )
+
+    def _auto_resolve_duplicates_by_ids(
+        self, session: Session, media_ids: list[int]
+    ) -> None:
+        if len(media_ids) <= 1:
+            return
+        media_items = session.exec(
+            select(Media).where(Media.id.in_(media_ids))
+        ).all()
+        if len(media_items) <= 1:
+            return
+        self._auto_resolve_media_items(session, media_items)
+
     def process(self):
         with Session(db.engine) as session:
             self._update_task_status(session, "running")
@@ -93,7 +208,22 @@ class DuplicateProcessor:
                         if len(video_ids) > 1:
                             self._create_or_update_group(session, video_ids)
                     else:
-                        pass#TODO
+                        if len(image_ids) > 1:
+                            image_id_set = set(image_ids)
+                            image_media = [
+                                media
+                                for media in media_items
+                                if media.id in image_id_set
+                            ]
+                            self._auto_resolve_media_items(session, image_media)
+                        if len(video_ids) > 1:
+                            video_id_set = set(video_ids)
+                            video_media = [
+                                media
+                                for media in media_items
+                                if media.id in video_id_set
+                            ]
+                            self._auto_resolve_media_items(session, video_media)
 
 
                 logger.info(
@@ -160,6 +290,10 @@ class DuplicateProcessor:
                                 is DuplicateHandlingRule.KEEP
                             ):
                                 self._create_or_update_group(
+                                    session, group_media_ids
+                                )
+                            else:
+                                self._auto_resolve_duplicates_by_ids(
                                     session, group_media_ids
                                 )
                             near_duplicate_groups += 1

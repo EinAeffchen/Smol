@@ -10,7 +10,7 @@ import {
   removeProfile as apiRemoveProfile,
   getProfileHealth,
 } from "../services/config";
-import { AppConfig, ProfileListResponse } from "../types";
+import { AppConfig, ProfileListResponse, VersionUpdateInfo } from "../types";
 import { IconButton } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/Delete";
@@ -50,6 +50,7 @@ import {
   ListItemText,
   ListItemSecondaryAction,
 } from "@mui/material";
+import { getVersionUpdateInfo } from "../services/version";
 
 type FacePresetKey = "strict" | "normal" | "loose";
 
@@ -146,6 +147,8 @@ export default function ConfigurationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<VersionUpdateInfo | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: "",
@@ -172,8 +175,20 @@ export default function ConfigurationPage() {
   useEffect(() => {
     const fetchConfig = async () => {
       try {
-        const data = await getConfig();
+        const [data, release] = await Promise.all([
+          getConfig(),
+          getVersionUpdateInfo().catch((err) => {
+            setUpdateError(err.message);
+            return null;
+          }),
+        ]);
         setConfig(data);
+        if (release) {
+          setUpdateInfo(release);
+          setUpdateError(release.error ?? null);
+        } else {
+          setUpdateInfo(null);
+        }
         // Try to load profiles; ignore errors on Docker
         try {
           const p = await listProfiles();
@@ -590,6 +605,19 @@ export default function ConfigurationPage() {
   if (!config) {
     return <Typography>No configuration loaded.</Typography>;
   }
+
+  const latestVersionLabel =
+    updateInfo?.latest_version ?? updateInfo?.latest_tag ?? null;
+  const updateLink =
+    updateInfo?.release_url ??
+    (updateInfo?.repo
+      ? `https://github.com/${updateInfo.repo}/releases`
+      : undefined);
+  const updateCheckEnabled = updateInfo?.update_check_enabled ?? true;
+  const showUpdateNotice =
+    updateCheckEnabled && Boolean(updateInfo?.update_available);
+  const showUpdateError =
+    updateCheckEnabled && !showUpdateNotice && Boolean(updateError);
 
   const isBinary = !!config.general.is_binary;
   const canEditMediaDirs = !config.general.is_docker;
@@ -1763,6 +1791,36 @@ export default function ConfigurationPage() {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
+      {showUpdateNotice && (
+        <Alert
+          severity="info"
+          sx={{ mb: 3 }}
+          action={
+            updateLink ? (
+              <Button
+                color="inherit"
+                size="small"
+                component="a"
+                href={updateLink}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                View Release
+              </Button>
+            ) : undefined
+          }
+        >
+          A newer version
+          {latestVersionLabel ? ` ${latestVersionLabel}` : ""} is available.
+          You are running {updateInfo?.current_version}.
+        </Alert>
+      )}
+      {showUpdateError && (
+        <Alert severity="warning" sx={{ mb: 3 }}>
+          Could not check for updates
+          {updateError ? `: ${updateError}` : "."}
+        </Alert>
+      )}
       <Typography variant="h4" gutterBottom sx={{ mb: 4 }}>
         Configuration
       </Typography>

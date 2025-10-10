@@ -17,6 +17,7 @@ import socket
 import uvicorn
 import webview
 from alembic.config import Config
+from anyio import to_thread
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -39,6 +40,7 @@ from app.api import (
     tasks,
 )
 from app.api.processors import router as proc_router
+from app.services.releases import get_latest_release_info
 from app.tasks import run_cleanup_and_chain
 from app.config import settings
 from app.database import ensure_vec_tables
@@ -356,6 +358,24 @@ def resolve_path(path):
 @app.get("/api/version", tags=["meta"])
 async def get_version():
     return {"version": APP_VERSION}
+
+
+@app.get("/api/version/update", tags=["meta"])
+async def get_version_update():
+    repo = settings.general.update_check_repo
+    if not repo:
+        return {
+            "update_check_enabled": False,
+            "current_version": APP_VERSION,
+        }
+    info = await to_thread.run_sync(
+        get_latest_release_info,
+        repo,
+        APP_VERSION,
+        settings.general.update_check_cache_minutes,
+        settings.general.update_check_timeout_seconds,
+    )
+    return info
 
 
 @app.get("/{full_path:path}", include_in_schema=False)

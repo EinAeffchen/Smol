@@ -1,5 +1,14 @@
 import React from "react";
-import { Box, Typography, Avatar, Stack, Button, Paper, useTheme } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Avatar,
+  Stack,
+  Button,
+  Paper,
+  useTheme,
+  CircularProgress,
+} from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import Grid from "@mui/material/Grid";
 import { Person } from "../types";
@@ -12,7 +21,9 @@ interface PersonHeroProps {
   onMerge: () => void;
   onDelete: () => void;
   onRefreshSimilar: () => void;
+  onAutoSelectProfile: () => void;
   saving: boolean;
+  autoSelectingProfile: boolean;
 }
 
 export function PersonHero({
@@ -21,7 +32,9 @@ export function PersonHero({
   onMerge,
   onDelete,
   onRefreshSimilar,
+  onAutoSelectProfile,
   saving,
+  autoSelectingProfile,
 }: PersonHeroProps) {
   const theme = useTheme();
   const thumbUrl = person.profile_face?.thumbnail_path
@@ -77,6 +90,17 @@ export function PersonHero({
                 disabled={saving}
               >
                 Refresh Similar
+              </Button>
+              <Button
+                variant="outlined"
+                onClick={onAutoSelectProfile}
+                disabled={saving || autoSelectingProfile}
+              >
+                {autoSelectingProfile ? (
+                  <CircularProgress size={18} thickness={5} />
+                ) : (
+                  "Auto Profile"
+                )}
               </Button>
               <Button
                 variant="outlined"

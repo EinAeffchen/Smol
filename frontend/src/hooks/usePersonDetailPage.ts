@@ -10,6 +10,7 @@ import {
   mergePersons,
   searchPersonsByName,
   setProfileFace,
+  autoSelectProfileFace as requestAutoSelectProfileFace,
   updatePerson,
 } from "../services/personActions";
 import { defaultListState, useListStore } from "../stores/useListStore";
@@ -29,6 +30,8 @@ import {
   detachFace,
 } from "../services/faceActions";
 
+const RELATIONSHIP_MAX_NODES = 200;
+
 export const usePersonDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const location = useLocation();
@@ -38,6 +41,7 @@ export const usePersonDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState({ name: "" });
   const [saving, setSaving] = useState(false);
+  const [isAutoSelectingProfile, setIsAutoSelectingProfile] = useState(false);
 
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<{
@@ -183,6 +187,7 @@ export const usePersonDetailPage = () => {
         const graph = await getPersonRelationshipGraph(
           Number(id),
           depthToRequest,
+          RELATIONSHIP_MAX_NODES,
           signal,
         );
         setRelationshipGraph(graph);
@@ -374,6 +379,22 @@ export const usePersonDetailPage = () => {
     }
   };
 
+  const handleAutoSelectProfileFace = useCallback(async () => {
+    if (!id) return;
+    setIsAutoSelectingProfile(true);
+    try {
+      const updatedPerson = await requestAutoSelectProfileFace(Number(id));
+      setPerson(updatedPerson);
+      await loadDetail();
+      showMessage("Selected a new profile photo");
+    } catch (err) {
+      console.error("Failed to auto-select profile face:", err);
+      showMessage("Failed to auto-select profile photo", "error");
+    } finally {
+      setIsAutoSelectingProfile(false);
+    }
+  }, [id, loadDetail]);
+
   const handleProfileAssignmentWrapper = async (
     faceId: number,
     personId: number,
@@ -492,11 +513,13 @@ export const usePersonDetailPage = () => {
     handleDeleteWrapper,
     handleDetachWrapper,
     handleCreateWrapper,
+    handleAutoSelectProfileFace,
     handleProfileAssignmentWrapper,
     handlePersonUpdate,
     handleDeletePerson,
     handleTagAddedToPerson,
     onSave,
     handleConfirmMerge,
+    isAutoSelectingProfile,
   };
 };

@@ -64,9 +64,13 @@ export const getSimilarPersons = async (
 export const getPersonRelationshipGraph = async (
   personId: number,
   depth: number,
+  maxNodes = 200,
   signal?: AbortSignal
 ): Promise<PersonRelationshipGraph> => {
-  const params = new URLSearchParams({ depth: depth.toString() });
+  const params = new URLSearchParams({
+    depth: depth.toString(),
+    max_nodes: maxNodes.toString(),
+  });
   const res = await fetch(
     `${API}/api/person/${personId}/relationships?${params.toString()}`,
     { signal }
@@ -97,4 +101,14 @@ export const getPersonFaces = async (
 
 export const setProfileFace = async (faceId: number, personId: number) => {
   return updatePerson(personId, { profile_face_id: faceId });
+};
+
+export const autoSelectProfileFace = async (personId: number): Promise<Person> => {
+  const res = await fetch(`${API}/api/person/${personId}/profile_face/auto`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    throw new Error("Failed to auto-select profile image");
+  }
+  return res.json();
 };

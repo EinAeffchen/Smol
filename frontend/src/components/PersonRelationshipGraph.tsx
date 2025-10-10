@@ -49,8 +49,8 @@ type GraphNode = BaseNode & {
   y?: number;
 };
 type GraphLink = PersonRelationshipGraphData["edges"][number] & {
-  source: number | GraphNode;
-  target: number | GraphNode;
+  source: GraphNode;
+  target: GraphNode;
 };
 
 const DEFAULT_CANVAS = { width: 640, height: 520 };
@@ -97,46 +97,99 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
 
     const connectedIds = new Set<number>();
     filteredLinks.forEach((edge) => {
-      connectedIds.add(edge.source);
-      connectedIds.add(edge.target);
+      connectedIds.add(Number(edge.source));
+      connectedIds.add(Number(edge.target));
     });
     connectedIds.add(graph.root_id);
 
     const filteredNodes = nodes.filter((node) => connectedIds.has(node.id));
 
-    const links: GraphLink[] = filteredLinks.map((edge) => ({
-      ...edge,
-      source: edge.source,
-      target: edge.target,
-    }));
+    const nodeMap = new Map<number, GraphNode>();
+    filteredNodes.forEach((node) => nodeMap.set(node.id, node));
+
+    const links: GraphLink[] = [];
+    for (const edge of filteredLinks) {
+      const sourceNode = nodeMap.get(Number(edge.source));
+      const targetNode = nodeMap.get(Number(edge.target));
+      if (!sourceNode || !targetNode) {
+        continue;
+      }
+      links.push({
+        ...edge,
+        source: sourceNode,
+        target: targetNode,
+      });
+    }
 
     return { nodes: filteredNodes, links };
   }, [graph, minWeight]);
+
+  const fullWeightSummary = useMemo(() => {
+    if (!graph || graph.edges.length === 0) {
+      return { min: 1, max: 1 };
+    }
+    const weights = graph.edges
+      .map((edge) => Number(edge.weight))
+      .filter((value) => Number.isFinite(value) && value >= 0);
+    if (weights.length === 0) {
+      return { min: 1, max: 1 };
+    }
+    return {
+      min: Math.max(1, Math.min(...weights)),
+      max: Math.max(1, Math.max(...weights)),
+    };
+  }, [graph]);
+
+  const { childRadius, rootRadius } = useMemo(() => {
+    const nodeCount = Math.max(graphData.nodes.length, 1);
+    const base = Math.max(8, 18 - Math.log(nodeCount + 1) * 2);
+    const root = Math.min(base * 1.4, base + 6);
+    return {
+      childRadius: base,
+      rootRadius: root,
+    };
+  }, [graphData.nodes.length]);
 
   const weightStats = useMemo(() => {
     if (!graphData.links.length) {
       return {
         min: 0,
         max: 1,
-        normalize: (weight: number) => 0,
+        median: 1,
+        q1: 1,
+        q3: 1,
+        logMax: 1,
+        normalize: (_weight: number) => 0,
       };
     }
-    const weights = graphData.links.map((edge) => edge.weight);
-    const min = Math.min(...weights);
-    const max = Math.max(...weights);
-    const range = Math.max(max - min, 1);
+    const weights = graphData.links
+      .map((edge) => Number(edge.weight))
+      .filter((value) => Number.isFinite(value) && value >= 0)
+      .sort((a, b) => a - b);
+    const min = weights[0];
+    const max = weights[weights.length - 1];
+    const median = weights[Math.floor(weights.length / 2)];
+    const q1 = weights[Math.floor(weights.length * 0.25)];
+    const q3 = weights[Math.floor(weights.length * 0.75)];
+    const logMax = Math.max(Math.log10(max + 1), 1);
     const normalize = (weight: number) =>
-      range === 0 ? 0 : (weight - min) / range;
-    return { min, max, normalize };
+      Math.max(0, Math.log10(weight + 1) / logMax);
+    return { min, max, median, q1, q3, logMax, normalize };
   }, [graphData.links]);
 
   useEffect(() => {
-    if (minWeight > weightStats.max) {
-      setMinWeight(weightStats.max);
-    } else if (minWeight < weightStats.min || (minWeight === 0 && weightStats.min >= 1)) {
-      setMinWeight(Math.max(weightStats.min, 1));
-    }
-  }, [minWeight, weightStats.max, weightStats.min]);
+    setMinWeight((current) => {
+      const minAllowed = fullWeightSummary.min;
+      const maxAllowed = Math.max(minAllowed, fullWeightSummary.max);
+      if (current < minAllowed) {
+        return minAllowed;
+      }
+      if (current > maxAllowed) {
+        return maxAllowed;
+      }
+      return current;
+    });
+  }, [fullWeightSummary.min, fullWeightSummary.max]);
 
   const handleDepthChange = (event: SelectChangeEvent<string>) => {
     const nextDepth = Number(event.target.value);
@@ -158,7 +211,7 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
         return;
       }
 
-      const baseRadius = node.isRoot ? 20 : 15;
+      const baseRadius = node.isRoot ? rootRadius : childRadius;
       const scaledRadius = baseRadius;
       ctx.save();
 
@@ -184,7 +237,8 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
           image.src = node.imageUrl;
           image.onload = () => {
             imageCache.current[node.id] = image;
-            graphRef.current?.refresh();
+            const fg = graphRef.current as unknown as { refresh?: () => void };
+            fg?.refresh?.();
           };
           image.onerror = () => {
             delete imageCache.current[node.id];
@@ -243,8 +297,7 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
 
       ctx.restore();
     },
-    [theme],
-  );
+    [childRadius, rootRadius, theme]);
 
   const drawLinkLabel = useCallback(
     (link: GraphLink, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -276,22 +329,36 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
   );
 
   const computeLinkWidth = useCallback(
-    (link: GraphLink) => 1.5 + weightStats.normalize(link.weight) * 6,
-    [weightStats],
+    (link: GraphLink) => {
+      const baseWidth = 1.5;
+      const { min, max, median } = weightStats;
+      if (max <= min) {
+        return baseWidth + 1.5;
+      }
+      if (link.weight <= median) {
+        const lowerSpan = Math.max(median - min, 1);
+        const ratio = Math.max(0, (link.weight - min) / lowerSpan);
+        return baseWidth + ratio * 2.5;
+      }
+      const upperSpan = Math.max(max - median, 1);
+      const ratio = Math.max(0, (link.weight - median) / upperSpan);
+      return baseWidth + 2.5 + ratio * 3.5;
+    },
+    [weightStats.min, weightStats.max, weightStats.median],
   );
 
   const computeLinkColor = useCallback(
     (link: GraphLink) => {
-      const ratio = weightStats.normalize(link.weight);
-      if (ratio > 0.66) {
+      const { median, q3 } = weightStats;
+      if (link.weight >= q3) {
         return theme.palette.primary.main;
       }
-      if (ratio > 0.33) {
+      if (link.weight >= median) {
         return theme.palette.primary.light;
       }
       return theme.palette.grey[600];
     },
-    [weightStats, theme.palette.primary.main, theme.palette.primary.light, theme.palette.grey],
+    [weightStats.median, weightStats.q3, theme.palette.primary.main, theme.palette.primary.light, theme.palette.grey],
   );
 
   const computeParticleCount = useCallback(
@@ -301,12 +368,12 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
   );
 
   const computeParticleSpeed = useCallback(
-    (link: GraphLink) => 0.0005 + weightStats.normalize(link.weight) * 0.002,
+    (link: GraphLink) => 0.0004 + weightStats.normalize(link.weight) * 0.002,
     [weightStats],
   );
 
   useEffect(() => {
-    if (!graphRef.current) {
+    if (!graphRef.current || graphData.nodes.length === 0) {
       return;
     }
     const fg = graphRef.current;
@@ -343,6 +410,12 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
   };
 
   const hasGraph = graphData.nodes.length > 0;
+  const graphKey = `${graph?.root_id ?? "graph"}-${depth}-${minWeight}`;
+  const minWeightSliderMin = fullWeightSummary.min;
+  const minWeightSliderMax = Math.max(
+    minWeightSliderMin,
+    fullWeightSummary.max,
+  );
 
   return (
     <Paper sx={{ p: 2, height: "100%" }}>
@@ -416,9 +489,9 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
                 Minimum co-appearances: {minWeight}
               </Typography>
               <Slider
-                defaultValue={1}
-                min={1}
-                max={Math.min(weightStats.max, 100)}
+                value={minWeight}
+                min={minWeightSliderMin}
+                max={minWeightSliderMax}
                 step={1}
                 size="small"
                 onChange={(_event, value) => setMinWeight(value as number)}
@@ -479,6 +552,7 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
 
         {hasGraph ? (
           <ForceGraph2D
+            key={graphKey}
             ref={graphRef}
             graphData={graphData}
             width={width ?? DEFAULT_CANVAS.width}

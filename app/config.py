@@ -250,6 +250,12 @@ class GeneralSettings(BaseModel):
     ffmpeg_path: Path | None = None
     # maximum number of thumbnails per folder, adjust according to your systems inodes
     thumb_dir_folder_size: int = 1000
+    # GitHub repo (owner/name) used for update checks. Set to None to disable.
+    update_check_repo: str | None = "EinAeffchen/Omoide"
+    # How long (in minutes) to cache the latest release lookup.
+    update_check_cache_minutes: int = 180
+    # Timeout (seconds) for contacting the GitHub API.
+    update_check_timeout_seconds: float = 5.0
 
     data_dir: Path = Field(default_factory=get_user_data_path)
 

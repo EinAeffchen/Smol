@@ -64,12 +64,14 @@ export default function PersonDetailPage() {
     handleDeleteWrapper,
     handleDetachWrapper,
     handleCreateWrapper,
+    handleAutoSelectProfileFace,
     handleProfileAssignmentWrapper,
     handlePersonUpdate,
     handleDeletePerson,
     handleTagAddedToPerson,
     onSave,
     handleConfirmMerge,
+    isAutoSelectingProfile,
   } = usePersonDetailPage();
 
   if (loading || !person) {
@@ -96,6 +98,8 @@ export default function PersonDetailPage() {
         onMerge={() => setMergeOpen(true)}
         onDelete={() => setConfirmDelete(true)}
         onRefreshSimilar={loadSimilar}
+        onAutoSelectProfile={handleAutoSelectProfileFace}
+        autoSelectingProfile={isAutoSelectingProfile}
       />
 
       <PersonContentTabs

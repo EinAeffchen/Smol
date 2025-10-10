@@ -52,6 +52,7 @@ from app.schemas.timeline import (
     TimelinePage,
 )
 from app.utils import (
+    auto_select_profile_face,
     get_person_embedding,
     recalculate_person_appearance_counts,
     update_person_embedding,
@@ -556,6 +557,28 @@ def set_profile_face(
 
 
 @router.post(
+    "/{person_id}/profile_face/auto",
+    response_model=Person,
+)
+def auto_profile_face(
+    person_id: int,
+    session: Session = Depends(get_session),
+):
+    if settings.general.read_only:
+        return HTTPException(
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
+        )
+    person = session.get(Person, person_id)
+    if not person:
+        raise HTTPException(404, "Person not found")
+    auto_select_profile_face(session, person_id)
+    safe_commit(session)
+    session.refresh(person)
+    return person
+
+
+@router.post(
     "/merge",
     summary="Merge one person into another",
     status_code=status.HTTP_200_OK,
@@ -621,28 +644,75 @@ def merge_persons(
     if target.profile_face_id is None and source.profile_face_id is not None:
         target.profile_face_id = source.profile_face_id
 
-    session.exec(
-        delete(PersonRelationship).where(
-            PersonRelationship.person_a_id == source.id,
-            PersonRelationship.person_b_id == target.id,
+    relationships_to_merge = session.exec(
+        select(PersonRelationship).where(
+            or_(
+                PersonRelationship.person_a_id == source.id,
+                PersonRelationship.person_b_id == source.id,
+            )
         )
-    )
-    session.exec(
-        delete(PersonRelationship).where(
-            PersonRelationship.person_b_id == source.id,
-            PersonRelationship.person_a_id == target.id,
+    ).all()
+
+    existing_cache: dict[tuple[int, int], PersonRelationship] = {}
+
+    for relationship in relationships_to_merge:
+        other_id = (
+            relationship.person_b_id
+            if relationship.person_a_id == source.id
+            else relationship.person_a_id
         )
-    )
-    session.exec(
-        update(PersonRelationship)
-        .where(PersonRelationship.person_a_id == source.id)
-        .values(person_a_id=target.id)
-    )
-    session.exec(
-        update(PersonRelationship)
-        .where(PersonRelationship.person_b_id == source.id)
-        .values(person_b_id=target.id)
-    )
+
+        session.delete(relationship)
+
+        if other_id == target.id:
+            continue
+
+        new_a, new_b = sorted((target.id, other_id))
+        cache_key = (new_a, new_b)
+
+        existing = existing_cache.get(cache_key)
+        if existing is None:
+            existing = session.exec(
+                select(PersonRelationship).where(
+                    and_(
+                        PersonRelationship.person_a_id == new_a,
+                        PersonRelationship.person_b_id == new_b,
+                    )
+                )
+            ).first()
+            if existing:
+                existing_cache[cache_key] = existing
+
+        if existing:
+            existing.coappearance_count = (
+                existing.coappearance_count or 0
+            ) + (relationship.coappearance_count or 0)
+            if relationship.updated_at and (
+                existing.updated_at is None
+                or relationship.updated_at > existing.updated_at
+            ):
+                existing.updated_at = relationship.updated_at
+                existing.last_media_id = relationship.last_media_id
+            elif (
+                existing.last_media_id is None
+                and relationship.last_media_id is not None
+            ):
+                existing.last_media_id = relationship.last_media_id
+            continue
+
+        new_relationship = PersonRelationship(
+            person_a_id=new_a,
+            person_b_id=new_b,
+            coappearance_count=relationship.coappearance_count,
+            last_media_id=relationship.last_media_id,
+            updated_at=relationship.updated_at or datetime.utcnow(),
+        )
+        session.add(new_relationship)
+        existing_cache[cache_key] = new_relationship
+
+    if target.profile_face_id is None:
+        auto_select_profile_face(session, target.id)
+
     session.delete(source)
     safe_commit(session)
 
@@ -792,7 +862,7 @@ def get_person_relationships(
         3, ge=1, le=5, description="Number of generations to include"
     ),
     max_nodes: int = Query(
-        50, ge=1, le=200, description="Maximum number of nodes to include"
+        150, ge=1, le=500, description="Maximum number of nodes to include"
     ),
     session: Session = Depends(get_session),
 ):

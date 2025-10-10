@@ -31,6 +31,7 @@ from app.models import (
     Media,
     MediaTagLink,
     Person,
+    PersonRelationship,
     ProcessingTask,
     Scene,
 )
@@ -107,6 +108,83 @@ def recalculate_person_appearance_counts(
             continue
         person.appearance_count = counts.get(pid, 0)
         session.add(person)
+
+
+def auto_select_profile_face(session: Session, person_id: int) -> int | None:
+    """Assigns a suitable profile face for the given person.
+
+    Prefers the face whose embedding is closest to the centroid of the
+    person's embeddings (same approach as clustering). Falls back to
+    a thumbnail/area heuristic when embeddings are missing.
+    Returns the selected face id, or None if no face could be chosen.
+    """
+    person = session.get(Person, person_id)
+    if not person:
+        return None
+
+    faces = session.exec(
+        select(Face).where(Face.person_id == person_id)
+    ).all()
+
+    if not faces:
+        if person.profile_face_id is not None:
+            person.profile_face_id = None
+            session.add(person)
+        return None
+
+    embedding_face_ids: list[int] = []
+    embedding_vectors: list[np.ndarray] = []
+
+    for face in faces:
+        row = session.exec(
+            text(
+                """
+                SELECT embedding
+                  FROM face_embeddings
+                 WHERE face_id = :fid
+                """
+            ).bindparams(fid=face.id)
+        ).first()
+        if not row:
+            continue
+        vector = vector_from_stored(row[0])
+        if vector is None or vector.size == 0:
+            continue
+        norm = float(np.linalg.norm(vector))
+        if not np.isfinite(norm) or norm == 0.0:
+            continue
+        embedding_face_ids.append(face.id)
+        embedding_vectors.append((vector / norm).astype(np.float32, copy=False))
+
+    best_face_id: int | None = None
+    if embedding_face_ids:
+        embeddings_arr = np.vstack(embedding_vectors)
+        centroid = embeddings_arr.mean(axis=0)
+        centroid_norm = float(np.linalg.norm(centroid))
+        if centroid_norm > 0:
+            centroid = centroid / centroid_norm
+        similarities = embeddings_arr @ centroid
+        best_face_id = int(embedding_face_ids[int(np.argmax(similarities))])
+
+    def fallback_score(face: Face) -> tuple[int, int, int]:
+        has_thumb = 1 if face.thumbnail_path else 0
+        area = 0
+        try:
+            if face.bbox and len(face.bbox) >= 4:
+                x1, y1, x2, y2 = face.bbox[:4]
+                area = max(0, int(x2) - int(x1)) * max(0, int(y2) - int(y1))
+        except Exception:  # pragma: no cover - defensive
+            area = 0
+        return (has_thumb, area, -face.id)
+
+    if best_face_id is None or not any(face.id == best_face_id for face in faces):
+        best_face = max(faces, key=fallback_score)
+        best_face_id = best_face.id
+
+    if person.profile_face_id != best_face_id:
+        person.profile_face_id = best_face_id
+        session.add(person)
+    return best_face_id
 
 
 def get_image_taken_date(img_path: Path | None = None) -> datetime:
@@ -907,7 +985,14 @@ def delete_record(media_id, session: Session):
     if thumb.is_file():
         to_unlink.append(thumb)
     faces = session.exec(select(Face).where(Face.media_id == media.id)).all()
+    affected_person_ids: set[int] = set()
     for face in faces:
+        if face.person_id is not None:
+            affected_person_ids.add(face.person_id)
+        if face.thumbnail_path:
+            thumb = Path(settings.general.thumb_dir / face.thumbnail_path)
+            if thumb.is_file():
+                to_unlink.append(thumb)
         sql = text(
             """
             DELETE FROM face_embeddings
@@ -915,10 +1000,6 @@ def delete_record(media_id, session: Session):
             """
         ).bindparams(f_id=face.id)
         session.exec(sql)
-        if face.thumbnail_path:
-            thumb = Path(settings.general.thumb_dir / face.thumbnail_path)
-            if thumb.is_file():
-                to_unlink.append(thumb)
 
     sql = text(
         """
@@ -950,8 +1031,15 @@ def delete_record(media_id, session: Session):
     session.exec(delete(ExifData).where(ExifData.media_id == media_id))
     session.exec(delete(Scene).where(Scene.media_id == media.id))
     session.exec(
+        delete(PersonRelationship).where(
+            PersonRelationship.last_media_id == media.id
+        )
+    )
+    session.exec(
         delete(DuplicateMedia).where(DuplicateMedia.media_id == media.id)
     )
+    for pid in affected_person_ids:
+        auto_select_profile_face(session, pid)
     session.delete(media)
     safe_commit(session)
 
