@@ -2,17 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
 import { getPerson, getPersonMediaAppearances } from "../services/person";
 import {
+  autoMergeSimilarPersons,
   deletePerson as deletePersonService,
   getPersonFaces,
   getSimilarPersons,
   getPersonRelationshipGraph,
   getSuggestedFaces,
+  mergeMultiplePersons,
   mergePersons,
   searchPersonsByName,
   setProfileFace,
   autoSelectProfileFace as requestAutoSelectProfileFace,
   updatePerson,
 } from "../services/personActions";
+import type { MergeResult } from "../services/personActions";
 import { defaultListState, useListStore } from "../stores/useListStore";
 import {
   FaceRead,
@@ -42,6 +45,7 @@ export const usePersonDetailPage = () => {
   const [form, setForm] = useState({ name: "" });
   const [saving, setSaving] = useState(false);
   const [isAutoSelectingProfile, setIsAutoSelectingProfile] = useState(false);
+  const [isMergingSimilar, setIsMergingSimilar] = useState(false);
 
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<{
@@ -203,10 +207,16 @@ export const usePersonDetailPage = () => {
     [id, relationshipDepth],
   );
 
-  const invalidateRelationshipGraph = useCallback(() => {
-    setRelationshipGraph(null);
-    setHasLoadedRelationships(false);
-  }, []);
+  const reloadRelationshipGraphIfLoaded = useCallback(async () => {
+    if (!id || !hasLoadedRelationships) {
+      return;
+    }
+    try {
+      await loadRelationshipGraph(relationshipDepth);
+    } catch (error) {
+      console.error("Failed to reload relationship graph:", error);
+    }
+  }, [hasLoadedRelationships, id, loadRelationshipGraph, relationshipDepth]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -321,8 +331,8 @@ export const usePersonDetailPage = () => {
       await assignFace(faceIds, personId);
       await Promise.all([refreshDetectedFaces(), loadDetail()]);
       setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-      invalidateRelationshipGraph();
       await refreshMediaAppearances();
+      await reloadRelationshipGraphIfLoaded();
     } catch (err) {
       console.error("Failed to assign face:", err);
       showMessage("Failed to assign face", "error");
@@ -334,8 +344,8 @@ export const usePersonDetailPage = () => {
       await deleteFace(faceIds);
       removeItems(detectedFacesListKey, faceIds);
       setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-      invalidateRelationshipGraph();
       await Promise.all([refreshMediaAppearances(), loadDetail()]);
+      await reloadRelationshipGraphIfLoaded();
     } catch (err) {
       console.error("Failed to delete face:", err);
       showMessage("Failed to delete face", "error");
@@ -347,8 +357,8 @@ export const usePersonDetailPage = () => {
       await detachFace(faceIds);
       removeItems(detectedFacesListKey, faceIds);
       setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-      invalidateRelationshipGraph();
       await Promise.all([refreshMediaAppearances(), loadDetail()]);
+      await reloadRelationshipGraphIfLoaded();
     } catch (err) {
       console.error("Failed to detach face:", err);
       showMessage("Failed to detach face", "error");
@@ -367,7 +377,7 @@ export const usePersonDetailPage = () => {
         refreshMediaAppearances(),
       ]);
       setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-      invalidateRelationshipGraph();
+      await reloadRelationshipGraphIfLoaded();
       return newPerson;
     } catch (err) {
       console.error("Failed to create person:", err);
@@ -375,6 +385,94 @@ export const usePersonDetailPage = () => {
       throw err;
     }
   };
+
+  const mergeSelectedSimilar = useCallback(
+    async (sourceIds: number[]): Promise<MergeResult | void> => {
+      if (!id || sourceIds.length === 0) {
+        return;
+      }
+      setIsMergingSimilar(true);
+      try {
+        const result = await mergeMultiplePersons(Number(id), sourceIds);
+        const mergedCount = result.merged_ids.length;
+        if (mergedCount > 0) {
+          const skippedCount = result.skipped_ids.length;
+          const messageParts = [`Merged ${mergedCount} similar person${mergedCount > 1 ? "s" : ""}`];
+          if (skippedCount > 0) {
+            messageParts.push(`skipped ${skippedCount}`);
+          }
+          showMessage(messageParts.join(", "));
+          await Promise.all([
+            loadDetail(),
+            refreshDetectedFaces(),
+            refreshMediaAppearances(),
+          ]);
+          await loadSimilar();
+          await reloadRelationshipGraphIfLoaded();
+        } else {
+          showMessage("No similar persons were merged.", "error");
+        }
+        return result;
+      } catch (err) {
+        console.error("Failed to merge selected similar persons:", err);
+        showMessage("Failed to merge selected similar persons", "error");
+      } finally {
+        setIsMergingSimilar(false);
+      }
+    },
+    [
+      id,
+      loadDetail,
+      loadSimilar,
+      refreshDetectedFaces,
+      refreshMediaAppearances,
+      reloadRelationshipGraphIfLoaded,
+      showMessage,
+    ]
+  );
+
+  const autoMergeSimilar = useCallback(async (): Promise<MergeResult | void> => {
+    if (!id) return;
+    setIsMergingSimilar(true);
+    try {
+      const result = await autoMergeSimilarPersons(Number(id));
+      const mergedCount = result.merged_ids.length;
+      if (mergedCount > 0) {
+        const skippedCount = result.skipped_ids.length;
+        const messageParts = [`Auto-merged ${mergedCount} similar person${mergedCount > 1 ? "s" : ""}`];
+        if (skippedCount > 0) {
+          messageParts.push(`skipped ${skippedCount}`);
+        }
+        showMessage(messageParts.join(", "));
+        await Promise.all([
+          loadDetail(),
+          refreshDetectedFaces(),
+          refreshMediaAppearances(),
+        ]);
+        await loadSimilar();
+        await reloadRelationshipGraphIfLoaded();
+      } else {
+        showMessage(
+          "No similar persons met the auto-merge threshold.",
+          "error"
+        );
+      }
+      return result;
+    } catch (err) {
+      console.error("Failed to auto-merge similar persons:", err);
+      showMessage("Failed to auto-merge similar persons", "error");
+    } finally {
+      setIsMergingSimilar(false);
+    }
+  }, [
+    id,
+    loadDetail,
+    loadSimilar,
+    refreshDetectedFaces,
+    refreshMediaAppearances,
+    reloadRelationshipGraphIfLoaded,
+    showMessage,
+  ]);
 
   const handleAutoSelectProfileFace = useCallback(async () => {
     if (!id) return;
@@ -510,6 +608,9 @@ export const usePersonDetailPage = () => {
     handleDeleteWrapper,
     handleDetachWrapper,
     handleCreateWrapper,
+    mergeSelectedSimilar,
+    autoMergeSimilar,
+    isMergingSimilar,
     handleAutoSelectProfileFace,
     handleProfileAssignmentWrapper,
     handlePersonUpdate,

@@ -1,6 +1,6 @@
 import React from "react";
 import { Link as RouterLink } from "react-router-dom";
-import { Box, Typography, useTheme } from "@mui/material";
+import { Box, Button, Checkbox, Typography, useTheme } from "@mui/material";
 import { alpha } from "@mui/material/styles";
 import { SimilarPerson } from "../types";
 import { API } from "../config";
@@ -13,22 +13,53 @@ const getInitials = (name = "") => {
   return name.substring(0, 2).toUpperCase();
 };
 
+interface SimilarPersonCardProps extends SimilarPerson {
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
+}
+
 export default function SimilarPersonCard({
   id,
   name,
   similarity,
   thumbnail,
-}: SimilarPerson) {
+  selectable = false,
+  selected = false,
+  onToggleSelect,
+}: SimilarPersonCardProps) {
   const theme = useTheme();
 
   const thumbUrl = thumbnail
     ? `${API}/thumbnails/${encodeURIComponent(thumbnail)}`
     : undefined;
 
+  const handleToggle = () => {
+    if (selectable && onToggleSelect) {
+      onToggleSelect();
+    }
+  };
+
+  const cardProps: Record<string, unknown> = selectable
+    ? {
+        role: "button" as const,
+        tabIndex: 0,
+        onClick: handleToggle,
+        onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            handleToggle();
+          }
+        },
+      }
+    : {
+        component: RouterLink,
+        to: `/person/${id}`,
+      };
+
   return (
     <Box
-      component={RouterLink}
-      to={`/person/${id}`}
+      {...cardProps}
       sx={{
         aspectRatio: "3/4",
         position: "relative",
@@ -38,12 +69,19 @@ export default function SimilarPersonCard({
         textDecoration: "none",
         color: (theme) => theme.palette.common.white,
         transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
+        cursor: selectable ? "pointer" : "pointer",
         background: thumbUrl
           ? `url(${thumbUrl})`
           : (theme) =>
               `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.primary.dark})`,
         backgroundSize: "cover",
         backgroundPosition: "center",
+        border: selectable
+          ? `2px solid ${
+              selected ? theme.palette.primary.main : "transparent"
+            }`
+          : "none",
+        boxShadow: selected ? theme.shadows[10] : theme.shadows[4],
 
         "&:hover": {
           transform: "scale(1.05)",
@@ -52,6 +90,49 @@ export default function SimilarPersonCard({
         },
       }}
     >
+      {selectable && (
+        <>
+          <Checkbox
+            checked={selected}
+            onChange={(event) => {
+              event.stopPropagation();
+              handleToggle();
+            }}
+            sx={{
+              position: "absolute",
+              top: 8,
+              left: 8,
+              zIndex: 2,
+              color: theme.palette.common.white,
+              "&.Mui-checked": {
+                color: theme.palette.primary.main,
+              },
+            }}
+          />
+          <Button
+            component={RouterLink}
+            to={`/person/${id}`}
+            size="small"
+            variant="outlined"
+            onClick={(event) => event.stopPropagation()}
+            sx={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+              zIndex: 2,
+              backdropFilter: "blur(6px)",
+              color: theme.palette.common.white,
+              borderColor: alpha(theme.palette.common.white, 0.6),
+              "&:hover": {
+                borderColor: theme.palette.primary.main,
+              },
+            }}
+          >
+            View
+          </Button>
+        </>
+      )}
+
       {!thumbUrl && (
         <Box
           sx={{

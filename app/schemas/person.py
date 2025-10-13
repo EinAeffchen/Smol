@@ -66,6 +66,15 @@ class MergePersonsRequest(BaseModel):
     target_id: int
 
 
+class MergePersonsBulkRequest(BaseModel):
+    source_ids: list[int]
+
+
+class MergePersonsResult(BaseModel):
+    merged_ids: list[int]
+    skipped_ids: list[int]
+
+
 class SimilarPerson(SQLModel):
     id: int
     name: str | None

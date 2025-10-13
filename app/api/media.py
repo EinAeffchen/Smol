@@ -1,11 +1,12 @@
 import sys
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
-from sqlalchemy import and_, or_, text, tuple_
+from sqlalchemy import and_, func, or_, text, tuple_
 from sqlalchemy.orm import aliased, selectinload
 from sqlmodel import Session, select
 
@@ -14,13 +15,17 @@ from app.config import (
 )
 from app.database import get_session
 from app.logger import logger
-from app.subprocess_helpers import popen_silent
 from app.models import ExifData, Face, Media, Person, Scene, Tag
+from app.subprocess_helpers import popen_silent
 from app.schemas.face import FaceRead
 from app.schemas.media import (
     CursorPage,
     GeoUpdate,
     MediaDetail,
+    MediaFolderBreadcrumb,
+    MediaFolderEntry,
+    MediaFolderListing,
+    MediaFolderPreview,
     MediaLocation,
     MediaNeighbors,
     MediaPreview,
@@ -35,6 +40,49 @@ from app.utils import (
 )
 
 router = APIRouter()
+
+
+def _normalize_relative_path(value: str | None) -> str:
+    if value is None:
+        return ""
+    normalized = value.replace("\\", "/").strip("/")
+    if not normalized:
+        return ""
+    parts = [segment for segment in normalized.split("/") if segment]
+    if any(part in {"..", "."} for part in parts):
+        raise HTTPException(status_code=400, detail="Invalid folder path")
+    return "/".join(parts)
+
+
+def _split_relative_path(path_value: str) -> list[str]:
+    normalized = path_value.replace("\\", "/").strip("/")
+    if not normalized:
+        return []
+    return [segment for segment in normalized.split("/") if segment]
+
+
+def _build_breadcrumbs(parts: list[str]) -> list[MediaFolderBreadcrumb]:
+    breadcrumbs: list[MediaFolderBreadcrumb] = []
+    for index, name in enumerate(parts):
+        segment_path = "/".join(parts[: index + 1])
+        breadcrumbs.append(
+            MediaFolderBreadcrumb(
+                name=name,
+                path=segment_path if segment_path else None,
+            )
+        )
+    return breadcrumbs
+
+
+@dataclass
+class _FolderAccumulator:
+    path: str
+    name: str
+    parent_path: str | None
+    depth: int
+    media_count: int = 0
+    subfolders: set[str] = field(default_factory=set)
+    previews: list[MediaFolderPreview] = field(default_factory=list)
 
 
 def format_timestamp(seconds: float) -> str:
@@ -98,6 +146,14 @@ def list_media(
     person_id: int | None = Query(
         None, description="Filter by detected person ID"
     ),
+    folder: str | None = Query(
+        None,
+        description="Relative folder path (POSIX style). Use empty string for root-level items.",
+    ),
+    recursive: bool = Query(
+        True,
+        description="Include media in nested subfolders when filtering by folder.",
+    ),
     sort: Annotated[str, Query(enum=["newest", "latest"])] = "newest",
     cursor: str | None = Query(
         None,
@@ -110,6 +166,18 @@ def list_media(
     # select by tags
     if tags and len(tags) > 0:
         q = q.join(Media.tags).where(Tag.name.in_(tags))
+
+    normalized_folder = ""
+    if folder is not None:
+        normalized_folder = _normalize_relative_path(folder)
+        normalized_path_expr = func.replace(Media.path, "\\", "/")
+        if normalized_folder:
+            prefix = f"{normalized_folder}/"
+            q = q.where(normalized_path_expr.like(f"{prefix}%"))
+            if not recursive:
+                q = q.where(~normalized_path_expr.like(f"{prefix}%/%"))
+        elif not recursive:
+            q = q.where(~normalized_path_expr.like("%/%"))
 
     if sort == "newest":
         sort_col = Media.created_at
@@ -150,6 +218,115 @@ def list_media(
     else:
         next_cursor = None
     return CursorPage(items=results, next_cursor=next_cursor)
+
+
+@router.get("/folders", response_model=MediaFolderListing)
+def list_media_folders(
+    parent: str | None = Query(
+        None,
+        description="Relative folder path (POSIX style). Omit or empty for root.",
+    ),
+    preview_limit: int = Query(
+        4,
+        ge=0,
+        le=12,
+        description="Maximum number of media previews to include per folder.",
+    ),
+    session: Session = Depends(get_session),
+):
+    normalized_parent = _normalize_relative_path(parent)
+    parent_parts = _split_relative_path(normalized_parent)
+
+    normalized_path_expr = func.replace(Media.path, "\\", "/")
+    stmt = select(
+        Media.id,
+        Media.path,
+        Media.filename,
+        Media.thumbnail_path,
+    ).order_by(Media.created_at.desc(), Media.id.desc())
+
+    if normalized_parent:
+        stmt = stmt.where(normalized_path_expr.like(f"{normalized_parent}/%"))
+
+    rows = session.exec(stmt).all()
+
+    folder_details: dict[str, _FolderAccumulator] = {}
+    direct_media_count = 0
+
+    for media_id, media_path, filename, thumbnail_path in rows:
+        path_parts = _split_relative_path(media_path)
+        if len(path_parts) <= len(parent_parts):
+            continue
+
+        relative_parts = path_parts[len(parent_parts) :]
+        if not relative_parts:
+            continue
+
+        if len(relative_parts) == 1:
+            direct_media_count += 1
+            continue
+
+        folder_name = relative_parts[0]
+        folder_path_segments = [*parent_parts, folder_name]
+        folder_path = "/".join(folder_path_segments)
+        parent_path_value = "/".join(parent_parts) if parent_parts else None
+
+        entry = folder_details.get(folder_path)
+        if entry is None:
+            entry = _FolderAccumulator(
+                path=folder_path,
+                name=folder_name,
+                parent_path=parent_path_value,
+                depth=len(parent_parts) + 1,
+            )
+            folder_details[folder_path] = entry
+
+        entry.media_count += 1
+
+        if len(relative_parts) > 2:
+            subfolder_name = relative_parts[1]
+            entry.subfolders.add(subfolder_name)
+
+        if preview_limit > 0:
+            if len(entry.previews) < preview_limit:
+                entry.previews.append(
+                    MediaFolderPreview(
+                        id=media_id,
+                        path=media_path,
+                        filename=filename,
+                        thumbnail_path=thumbnail_path,
+                    )
+                )
+
+    folders = [
+        MediaFolderEntry(
+            path=entry.path,
+            name=entry.name,
+            parent_path=entry.parent_path,
+            depth=entry.depth,
+            media_count=entry.media_count,
+            subfolder_count=len(entry.subfolders),
+            previews=list(entry.previews),
+        )
+        for entry in folder_details.values()
+    ]
+
+    folders.sort(key=lambda entry: entry.name.lower())
+
+    breadcrumbs = _build_breadcrumbs(parent_parts)
+    current_path = "/".join(parent_parts) if parent_parts else None
+    parent_path_value = "/".join(parent_parts[:-1])
+    if parent_path_value == "":
+        parent_path_value = None
+
+    return MediaFolderListing(
+        current_path=current_path,
+        parent_path=parent_path_value,
+        depth=len(parent_parts),
+        direct_media_count=direct_media_count,
+        folders=folders,
+        breadcrumbs=breadcrumbs,
+    )
 
 
 @router.get("/locations", response_model=list[MediaLocation])

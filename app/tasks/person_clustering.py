@@ -34,6 +34,7 @@ from .state import clear_task_progress, set_task_progress
 
 __all__ = [
     "assign_to_existing_persons",
+    "merge_person_with_similar",
     "merge_similar_persons",
     "rebuild_person_embedding",
     "run_person_clustering",
@@ -320,6 +321,86 @@ def _merge_person_pair(
     return keep_id, drop_id
 
 
+def merge_person_with_similar(
+    session: Session,
+    person_id: int,
+    percent_threshold: float | None = None,
+    k: int = 20,
+) -> list[int]:
+    """
+    Merge the specified person with all similar persons whose similarity
+    exceeds the configured threshold. Returns the list of person IDs that were
+    merged into the surviving record.
+    """
+    threshold = float(
+        percent_threshold
+        if percent_threshold is not None
+        else getattr(
+            settings.face_recognition,
+            "person_merge_percent_similarity",
+            75.0,
+        )
+    )
+
+    row = session.exec(
+        text(
+            "SELECT embedding FROM person_embeddings WHERE person_id = :pid"
+        ).bindparams(pid=person_id)
+    ).first()
+    if not row:
+        return []
+
+    vec = vector_from_stored(row[0])
+    if vec is None or vec.size == 0:
+        return []
+
+    norm = float(np.linalg.norm(vec))
+    if not np.isfinite(norm) or norm == 0.0:
+        return []
+
+    normed_vec = (vec / norm).astype(np.float32, copy=False)
+    blob = vector_to_blob(normed_vec)
+    if blob is None:
+        return []
+
+    candidates = session.exec(
+        text(
+            """
+            SELECT person_id,
+                   ROUND(
+                       (1.0 - (MIN(distance) * MIN(distance)) / 2.0) * 100,
+                       2
+                   ) AS similarity_pct
+              FROM person_embeddings
+             WHERE person_id != :pid
+               AND embedding MATCH :vec
+               AND k = :k_val
+          GROUP BY person_id
+          ORDER BY similarity_pct DESC
+          LIMIT :limit_val
+            """
+        ).bindparams(pid=person_id, vec=blob, k_val=k, limit_val=k)
+    ).all()
+
+    merged_ids: list[int] = []
+    current_id = person_id
+    for candidate_id, similarity in candidates:
+        if candidate_id is None or similarity is None:
+            continue
+        if float(similarity) < threshold:
+            continue
+        merge_result = _merge_person_pair(
+            session, current_id, int(candidate_id)
+        )
+        if merge_result is None:
+            continue
+        keep_id, dropped_id = merge_result
+        merged_ids.append(dropped_id)
+        current_id = keep_id
+
+    return merged_ids
+
+
 def merge_similar_persons(
     task_id: str, candidate_person_ids: Iterable[int] | None = None
 ) -> int:
@@ -332,7 +413,7 @@ def merge_similar_persons(
             75.0,
         )
     )
-
+    logger.debug("Person merge threshold set to: %s", percent_threshold)
     candidate_ids: set[int] = {
         int(pid) for pid in (candidate_person_ids or []) if pid is not None
     }
@@ -392,17 +473,18 @@ def merge_similar_persons(
                               FROM person_embeddings
                              WHERE person_id != :pid
                                AND embedding MATCH :vec
+                               AND similarity_pct >= :thresh
                                and k = 5
                              ORDER BY similarity_pct desc
                             """
-                        ).bindparams(pid=person_id, vec=blob)
+                        ).bindparams(
+                            pid=person_id, vec=blob, thresh=percent_threshold
+                        )
                     ).all()
-
+                    logger.debug("Got %s candidates", len(candidates))
                     merged_this_round = False
                     for candidate_id, similarity in candidates:
                         if candidate_id is None or similarity is None:
-                            continue
-                        if float(similarity) < percent_threshold:
                             continue
                         logger.debug(
                             "Merging candidate persons %s and %s (similarity %.2f%%)",

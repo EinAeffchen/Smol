@@ -14,6 +14,37 @@ export interface Media {
   extracted_scenes: boolean;
 }
 
+export interface MediaFolderPreview {
+  id: number;
+  path: string;
+  filename: string;
+  thumbnail_path?: string | null;
+}
+
+export interface MediaFolderEntry {
+  path: string;
+  name: string;
+  parent_path?: string | null;
+  depth: number;
+  media_count: number;
+  subfolder_count: number;
+  previews: MediaFolderPreview[];
+}
+
+export interface MediaFolderBreadcrumb {
+  name: string;
+  path?: string | null;
+}
+
+export interface MediaFolderListing {
+  current_path?: string | null;
+  parent_path?: string | null;
+  depth: number;
+  direct_media_count: number;
+  folders: MediaFolderEntry[];
+  breadcrumbs: MediaFolderBreadcrumb[];
+}
+
 export interface ProfileFace {
   id: number;
   thumbnail_path?: string;

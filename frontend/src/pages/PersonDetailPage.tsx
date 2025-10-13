@@ -60,6 +60,9 @@ export default function PersonDetailPage() {
     loadRelationshipGraph,
     loadSuggestedFaces,
     loadMoreDetectedFaces,
+    mergeSelectedSimilar,
+    autoMergeSimilar,
+    isMergingSimilar,
     handleAssignWrapper,
     handleDeleteWrapper,
     handleDetachWrapper,
@@ -119,6 +122,9 @@ export default function PersonDetailPage() {
         similarPersons={similarPersons}
         onRefreshSuggestions={loadSuggestedFaces}
         handleCreateWrapper={handleCreateWrapper}
+        onMergeSelectedSimilar={mergeSelectedSimilar}
+        onAutoMergeSimilar={autoMergeSimilar}
+        isMergingSimilar={isMergingSimilar}
         filterPeople={filterPeople}
         onFilterPeopleChange={(people) => setFilterPeople(people)}
         mediaListKey={mediaListKey}

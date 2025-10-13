@@ -22,6 +22,7 @@ import MediaAppearances from "./MediaAppearances";
 import SimilarPersonCard from "./SimilarPersonCard";
 import { TagsSection } from "./TagsSection";
 import PersonRelationshipGraph from "./PersonRelationshipGraph";
+import type { MergeResult } from "../services/personActions";
 
 const DetectedFaces = React.lazy(() => import("./DetectedFaces"));
 
@@ -58,6 +59,11 @@ interface PersonContentTabsProps {
   handleDetachWrapper: (faceIds: number[]) => void;
   suggestedFaces: FaceRead[];
   similarPersons: SimilarPerson[];
+  onMergeSelectedSimilar: (
+    ids: number[],
+  ) => Promise<MergeResult | void> | MergeResult | void;
+  onAutoMergeSimilar: () => Promise<MergeResult | void> | MergeResult | void;
+  isMergingSimilar: boolean;
   onTagUpdate: (obj: Person | Media) => void;
   onRefreshSuggestions: () => void;
   onLoadSimilar: () => Promise<void> | void;
@@ -85,6 +91,9 @@ export function PersonContentTabs({
   handleDetachWrapper,
   suggestedFaces,
   similarPersons,
+  onMergeSelectedSimilar,
+  onAutoMergeSimilar,
+  isMergingSimilar,
   onTagUpdate,
   onRefreshSuggestions,
   onLoadSimilar,
@@ -104,6 +113,7 @@ export function PersonContentTabs({
     useState(false);
   const [isProcessingFaces, setIsProcessingFaces] = useState(false);
   const [isLoadingSimilarTab, setIsLoadingSimilarTab] = useState(false);
+  const [selectedSimilarIds, setSelectedSimilarIds] = useState<number[]>([]);
 
   const createActionHandler = <
     T extends (...args: any[]) => Promise<unknown> | void,
@@ -126,6 +136,43 @@ export function PersonContentTabs({
   const handleCreate = createActionHandler(handleCreateWrapper);
   const handleDelete = createActionHandler(handleDeleteWrapper);
   const handleDetach = createActionHandler(handleDetachWrapper);
+
+  const toggleSimilarSelection = (similarId: number) => {
+    setSelectedSimilarIds((prev) =>
+      prev.includes(similarId)
+        ? prev.filter((value) => value !== similarId)
+        : [...prev, similarId]
+    );
+  };
+
+  const handleMergeSelectedClick = async () => {
+    if (selectedSimilarIds.length === 0) {
+      return;
+    }
+    try {
+      const result = (await Promise.resolve(
+        onMergeSelectedSimilar(selectedSimilarIds),
+      )) as MergeResult | void;
+      if (result && result.merged_ids && result.merged_ids.length > 0) {
+        setSelectedSimilarIds([]);
+      }
+    } catch (error) {
+      console.error("Failed to merge selected similar persons:", error);
+    }
+  };
+
+  const handleAutoMergeClick = async () => {
+    try {
+      const result = (await Promise.resolve(
+        onAutoMergeSimilar(),
+      )) as MergeResult | void;
+      if (result && result.merged_ids && result.merged_ids.length > 0) {
+        setSelectedSimilarIds([]);
+      }
+    } catch (error) {
+      console.error("Failed to auto-merge similar persons:", error);
+    }
+  };
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -169,7 +216,14 @@ export function PersonContentTabs({
     setIsLoadingSimilarTab(false);
     setTabValue(0);
     setFaceTabValue(0);
+    setSelectedSimilarIds([]);
   }, [person.id]);
+
+  useEffect(() => {
+    setSelectedSimilarIds((prev) =>
+      prev.filter((id) => similarPersons.some((similar) => similar.id === id))
+    );
+  }, [similarPersons]);
 
   return (
     <Box sx={{ width: "100%" }}>
@@ -269,15 +323,63 @@ export function PersonContentTabs({
       </TabPanel>
 
       <TabPanel value={tabValue} index={2}>
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "space-between",
+            alignItems: "center",
+            gap: 1.5,
+            mb: 2,
+          }}
+        >
+          <Typography variant="h6">Similar People</Typography>
+          <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
+            {selectedSimilarIds.length > 0 && (
+              <Typography variant="body2" color="text.secondary">
+                {selectedSimilarIds.length} selected
+              </Typography>
+            )}
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={handleAutoMergeClick}
+              disabled={isMergingSimilar || isLoadingSimilarTab}
+              startIcon={
+                isMergingSimilar ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : undefined
+              }
+            >
+              {isMergingSimilar ? "Auto Merging..." : "Auto Merge"}
+            </Button>
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleMergeSelectedClick}
+              disabled={
+                isMergingSimilar || selectedSimilarIds.length === 0
+              }
+            >
+              {isMergingSimilar ? "Merging..." : "Merge Selected"}
+            </Button>
+          </Box>
+        </Box>
+
         {similarPersons.length > 0 ? (
           <Grid container spacing={2}>
             {similarPersons.map((similar) => (
               <Grid key={similar.id} size={{ xs: 6, sm: 3, md: 2 }}>
-                <SimilarPersonCard {...similar} />
+                <SimilarPersonCard
+                  {...similar}
+                  selectable
+                  selected={selectedSimilarIds.includes(similar.id)}
+                  onToggleSelect={() => toggleSimilarSelection(similar.id)}
+                />
               </Grid>
             ))}
           </Grid>
-        ) : isLoadingSimilarTab ? (
+        ) : isLoadingSimilarTab || isMergingSimilar ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
             <CircularProgress size={32} />
           </Box>

@@ -24,12 +24,17 @@ import {
   useTheme,
 } from "@mui/material";
 import { useNavigate } from "react-router-dom";
-import { Graph as G6Graph, GraphData, IG6GraphEvent } from "@antv/g6";
+import {
+  EdgeEvent,
+  Graph as G6Graph,
+  GraphData,
+  NodeEvent,
+  type IElementEvent,
+} from "@antv/g6";
 import type { BaseEdgeStyleProps, BaseNodeStyleProps } from "@antv/g6";
 import useResizeObserver from "use-resize-observer";
 import { API } from "../config";
 import { PersonRelationshipGraph as PersonRelationshipGraphData } from "../types";
-import { Renderer as SVGRenderer } from '@antv/g-svg';
 interface PersonRelationshipGraphProps {
   graph: PersonRelationshipGraphData | null;
   depth: number;
@@ -71,6 +76,7 @@ type GraphEdge = {
   weight: number;
   normalizedWeight: number;
   visualWidth: number;
+  layoutWeight: number;
   intensity: number;
   formattedLabel: string;
   label?: string;
@@ -78,6 +84,7 @@ type GraphEdge = {
   data: {
     weight: number;
     normalizedWeight: number;
+    layoutWeight: number;
     formattedLabel: string;
     isInterCluster: boolean;
   };
@@ -113,6 +120,9 @@ const CLUSTER_COLORS = [
 
 const MIN_SPACING = 90;
 const MAX_SPACING = 260;
+
+const clampForceSpacing = (value: number) =>
+  Math.max(MIN_SPACING, Math.min(MAX_SPACING, value));
 
 const normalizeWeight = (weight: number, summary: WeightSummary) => {
   if (summary.max === summary.min) {
@@ -153,6 +163,267 @@ const interpolateHexColor = (from: string, to: string, amount: number) => {
 
 const clampSliderValue = (value: number | number[]) =>
   Array.isArray(value) ? value[0] : value;
+
+const pseudoRandom = (seed: number) => {
+  const x = Math.sin(seed * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+};
+
+const clearElementStates = (graph: G6Graph) => {
+  graph.getNodeData().forEach((node) => {
+    void graph.setElementState(node.id, []);
+  });
+  graph.getEdgeData().forEach((edge) => {
+    void graph.setElementState(edge.id, []);
+  });
+};
+
+const applyWeightedSpringLayout = (
+  clustered: ClusteredGraph,
+  baseSpacing: number
+): GraphData => {
+  const spacing = clampForceSpacing(baseSpacing);
+  const nodes = clustered.nodes.map((node) => ({
+    ...node,
+    style: { ...(node.style ?? {}) },
+  }));
+  const edges = clustered.edges.map((edge) => ({
+    ...edge,
+    style: { ...(edge.style ?? {}) },
+  }));
+
+  const nodeCount = nodes.length;
+  if (nodeCount === 0) {
+    return { nodes, edges };
+  }
+
+  const initialRadius = spacing * Math.max(1.4, Math.sqrt(nodeCount) * 0.55);
+  nodes.forEach((node, index) => {
+    const angle = (index / nodeCount) * Math.PI * 2;
+    node.style.x = Math.cos(angle) * initialRadius;
+    node.style.y = Math.sin(angle) * initialRadius;
+  });
+
+  const radii = nodes.map((node) => {
+    const styleSize = node.style?.size;
+    const numericSize =
+      typeof styleSize === "number" ? styleSize : node.size ?? 40;
+    return Math.max(16, numericSize / 2);
+  });
+
+  const indexMap = new Map<string, number>();
+  nodes.forEach((node, index) => {
+    indexMap.set(node.id, index);
+  });
+
+  const areaEdge = spacing * Math.max(2.2, Math.sqrt(nodeCount) * 0.9);
+  const idealArea = Math.pow(areaEdge, 2);
+  const k = Math.sqrt(idealArea / nodeCount);
+
+  let temperature = spacing * Math.max(2.6, Math.sqrt(nodeCount) * 1.6);
+  const iterations = Math.min(160, Math.max(60, nodeCount * 4));
+  const displacements = nodes.map(() => ({ x: 0, y: 0 }));
+
+  for (let iteration = 0; iteration < iterations; iteration += 1) {
+    displacements.forEach((disp) => {
+      disp.x = 0;
+      disp.y = 0;
+    });
+
+    for (let i = 0; i < nodeCount; i += 1) {
+      for (let j = i + 1; j < nodeCount; j += 1) {
+        let dx = (nodes[i].style.x ?? 0) - (nodes[j].style.x ?? 0);
+        let dy = (nodes[i].style.y ?? 0) - (nodes[j].style.y ?? 0);
+        let distSq = dx * dx + dy * dy;
+        if (distSq < 1e-6) {
+          const jitter = 0.01;
+          const seed = iteration * nodeCount * 13 + i * 7 + j * 17;
+          dx = (pseudoRandom(seed) - 0.5) * jitter;
+          dy = (pseudoRandom(seed + 1) - 0.5) * jitter;
+          distSq = dx * dx + dy * dy;
+        }
+        const dist = Math.sqrt(distSq);
+        const minSep = radii[i] + radii[j] + spacing * 0.18;
+
+        let repulsive = ((k * k) / dist) * 0.75;
+        if (dist < minSep) {
+          repulsive += ((minSep - dist) / minSep) * k * 1.6;
+        }
+
+        const fx = (dx / dist) * repulsive;
+        const fy = (dy / dist) * repulsive;
+        displacements[i].x += fx;
+        displacements[i].y += fy;
+        displacements[j].x -= fx;
+        displacements[j].y -= fy;
+      }
+    }
+
+    edges.forEach((edge, edgeIndex) => {
+      const sourceIndex = indexMap.get(edge.source);
+      const targetIndex = indexMap.get(edge.target);
+      if (sourceIndex === undefined || targetIndex === undefined) {
+        return;
+      }
+
+      let dx =
+        (nodes[sourceIndex].style.x ?? 0) -
+        (nodes[targetIndex].style.x ?? 0);
+      let dy =
+        (nodes[sourceIndex].style.y ?? 0) -
+        (nodes[targetIndex].style.y ?? 0);
+      let distSq = dx * dx + dy * dy;
+      if (distSq < 1e-6) {
+        const jitter = 0.05;
+        const offset = edgeIndex * 0.37;
+        dx = Math.cos(offset) * jitter;
+        dy = Math.sin(offset) * jitter;
+        distSq = dx * dx + dy * dy;
+      }
+      const dist = Math.sqrt(distSq);
+      const weight = Math.max(
+        0,
+        Math.min(1, edge.layoutWeight ?? edge.normalizedWeight ?? 0)
+      );
+      const desired =
+        radii[sourceIndex] +
+        radii[targetIndex] +
+        spacing * (0.18 + (1 - weight) * 1.1);
+      const diff = dist - desired;
+      const adjustedStrength = 0.28 + weight * 1.1;
+      const force =
+        (diff / (desired + 1e-6)) * (k * adjustedStrength);
+      const fx = (dx / dist) * force;
+      const fy = (dy / dist) * force;
+
+      displacements[sourceIndex].x -= fx;
+      displacements[sourceIndex].y -= fy;
+      displacements[targetIndex].x += fx;
+      displacements[targetIndex].y += fy;
+    });
+
+    for (let i = 0; i < nodeCount; i += 1) {
+      const disp = displacements[i];
+      const dispLength = Math.hypot(disp.x, disp.y);
+      if (dispLength < 1e-6) {
+        continue;
+      }
+      const limited = Math.min(dispLength, temperature);
+      nodes[i].style.x =
+        (nodes[i].style.x ?? 0) + (disp.x / dispLength) * limited;
+      nodes[i].style.y =
+        (nodes[i].style.y ?? 0) + (disp.y / dispLength) * limited;
+    }
+
+    temperature *= 0.92;
+  }
+
+  const averageX =
+    nodes.reduce((sum, node) => sum + (node.style.x ?? 0), 0) / nodeCount;
+  const averageY =
+    nodes.reduce((sum, node) => sum + (node.style.y ?? 0), 0) / nodeCount;
+  let maxDistance = 0;
+
+  nodes.forEach((node) => {
+    const normalizedX = (node.style.x ?? 0) - averageX;
+    const normalizedY = (node.style.y ?? 0) - averageY;
+    const distance = Math.hypot(normalizedX, normalizedY);
+    maxDistance = Math.max(maxDistance, distance);
+    node.style = {
+      ...node.style,
+      x: normalizedX,
+      y: normalizedY,
+    };
+    node.x = normalizedX;
+    node.y = normalizedY;
+  });
+
+  const maxAllowedRadius =
+    spacing * Math.max(2.8, Math.sqrt(nodeCount) * 1.3);
+  if (maxDistance > maxAllowedRadius && maxDistance > 0) {
+    const scale = maxAllowedRadius / maxDistance;
+    nodes.forEach((node) => {
+      node.style = {
+        ...node.style,
+        x: (node.style.x ?? 0) * scale,
+        y: (node.style.y ?? 0) * scale,
+      };
+      node.x = (node.x ?? 0) * scale;
+      node.y = (node.y ?? 0) * scale;
+    });
+  }
+
+  return { nodes, edges };
+};
+
+const getEventElementId = (event: IElementEvent): string | undefined => {
+  const target = event.target as { id?: string } | null;
+  if (target?.id) {
+    return String(target.id);
+  }
+  const eventWithData = event as unknown as { data?: { id?: string | number } };
+  const dataId = eventWithData.data?.id;
+  if (typeof dataId === "string" || typeof dataId === "number") {
+    return String(dataId);
+  }
+  return undefined;
+};
+
+const highlightNode = (graph: G6Graph, nodeId: string) => {
+  clearElementStates(graph);
+  const edges = graph.getEdgeData() as GraphEdge[];
+  const highlightedNodeIds = new Set<string>([nodeId]);
+  const highlightedEdgeIds = new Set<string>();
+
+  void graph.setElementState(nodeId, ["highlight"]);
+
+  edges.forEach((edge) => {
+    if (edge.source === nodeId || edge.target === nodeId) {
+      highlightedEdgeIds.add(edge.id);
+      highlightedNodeIds.add(edge.source);
+      highlightedNodeIds.add(edge.target);
+      void graph.setElementState(edge.id, ["highlight"]);
+    }
+  });
+
+  edges.forEach((edge) => {
+    if (!highlightedEdgeIds.has(edge.id)) {
+      void graph.setElementState(edge.id, ["inactive"]);
+    }
+  });
+
+  graph.getNodeData().forEach((node) => {
+    if (!highlightedNodeIds.has(node.id)) {
+      void graph.setElementState(node.id, ["inactive"]);
+    }
+  });
+};
+
+const highlightEdge = (graph: G6Graph, edgeId: string) => {
+  const edge = graph.getEdgeData(edgeId) as GraphEdge | undefined;
+  if (!edge) {
+    return;
+  }
+  clearElementStates(graph);
+
+  const involvedNodeIds = new Set<string>([edge.source, edge.target]);
+  void graph.setElementState(edgeId, ["highlight"]);
+  involvedNodeIds.forEach((id) => {
+    void graph.setElementState(id, ["highlight"]);
+  });
+
+  graph.getEdgeData().forEach((edgeData) => {
+    if (edgeData.id !== edgeId) {
+      void graph.setElementState(edgeData.id, ["inactive"]);
+    }
+  });
+
+  graph.getNodeData().forEach((nodeData) => {
+    if (!involvedNodeIds.has(nodeData.id)) {
+      void graph.setElementState(nodeData.id, ["inactive"]);
+    }
+  });
+};
 
 const sharedNeighborCount = (
   nodeIdA: string,
@@ -209,19 +480,61 @@ const applyClustering = (
     depthLookup.set(node.id, node.depth ?? 1);
   });
 
+  type NodeMetrics = {
+    degree: number;
+    totalNormalized: number;
+    maxNormalized: number;
+    strongestNeighbor?: string;
+  };
+
   const adjacency = new Map<string, Map<string, number>>();
   const adjacencySets = new Map<string, Set<string>>();
+  const adjacencyNormalized = new Map<string, Map<string, number>>();
+  const nodeMetrics = new Map<string, NodeMetrics>();
+
+  const ensureMetrics = (nodeId: string): NodeMetrics => {
+    let metrics = nodeMetrics.get(nodeId);
+    if (!metrics) {
+      metrics = { degree: 0, totalNormalized: 0, maxNormalized: 0 };
+      nodeMetrics.set(nodeId, metrics);
+    }
+    return metrics;
+  };
+
+  const updateMetrics = (
+    nodeId: string,
+    neighborId: string,
+    normalized: number
+  ) => {
+    const metrics = ensureMetrics(nodeId);
+    metrics.degree += 1;
+    metrics.totalNormalized += normalized;
+    if (normalized >= metrics.maxNormalized) {
+      metrics.maxNormalized = normalized;
+      metrics.strongestNeighbor = neighborId;
+    }
+  };
+
   nodes.forEach((node) => {
     adjacency.set(node.id, new Map());
     adjacencySets.set(node.id, new Set());
+    adjacencyNormalized.set(node.id, new Map());
   });
 
   edges.forEach((edge) => {
     const weight = edge.weight ?? 1;
+    const normalized = Math.max(
+      0,
+      Math.min(1, edge.layoutWeight ?? edge.normalizedWeight ?? 0)
+    );
     adjacency.get(edge.source)?.set(edge.target, weight);
     adjacency.get(edge.target)?.set(edge.source, weight);
     adjacencySets.get(edge.source)?.add(edge.target);
     adjacencySets.get(edge.target)?.add(edge.source);
+    adjacencyNormalized.get(edge.source)?.set(edge.target, normalized);
+    adjacencyNormalized.get(edge.target)?.set(edge.source, normalized);
+    updateMetrics(edge.source, edge.target, normalized);
+    updateMetrics(edge.target, edge.source, normalized);
   });
 
   const labels = new Map<string, string>();
@@ -262,9 +575,14 @@ const applyClustering = (
           return;
         }
 
-        let influence = weight;
+        const normalized =
+          adjacencyNormalized.get(node.id)?.get(neighborId) ?? 0;
+
+        let influence =
+          weight *
+          (0.24 + Math.pow(Math.max(normalized, 0), 1.6) * 2.6);
         if (rootSet.has(node.id) || rootSet.has(neighborId)) {
-          influence *= 0.18;
+          influence *= 0.25;
         }
 
         const neighborDegree = Math.max(
@@ -309,6 +627,27 @@ const applyClustering = (
     }
   }
 
+  nodes.forEach((node) => {
+    if (rootSet.has(node.id)) {
+      return;
+    }
+    const metrics = nodeMetrics.get(node.id);
+    if (!metrics) {
+      return;
+    }
+    if (metrics.degree <= 1 && metrics.maxNormalized <= 0.22) {
+      labels.set(node.id, node.id);
+      return;
+    }
+    if (
+      metrics.degree <= 2 &&
+      metrics.maxNormalized <= 0.18 &&
+      metrics.totalNormalized <= 0.38
+    ) {
+      labels.set(node.id, node.id);
+    }
+  });
+
   const labelToCluster = new Map<string, { id: string; color: string }>();
   const labelCounts = new Map<string, number>();
   labels.forEach((label) => {
@@ -328,6 +667,7 @@ const applyClustering = (
   });
 
   const clusterSummaries = new Map<string, ClusterSummary>();
+  const backgroundColor = "#0B1224";
   nodes.forEach((node) => {
     const label = labels.get(node.id);
     const cluster = label ? labelToCluster.get(label) : undefined;
@@ -363,11 +703,16 @@ const applyClustering = (
       return;
     }
     const isInterCluster = sourceNode.cluster !== targetNode.cluster;
+    const normalized = Math.max(
+      0,
+      Math.min(1, edge.normalizedWeight ?? 0)
+    );
     edge.data = {
       ...edge.data,
       isInterCluster,
     };
 
+    const baseStroke = (edge.style?.stroke as string | undefined) ?? "#6C7A99";
     if (isInterCluster) {
       bridgingMap.get(edge.source)?.add(targetNode.cluster ?? "");
       bridgingMap.get(edge.target)?.add(sourceNode.cluster ?? "");
@@ -385,19 +730,78 @@ const applyClustering = (
       }
       edge.style = {
         ...edge.style,
-        lineDash: [6, 6],
-        opacity: Math.min(edge.intensity, 0.35),
+        stroke: interpolateHexColor(baseStroke, "#9FA6BF", 0.6),
+        lineWidth: Math.min(
+          8,
+          Math.max(
+            1.2,
+            (edge.visualWidth ?? 2) * (0.45 + normalized * 0.4)
+          )
+        ),
+        opacity: Math.min(0.38, 0.12 + normalized * 0.32),
+        lineDash: [4, 9],
+        shadowColor: undefined,
+        shadowBlur: 0,
+        lineCap: "round",
+        lineJoin: "round",
+        cursor: "pointer",
       };
     } else {
+      const clusterColor =
+        sourceNode.clusterColor && sourceNode.clusterColor === targetNode.clusterColor
+          ? sourceNode.clusterColor
+          : sourceNode.clusterColor ?? targetNode.clusterColor;
+      const strokeColor = clusterColor
+        ? interpolateHexColor(
+            baseStroke,
+            clusterColor,
+            Math.min(0.8, 0.35 + normalized * 0.45)
+          )
+        : baseStroke;
       edge.style = {
         ...edge.style,
+        stroke: strokeColor,
+        lineWidth: Math.max(2.2, edge.visualWidth ?? 2.2),
+        opacity: Math.max(edge.intensity ?? 0.08, 0.08 + normalized * 0.32),
+        shadowColor: alpha(strokeColor, 0.3 + normalized * 0.45),
+        shadowBlur: Math.max(edge.style?.shadowBlur ?? 0, 12 + normalized * 8),
         lineDash: undefined,
+        lineCap: "round",
+        lineJoin: "round",
+        cursor: "pointer",
       };
     }
   });
 
   nodes.forEach((node) => {
     node.bridgeScore = bridgingMap.get(node.id)?.size ?? 0;
+    const clusterColor = node.clusterColor;
+    if (clusterColor) {
+      const fill = interpolateHexColor(
+        backgroundColor,
+        clusterColor,
+        node.isRoot ? 0.6 : 0.45
+      );
+      const stroke = interpolateHexColor(backgroundColor, clusterColor, 0.92);
+      const shadow = alpha(clusterColor, node.isRoot ? 0.6 : 0.45);
+      node.style = {
+        ...node.style,
+        fill,
+        stroke,
+        lineWidth: Math.max(node.style?.lineWidth ?? 2, node.isRoot ? 3.6 : 2.4),
+        shadowColor: shadow,
+        shadowBlur: Math.max(node.style?.shadowBlur ?? 0, node.isRoot ? 26 : 16),
+      };
+    }
+    if (node.isRoot) {
+      node.style = {
+        ...node.style,
+        stroke: "#FFFFFF",
+        lineWidth: Math.max(node.style?.lineWidth ?? 0, 4),
+        shadowColor: alpha("#FFFFFF", 0.5),
+        shadowBlur: Math.max(node.style?.shadowBlur ?? 0, 28),
+      };
+    }
   });
 
   const clusters = Array.from(clusterSummaries.values()).sort((a, b) => {
@@ -407,135 +811,6 @@ const applyClustering = (
   });
 
   return { nodes, edges, clusters };
-};
-
-const applyClusterLayout = (
-  clustered: ClusteredGraph,
-  spacing: number
-): GraphData => {
-  const nodes = clustered.nodes.map((node) => ({
-    ...node,
-    style: { ...(node.style ?? {}) },
-  }));
-  const nodeLookup = new Map<string, GraphNode>();
-  nodes.forEach((node) => {
-    nodeLookup.set(node.id, node);
-  });
-
-  const edges = clustered.edges.map((edge) => ({
-    ...edge,
-    style: { ...(edge.style ?? {}) },
-  }));
-
-  const clusters = clustered.clusters.map((cluster) => ({
-    ...cluster,
-    nodeIds: [...cluster.nodeIds],
-  }));
-
-  const rootCluster = clusters.find((cluster) => cluster.hasRoot) ?? null;
-  const nonRootClusters = clusters.filter((cluster) => !cluster.hasRoot);
-
-  const baseRadius =
-    spacing * 2.8
-    + (rootCluster ? Math.sqrt(rootCluster.totalWeight + 1) * spacing * 0.18 : 0);
-  const ringSpacing = spacing * 3.4;
-  const clustersPerRing = Math.max(
-    4,
-    Math.ceil(Math.sqrt(nonRootClusters.length))
-  );
-
-  const clusterCenters = new Map<string, { x: number; y: number }>();
-
-  if (rootCluster) {
-    clusterCenters.set(rootCluster.id, { x: 0, y: 0 });
-  }
-
-  let clusterIndex = 0;
-  let ring = 0;
-  while (clusterIndex < nonRootClusters.length) {
-    const remaining = nonRootClusters.length - clusterIndex;
-    const ringCount = Math.min(clustersPerRing + ring, remaining);
-    const radius = baseRadius + ring * ringSpacing;
-    for (let i = 0; i < ringCount; i += 1) {
-      const cluster = nonRootClusters[clusterIndex];
-      const offset = ring % 2 === 0 ? 0 : Math.PI / ringCount;
-      const angle = (2 * Math.PI * i) / ringCount + offset;
-      clusterCenters.set(cluster.id, {
-        x: Math.cos(angle) * radius,
-        y: Math.sin(angle) * radius,
-      });
-      clusterIndex += 1;
-    }
-    ring += 1;
-  }
-
-  clusters.forEach((cluster) => {
-    const center = clusterCenters.get(cluster.id) ?? { x: 0, y: 0 };
-    const nodeIds = cluster.nodeIds
-      .map((id) => nodeLookup.get(id))
-      .filter(Boolean) as GraphNode[];
-    if (!nodeIds.length) {
-      return;
-    }
-
-    const orderedNodes = nodeIds
-      .slice()
-      .sort(
-        (a, b) =>
-          (b.bridgeScore ?? 0) - (a.bridgeScore ?? 0) ||
-          (b.totalWeight ?? 0) - (a.totalWeight ?? 0) ||
-          a.id.localeCompare(b.id)
-      );
-
-    const rootNodeIndex = orderedNodes.findIndex((node) => node.depth === 0);
-    if (rootNodeIndex >= 0) {
-      const [rootNode] = orderedNodes.splice(rootNodeIndex, 1);
-      rootNode.x = center.x;
-      rootNode.y = center.y;
-      orderedNodes.unshift(rootNode);
-    }
-
-    const ringInnerSpacing = spacing * 1.15;
-    const firstRingRadius =
-      spacing * 1.45 + Math.sqrt(cluster.totalWeight + 1) * spacing * 0.08;
-
-    let assigned = 0;
-    let ringIndex = 0;
-    while (assigned < orderedNodes.length) {
-      const ringRadius = firstRingRadius + ringIndex * ringInnerSpacing;
-      const circumference = 2 * Math.PI * ringRadius;
-      const maxNodesThisRing = Math.max(
-        6,
-        Math.floor(circumference / Math.max(50, spacing + 30))
-      );
-      const nodesThisRing = Math.min(
-        maxNodesThisRing,
-        orderedNodes.length - assigned
-      );
-      const angleOffset = ringIndex % 2 === 0 ? 0 : Math.PI / nodesThisRing;
-
-      for (let i = 0; i < nodesThisRing; i += 1) {
-        const node = orderedNodes[assigned];
-        const angle = (2 * Math.PI * i) / nodesThisRing + angleOffset;
-        node.x = center.x + Math.cos(angle) * ringRadius;
-        node.y = center.y + Math.sin(angle) * ringRadius;
-        assigned += 1;
-      }
-
-      ringIndex += 1;
-    }
-  });
-
-  const positionedNodes = nodes.map((node) => ({
-    ...node,
-    style: {
-      ...(node.style ?? {}),
-      x: node.x,
-      y: node.y,
-    },
-  }));
-
-  return { nodes: positionedNodes, edges };
 };
 
 const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
@@ -555,7 +830,7 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
   } = useResizeObserver<HTMLDivElement>();
 
   const [showEdgeLabels, setShowEdgeLabels] = useState(true);
-  const [spacing, setSpacing] = useState(140);
+  const [spacing, setSpacing] = useState(() => clampForceSpacing(140));
   const [minWeight, setMinWeight] = useState(1);
 
   const setContainerRef = useCallback(
@@ -578,7 +853,7 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
       .map((edge) => Math.max(1, Number(edge.weight) || 0))
       .filter((value) => Number.isFinite(value));
     const min = Math.max(1, Math.min(...weights));
-    const max = Math.max(min, Math.max(...weights));
+    const max = Math.min(100, Math.max(...weights));
     return { min, max };
   }, [graph]);
 
@@ -601,15 +876,65 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
       (edge) => (edge.weight ?? 0) >= minWeight
     );
 
+    const nodeIdSet = new Set(graph.nodes.map((node) => String(node.id)));
+    const adjacency = new Map<string, Set<string>>();
+
     filteredEdgesRaw.forEach((edge) => {
-      const weight = Math.max(1, Number(edge.weight) || 0);
       const source = String(edge.source);
       const target = String(edge.target);
-      nodeWeightMap.set(source, (nodeWeightMap.get(source) ?? 0) + weight);
-      nodeWeightMap.set(target, (nodeWeightMap.get(target) ?? 0) + weight);
+      if (!nodeIdSet.has(source) || !nodeIdSet.has(target)) {
+        return;
+      }
+      if (!adjacency.has(source)) {
+        adjacency.set(source, new Set());
+      }
+      adjacency.get(source)!.add(target);
+      if (!adjacency.has(target)) {
+        adjacency.set(target, new Set());
+      }
+      adjacency.get(target)!.add(source);
     });
 
     const rootId = String(graph.root_id ?? graph.nodes[0]?.id ?? "");
+    const reachable = new Set<string>();
+    const queue: string[] = [rootId];
+
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || !nodeIdSet.has(current) || reachable.has(current)) {
+        continue;
+      }
+      reachable.add(current);
+      const neighbors = adjacency.get(current);
+      if (neighbors) {
+        neighbors.forEach((neighbor) => {
+          if (!reachable.has(neighbor)) {
+            queue.push(neighbor);
+          }
+        });
+      }
+    }
+
+    if (!reachable.size && nodeIdSet.has(rootId)) {
+      reachable.add(rootId);
+    }
+
+    const connectedEdges = filteredEdgesRaw.filter((edge) => {
+      const source = String(edge.source);
+      const target = String(edge.target);
+      return reachable.has(source) && reachable.has(target);
+    });
+
+    const activeNodeIds = new Set<string>();
+    connectedEdges.forEach((edge) => {
+      const weight = Math.max(1, Number(edge.weight) || 0);
+      const source = String(edge.source);
+      const target = String(edge.target);
+      activeNodeIds.add(source);
+      activeNodeIds.add(target);
+      nodeWeightMap.set(source, (nodeWeightMap.get(source) ?? 0) + weight);
+      nodeWeightMap.set(target, (nodeWeightMap.get(target) ?? 0) + weight);
+    });
 
     const fallbackFill = alpha("#151B2C", 0.9);
     const labelColor =
@@ -617,12 +942,20 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
         ? theme.palette.grey[100]
         : theme.palette.grey[900];
 
-    const nodes: GraphNode[] = graph.nodes.map((node) => {
-      const id = String(node.id);
-      const totalWeight = nodeWeightMap.get(id) ?? 0;
-      const image = node.profile_thumbnail
-        ? `${API}/thumbnails/${encodeURIComponent(node.profile_thumbnail)}`
-        : null;
+    const nodes: GraphNode[] = graph.nodes
+      .filter((node) => {
+        const id = String(node.id);
+        if (!reachable.has(id)) {
+          return false;
+        }
+        return activeNodeIds.has(id);
+      })
+      .map((node) => {
+        const id = String(node.id);
+        const totalWeight = nodeWeightMap.get(id) ?? 0;
+        const image = node.profile_thumbnail
+          ? `${API}/thumbnails/${encodeURIComponent(node.profile_thumbnail)}`
+          : null;
       const baseSize = 32;
       const sizeBoost = Math.min(28, Math.sqrt(totalWeight || 1) * 4.2);
       const size = baseSize + sizeBoost + (node.depth === 0 ? 12 : 0);
@@ -680,20 +1013,29 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
           hasImage: Boolean(image),
         },
       };
-    });
+      });
 
     const strongColor = theme.palette.primary.main;
-    const weakColor = theme.palette.grey[500];
+    const weakColor =
+      theme.palette.grey[700] ?? theme.palette.grey[500] ?? "#4C5A73";
 
-    const edges: GraphEdge[] = filteredEdgesRaw.map((edge, index) => {
+    const edges: GraphEdge[] = connectedEdges.map((edge, index) => {
       const weight = Math.max(1, Number(edge.weight) || 0);
       const normalizedWeight = normalizeWeight(weight, weightSummary);
-      const visualWidth = 1.1 + Math.log2(weight + 1) * 2.6;
-      const intensity = 0.2 + normalizedWeight * 0.7;
+      const easedWeight = Math.pow(normalizedWeight, 0.55);
+      const layoutWeight =
+        normalizedWeight >= 0.5
+          ? Math.min(1, normalizedWeight * 1.15)
+          : normalizedWeight >= 0.3
+          ? normalizedWeight
+          : Math.pow(normalizedWeight, 1.8) * 0.1;
+      const visualWidth =
+        0.9 + easedWeight * 12 + Math.log2(weight + 1) * 1.1;
+      const intensity = 0.04 + Math.pow(normalizedWeight, 1.25) * 0.96;
       const color = interpolateHexColor(
         weakColor,
         strongColor,
-        normalizedWeight
+        easedWeight
       );
       const formattedLabel = `${weight} co-appearance${
         weight === 1 ? "" : "s"
@@ -706,6 +1048,7 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
         target: String(edge.target),
         weight,
         normalizedWeight,
+        layoutWeight,
         visualWidth,
         intensity,
         formattedLabel,
@@ -714,11 +1057,17 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
           stroke: color,
           lineWidth: visualWidth,
           opacity: intensity,
-          lineAppendWidth: Math.max(10, visualWidth + 8),
+          shadowColor: alpha(color, 0.35),
+          shadowBlur: Math.max(0, Math.round(visualWidth * 0.8)),
+          lineAppendWidth: Math.max(10, visualWidth + 10),
+          lineCap: "round",
+          lineJoin: "round",
+          cursor: "pointer",
         },
         data: {
           weight,
           normalizedWeight,
+          layoutWeight,
           formattedLabel,
           isInterCluster: false,
         },
@@ -742,11 +1091,11 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
     return applyClustering(processedData, CLUSTER_COLORS);
   }, [processedData]);
 
-  const layoutData: GraphData | undefined = useMemo(() => {
+  const graphData: GraphData | undefined = useMemo(() => {
     if (!clusteredGraph) {
       return undefined;
     }
-    return applyClusterLayout(clusteredGraph, spacing);
+    return applyWeightedSpringLayout(clusteredGraph, spacing);
   }, [clusteredGraph, spacing]);
 
   useEffect(() => {
@@ -761,7 +1110,6 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
       height,
       pixelRatio: Math.min(2, window.devicePixelRatio * 1.1),
       behaviors: ["drag-element", "drag-canvas", "zoom-canvas", "scroll-canvas"],
-      layout: {type: "force"},
       edge: {
         type: "quadratic",
         style: {
@@ -769,6 +1117,8 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
           lineWidth: 1.4,
           opacity: 0.4,
           lineAppendWidth: 8,
+          lineCap: "round",
+          lineJoin: "round",
         },
         label: {
           style: {
@@ -816,80 +1166,35 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
       },
     });
 
-    const clearStates = () => {
-      graphInstance.getNodes().forEach((node) => {
-        graphInstance.clearItemStates(node);
-      });
-      graphInstance.getEdges().forEach((edge) => {
-        graphInstance.clearItemStates(edge);
-      });
-    };
-
-    graphInstance.on("node:click", (evt: IG6GraphEvent) => {
-      const model = evt.item?.getModel() as GraphNode | undefined;
-      if (model) {
-        navigate(`/person/${model.id}`);
+    graphInstance.on(NodeEvent.CLICK, (event: IElementEvent) => {
+      const nodeId = getEventElementId(event);
+      if (nodeId) {
+        navigate(`/person/${nodeId}`);
       }
     });
 
-    graphInstance.on("node:mouseenter", (evt) => {
-      const nodeItem = evt.item;
-      if (!nodeItem) return;
-      clearStates();
-      graphInstance.setItemState(nodeItem, "highlight", true);
-      const nodeId = (nodeItem.getModel() as GraphNode).id;
-      graphInstance.getEdges().forEach((edge) => {
-        const model = edge.getModel() as GraphEdge;
-        if (model.source === nodeId || model.target === nodeId) {
-          graphInstance.setItemState(edge, "highlight", true);
-          const otherId = model.source === nodeId ? model.target : model.source;
-          const neighborNode = graphInstance.findById(otherId);
-          if (neighborNode) {
-            graphInstance.setItemState(neighborNode, "highlight", true);
-          }
-        } else {
-          graphInstance.setItemState(edge, "inactive", true);
-        }
-      });
-      graphInstance.getNodes().forEach((node) => {
-        if (node !== nodeItem && !node.hasState("highlight")) {
-          graphInstance.setItemState(node, "inactive", true);
-        }
-      });
+    graphInstance.on(NodeEvent.POINTER_ENTER, (event: IElementEvent) => {
+      const nodeId = getEventElementId(event);
+      if (!nodeId) {
+        return;
+      }
+      highlightNode(graphInstance, nodeId);
     });
 
-    graphInstance.on("node:mouseleave", () => {
-      clearStates();
+    graphInstance.on(NodeEvent.POINTER_LEAVE, () => {
+      clearElementStates(graphInstance);
     });
 
-    graphInstance.on("edge:mouseenter", (evt) => {
-      const edgeItem = evt.item;
-      if (!edgeItem) return;
-      clearStates();
-      graphInstance.setItemState(edgeItem, "highlight", true);
-      const model = edgeItem.getModel() as GraphEdge;
-      const sourceNode = graphInstance.findById(model.source);
-      const targetNode = graphInstance.findById(model.target);
-      if (sourceNode) graphInstance.setItemState(sourceNode, "highlight", true);
-      if (targetNode) graphInstance.setItemState(targetNode, "highlight", true);
-      graphInstance.getEdges().forEach((edge) => {
-        if (edge !== edgeItem) {
-          graphInstance.setItemState(edge, "inactive", true);
-        }
-      });
-      graphInstance.getNodes().forEach((node) => {
-        if (
-          node !== sourceNode &&
-          node !== targetNode &&
-          !node.hasState("highlight")
-        ) {
-          graphInstance.setItemState(node, "inactive", true);
-        }
-      });
+    graphInstance.on(EdgeEvent.POINTER_ENTER, (event: IElementEvent) => {
+      const edgeId = getEventElementId(event);
+      if (!edgeId) {
+        return;
+      }
+      highlightEdge(graphInstance, edgeId);
     });
 
-    graphInstance.on("edge:mouseleave", () => {
-      clearStates();
+    graphInstance.on(EdgeEvent.POINTER_LEAVE, () => {
+      clearElementStates(graphInstance);
     });
 
     g6GraphRef.current = graphInstance;
@@ -902,21 +1207,36 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
 
   useEffect(() => {
     const graphInstance = g6GraphRef.current;
-    if (!graphInstance || !layoutData) {
+    if (!graphInstance || !graphData) {
       return;
     }
 
-    graphInstance.setData(layoutData);
-    graphInstance.render();
+    let cancelled = false;
 
-    graphInstance.fitView(48);
-  }, [layoutData]);
+    const run = async () => {
+      graphInstance.setData(graphData);
+      await graphInstance.render();
+      if (cancelled) {
+        return;
+      }
+      await graphInstance.fitView({ padding: 48 });
+    };
+
+    run().catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error("[PersonRelationshipGraph] Failed to render graph", error);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [graphData]);
 
   useEffect(() => {
     const graphInstance = g6GraphRef.current;
     if (!graphInstance) return;
     graphInstance.setSize(width, height);
-    graphInstance.fitView(48);
+    void graphInstance.fitView({ padding: 48 });
   }, [width, height]);
 
   const handleDepthChange = (event: SelectChangeEvent<string>) => {
@@ -929,21 +1249,12 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
   const handleResetView = () => {
     const graphInstance = g6GraphRef.current;
     if (!graphInstance) return;
-    graphInstance.fitView(48);
-    graphInstance
-      .getNodes()
-      .forEach((node) => graphInstance.clearItemStates(node));
-    graphInstance
-      .getEdges()
-      .forEach((edge) => graphInstance.clearItemStates(edge));
+    void graphInstance.fitView({ padding: 48 });
+    clearElementStates(graphInstance);
   };
 
   const hasGraph = Boolean(
-    layoutData &&
-      layoutData.nodes &&
-      layoutData.nodes.length > 0 &&
-      layoutData.edges &&
-      layoutData.edges.length > 0
+    graphData?.nodes?.length && graphData?.edges?.length
   );
 
   return (
@@ -1006,7 +1317,7 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
               color="text.secondary"
               sx={{ display: "block", mb: 0.5 }}
             >
-              Layout spacing: {spacing}px
+              Force link distance: {spacing}px
             </Typography>
             <Slider
               size="small"
@@ -1015,7 +1326,9 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
               step={10}
               value={spacing}
               valueLabelDisplay="auto"
-              onChange={(_, value) => setSpacing(clampSliderValue(value))}
+              onChange={(_, value) =>
+                setSpacing(clampForceSpacing(clampSliderValue(value)))
+              }
             />
           </Box>
           <Box sx={{ width: 240 }}>

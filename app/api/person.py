@@ -35,7 +35,9 @@ from app.schemas.person import (
     CursorPage,
     FaceRead,
     MediaCursorPage,
+    MergePersonsBulkRequest,
     MergePersonsRequest,
+    MergePersonsResult,
     PersonDetail,
     PersonRead,
     PersonReadSimple,
@@ -578,28 +580,16 @@ def auto_profile_face(
     return person
 
 
-@router.post(
-    "/merge",
-    summary="Merge one person into another",
-    status_code=status.HTTP_200_OK,
-)
-def merge_persons(
-    body: MergePersonsRequest,
-    session: Session = Depends(get_session),
-):
-    if settings.general.read_only:
-        return HTTPException(
-            status_code=403,
-            detail="Not allowed in settings.general.read_only mode.",
-        )
-    sid, tid = body.source_id, body.target_id
-    if sid == tid:
+def _merge_person_into_target(
+    session: Session, source_id: int, target_id: int
+) -> Person:
+    if source_id == target_id:
         raise HTTPException(
             status_code=400, detail="source_id and target_id must differ"
         )
 
-    source = session.get(Person, sid)
-    target = session.get(Person, tid)
+    source = session.get(Person, source_id)
+    target = session.get(Person, target_id)
 
     if not source or not target:
         raise HTTPException(
@@ -607,7 +597,7 @@ def merge_persons(
         )
 
     session.exec(
-        update(Face).where(Face.person_id == sid).values(person_id=tid)
+        update(Face).where(Face.person_id == source_id).values(person_id=target_id)
     )
     session.exec(
         text(
@@ -616,30 +606,30 @@ def merge_persons(
             SET person_id = :target_id
             WHERE person_id = :source_id
             """
-        ).bindparams(target_id=tid, source_id=sid)
+        ).bindparams(target_id=target_id, source_id=source_id)
     )
     session.exec(
         update(TimelineEvent)
-        .where(TimelineEvent.person_id == sid)
-        .values(person_id=tid)
+        .where(TimelineEvent.person_id == source_id)
+        .values(person_id=target_id)
     )
 
     source_tag_ids = set(
         session.exec(
-            select(PersonTagLink.tag_id).where(PersonTagLink.person_id == sid)
+            select(PersonTagLink.tag_id).where(PersonTagLink.person_id == source_id)
         ).all()
     )
     if source_tag_ids:
         target_tag_ids = set(
             session.exec(
                 select(PersonTagLink.tag_id).where(
-                    PersonTagLink.person_id == tid
+                    PersonTagLink.person_id == target_id
                 )
             ).all()
         )
         for tag_id in source_tag_ids - target_tag_ids:
-            session.add(PersonTagLink(person_id=tid, tag_id=tag_id))
-    session.exec(delete(PersonTagLink).where(PersonTagLink.person_id == sid))
+            session.add(PersonTagLink(person_id=target_id, tag_id=tag_id))
+    session.exec(delete(PersonTagLink).where(PersonTagLink.person_id == source_id))
 
     if target.profile_face_id is None and source.profile_face_id is not None:
         target.profile_face_id = source.profile_face_id
@@ -716,19 +706,73 @@ def merge_persons(
     session.delete(source)
     safe_commit(session)
 
-    update_person_embedding(session, tid)
+    update_person_embedding(session, target_id)
     session.exec(
         text(
             """
             DELETE FROM person_embeddings
             WHERE person_id=:p_id
             """
-        ).bindparams(p_id=sid)
+        ).bindparams(p_id=source_id)
     )
-    recalculate_person_appearance_counts(session, [tid])
+    recalculate_person_appearance_counts(session, [target_id])
     session.refresh(target)
     safe_commit(session)
     return target
+
+
+@router.post(
+    "/merge",
+    summary="Merge one person into another",
+    status_code=status.HTTP_200_OK,
+)
+def merge_persons(
+    body: MergePersonsRequest,
+    session: Session = Depends(get_session),
+):
+    if settings.general.read_only:
+        return HTTPException(
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
+        )
+    merged = _merge_person_into_target(session, body.source_id, body.target_id)
+    return merged
+
+
+@router.post(
+    "/{person_id}/merge-multiple",
+    response_model=MergePersonsResult,
+    summary="Merge multiple persons into the specified person",
+)
+def merge_multiple_persons(
+    person_id: int,
+    request: MergePersonsBulkRequest,
+    session: Session = Depends(get_session),
+):
+    if settings.general.read_only:
+        return HTTPException(
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
+        )
+    merged_ids: list[int] = []
+    skipped_ids: list[int] = []
+    seen: set[int] = set()
+    for source_id in request.source_ids:
+        if source_id in seen:
+            continue
+        seen.add(source_id)
+        if source_id == person_id:
+            skipped_ids.append(source_id)
+            continue
+        try:
+            _merge_person_into_target(session, source_id, person_id)
+            merged_ids.append(source_id)
+        except HTTPException as exc:
+            if exc.status_code in (400, 404):
+                skipped_ids.append(source_id)
+            else:
+                raise
+    return MergePersonsResult(merged_ids=merged_ids, skipped_ids=skipped_ids)
 
 
 @router.delete(
@@ -852,6 +896,60 @@ def get_similarities(
     return similar_persons_list
 
 
+@router.post(
+    "/{person_id}/merge-similar",
+    response_model=MergePersonsResult,
+    summary="Automatically merge similar persons that exceed the merge threshold",
+)
+def auto_merge_similar_persons(
+    person_id: int,
+    session: Session = Depends(get_session),
+):
+    if settings.general.read_only:
+        return HTTPException(
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
+        )
+
+    threshold = float(
+        getattr(
+            settings.face_recognition,
+            "person_merge_percent_similarity",
+            75.0,
+        )
+    )
+    similar_people = get_similarities(person_id, session)
+    candidate_ids = [
+        similar.id
+        for similar in similar_people
+        if similar.id is not None
+        and similar.similarity is not None
+        and float(similar.similarity) >= threshold
+    ]
+
+    merged_ids: list[int] = []
+    skipped_ids: list[int] = []
+
+    seen_ids: set[int] = set()
+
+    for source_id in candidate_ids:
+        if source_id in seen_ids:
+            continue
+        seen_ids.add(source_id)
+        if source_id == person_id:
+            continue
+        try:
+            _merge_person_into_target(session, source_id, person_id)
+            merged_ids.append(source_id)
+        except HTTPException as exc:
+            if exc.status_code in (400, 404):
+                skipped_ids.append(source_id)
+            else:
+                raise
+
+    return MergePersonsResult(merged_ids=merged_ids, skipped_ids=skipped_ids)
+
+
 @router.get(
     "/{person_id}/relationships",
     response_model=RelationshipGraph,
@@ -939,14 +1037,9 @@ def get_person_relationships(
                 else rel.person_a_id
             )
 
-            edge_key = tuple(sorted((current_id, neighbour_id)))
             weight = int(rel.coappearance_count or 0)
-
             if weight <= 0:
                 continue
-
-            existing_weight = edges.get(edge_key, 0)
-            edges[edge_key] = max(existing_weight, weight)
 
             if len(nodes) >= max_nodes and neighbour_id not in nodes:
                 continue
@@ -954,6 +1047,10 @@ def get_person_relationships(
             added = _ensure_node(neighbour_id, current_depth + 1)
             if not added:
                 continue
+
+            edge_key = tuple(sorted((current_id, neighbour_id)))
+            existing_weight = edges.get(edge_key, 0)
+            edges[edge_key] = max(existing_weight, weight)
 
             if neighbour_id not in visited and (current_depth + 1) <= depth:
                 queue.append((neighbour_id, current_depth + 1))
@@ -970,6 +1067,7 @@ def get_person_relationships(
     edge_models = [
         RelationshipEdge(source=edge[0], target=edge[1], weight=weight)
         for edge, weight in edges.items()
+        if edge[0] in nodes and edge[1] in nodes
     ]
 
     return RelationshipGraph(

@@ -79,3 +79,34 @@ class GeoUpdate(SQLModel):
 class CursorPage(BaseModel):
     items: list[MediaPreview]
     next_cursor: str | None
+
+
+class MediaFolderPreview(BaseModel):
+    id: int
+    path: str
+    filename: str
+    thumbnail_path: str | None = None
+
+
+class MediaFolderEntry(BaseModel):
+    path: str
+    name: str
+    parent_path: str | None
+    depth: int
+    media_count: int
+    subfolder_count: int
+    previews: list[MediaFolderPreview] = Field(default_factory=list)
+
+
+class MediaFolderBreadcrumb(BaseModel):
+    name: str
+    path: str | None
+
+
+class MediaFolderListing(BaseModel):
+    current_path: str | None
+    parent_path: str | None
+    depth: int
+    direct_media_count: int
+    folders: list[MediaFolderEntry] = Field(default_factory=list)
+    breadcrumbs: list[MediaFolderBreadcrumb] = Field(default_factory=list)

@@ -1,6 +1,11 @@
 import { API } from "../config";
 import { Person, PersonRelationshipGraph } from "../types";
 
+export interface MergeResult {
+  merged_ids: number[];
+  skipped_ids: number[];
+}
+
 export const updatePerson = async (
   personId: number,
   data: { name?: string; profile_face_id?: number }
@@ -28,6 +33,29 @@ export const mergePersons = async (sourceId: number, targetId: number) => {
     body: JSON.stringify({ source_id: sourceId, target_id: targetId }),
   });
   if (!res.ok) throw new Error("Failed to merge persons");
+};
+
+export const mergeMultiplePersons = async (
+  targetId: number,
+  sourceIds: number[]
+): Promise<MergeResult> => {
+  const res = await fetch(`${API}/api/person/${targetId}/merge-multiple`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ source_ids: sourceIds }),
+  });
+  if (!res.ok) throw new Error("Failed to merge selected persons");
+  return res.json();
+};
+
+export const autoMergeSimilarPersons = async (
+  personId: number
+): Promise<MergeResult> => {
+  const res = await fetch(`${API}/api/person/${personId}/merge-similar`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error("Failed to auto-merge similar persons");
+  return res.json();
 };
 
 export const searchPersonsByName = async (name: string): Promise<Person[]> => {
@@ -64,7 +92,7 @@ export const getSimilarPersons = async (
 export const getPersonRelationshipGraph = async (
   personId: number,
   depth: number,
-  maxNodes = 200,
+  maxNodes = 500,
   signal?: AbortSignal
 ): Promise<PersonRelationshipGraph> => {
   const params = new URLSearchParams({
