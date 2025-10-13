@@ -9,6 +9,7 @@
         "format": "prettier --write ."
     },
     "dependencies": {
+        "@antv/g6": "^5.0.49",
         "@emotion/react": "11.14.0",
         "@emotion/styled": "11.14.1",
         "@mui/icons-material": "7.1.0",
@@ -20,10 +21,9 @@
         "date-fns": "4.1.0",
         "leaflet": "1.9.4",
         "prop-types": "15.8.1",
+        "@antv/g-svg":"2.0.42",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
-        "react-force-graph": "^1.29.3",
-        "react-force-graph-2d": "1.29.0",
         "react-intersection-observer": "9.16.0",
         "react-leaflet": "^4.2.1",
         "react-masonry-css": "1.0.16",

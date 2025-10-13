@@ -40,14 +40,14 @@ from app.api import (
     tasks,
 )
 from app.api.processors import router as proc_router
-from app.services.releases import get_latest_release_info
-from app.tasks import run_cleanup_and_chain
 from app.config import settings
 from app.database import ensure_vec_tables
 from app.ffmpeg import ensure_ffmpeg_available
 from app.logger import configure_file_logging, logger
 from app.models import ProcessingTask
 from app.processor_registry import load_processors
+from app.services.releases import get_latest_release_info
+from app.tasks import run_cleanup_and_chain
 
 # Configure uvicorn loggers' verbosity
 logging.getLogger("uvicorn.error").setLevel(logging.INFO)
@@ -461,7 +461,7 @@ def run_migrations():
 
 def start_server():
     """Starts the Uvicorn server in a daemon thread."""
-    uvicorn.run(app, host="127.0.0.1", port=8123)
+    uvicorn.run(app, host="0.0.0.0", port=8123)
 
 
 if __name__ == "__main__":
