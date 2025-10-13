@@ -134,15 +134,12 @@ export const usePersonDetailPage = () => {
     [id],
   );
 
-  const loadMoreDetectedFaces = useCallback(
-    async (cursor: string | null) => {
-      if (!id) return;
-      await loadMore(detectedFacesListKey, () =>
-        getPersonFaces(Number(id), cursor, 20),
-      );
-    },
-    [id, loadMore, detectedFacesListKey],
-  );
+  const loadMoreDetectedFaces = useCallback(async () => {
+    if (!id) return;
+    await loadMore(detectedFacesListKey, (cursor) =>
+      getPersonFaces(Number(id), cursor ?? null, 20),
+    );
+  }, [id, loadMore, detectedFacesListKey]);
 
   const loadSuggestedFaces = useCallback(
     async (signal?: AbortSignal) => {
