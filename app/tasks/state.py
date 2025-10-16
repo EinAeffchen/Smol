@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
-from typing import MutableMapping
+from typing import Any, MutableMapping
 
 from pydantic import BaseModel
 
@@ -26,11 +26,11 @@ _MAX_FAILURES_PER_TASK = 500
 
 # The progress dictionaries are intentionally module-level singletons so they
 # can be shared across API requests without additional coordination.
-_task_progress: dict[str, dict[str, str | None]] = {}
+_task_progress: dict[str, dict[str, Any]] = {}
 _task_failures: "OrderedDict[str, list[TaskFailure]]" = OrderedDict()
 
 
-def get_task_progress() -> MutableMapping[str, dict[str, str | None]]:
+def get_task_progress() -> MutableMapping[str, dict[str, Any]]:
     return _task_progress
 
 
@@ -64,6 +64,7 @@ def set_task_progress(
     *,
     current_item: str | None = None,
     current_step: str | None = None,
+    **extras: Any,
 ) -> None:
     entry = _task_progress.setdefault(
         task_id, {"current_item": None, "current_step": None}
@@ -72,6 +73,11 @@ def set_task_progress(
         entry["current_item"] = current_item
     if current_step is not None:
         entry["current_step"] = current_step
+    for key, value in extras.items():
+        if key in ("current_item", "current_step"):
+            continue
+        if value is not None:
+            entry[key] = value
 
 
 def clear_task_progress(task_id: str) -> None:

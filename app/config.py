@@ -27,9 +27,7 @@ def get_os_app_config_dir() -> Path:
     which profile (data directory) is active.
     """
     base = Path(
-        os.getenv("APPDATA")
-        or os.getenv("XDG_CONFIG_HOME")
-        or Path.home() / ".config"
+        os.getenv("APPDATA") or os.getenv("XDG_CONFIG_HOME") or Path.home() / ".config"
     )
     d = base / "omoide"
     d.mkdir(parents=True, exist_ok=True)
@@ -93,7 +91,8 @@ def get_user_data_path() -> Path:
             # or network location), fall back to a safe local profile instead of
             # crashing on startup. Persist the fallback so the app can run.
             logger.warning(
-                "Active profile '%s' is not accessible; falling back to default profile. Error: %s",
+                "Active profile '%s' is not accessible; falling back to default"
+                " profile. Error: %s",
                 active,
                 e,
             )
@@ -104,13 +103,14 @@ def get_user_data_path() -> Path:
                 bs = bootstrap or {}
                 profiles = bs.get("profiles", [])
                 if not any(
-                    (isinstance(x, dict) and x.get("path") == str(p))
-                    for x in profiles
+                    (isinstance(x, dict) and x.get("path") == str(p)) for x in profiles
                 ):
-                    profiles.append({
-                        "name": p.name or "Profile",
-                        "path": str(p),
-                    })
+                    profiles.append(
+                        {
+                            "name": p.name or "Profile",
+                            "path": str(p),
+                        }
+                    )
                 bs["profiles"] = profiles
                 bs["active_profile"] = str(default_profile)
                 write_bootstrap(bs)
@@ -291,7 +291,7 @@ class GeneralSettings(BaseModel):
     def database_url(self) -> str:
         return (
             f"sqlite:///{self.database_dir}/omoide.db?cache=shared&mode=rwc"
-            f"&_journal_mode=WAL&_synchronous=NORMAL"
+            "&_journal_mode=WAL&_synchronous=NORMAL"
         )
 
     def model_post_init(self, context) -> None:
@@ -303,10 +303,7 @@ class GeneralSettings(BaseModel):
         if not IS_DOCKER:
             legacy_models_dir = self.omoide_dir / "models"
             try:
-                if (
-                    legacy_models_dir.exists()
-                    and legacy_models_dir != self.models_dir
-                ):
+                if legacy_models_dir.exists() and legacy_models_dir != self.models_dir:
                     migrated_any = False
                     for item in legacy_models_dir.iterdir():
                         dest = self.models_dir / item.name
@@ -332,9 +329,7 @@ class GeneralSettings(BaseModel):
                     except OSError:
                         pass
             except Exception as e:
-                logger.warning(
-                    "Could not migrate legacy models directory: %s", e
-                )
+                logger.warning("Could not migrate legacy models directory: %s", e)
         if IS_DOCKER:
             self.media_dirs = [Path("/app/media")]
 
@@ -428,9 +423,7 @@ class FaceClusteringPreset(str, Enum):
     CUSTOM = "custom"
 
 
-FACE_RECOGNITION_PRESETS: dict[
-    FaceClusteringPreset, dict[str, float | int | str]
-] = {
+FACE_RECOGNITION_PRESETS: dict[FaceClusteringPreset, dict[str, float | int | str]] = {
     FaceClusteringPreset.STRICT: {
         "face_recognition_min_confidence": 0.6,
         "face_match_min_percent": 80,
@@ -440,6 +433,7 @@ FACE_RECOGNITION_PRESETS: dict[
         "face_recognition_min_face_pixels": 1600,
         "person_min_face_count": 3,
         "person_min_media_count": 2,
+        "person_merge_search_k": 20,
         "person_cluster_max_l2_radius": 0.95,
         "person_merge_percent_similarity": 80,
         "cluster_batch_size": 15000,
@@ -457,6 +451,7 @@ FACE_RECOGNITION_PRESETS: dict[
         "face_recognition_min_face_pixels": 1600,
         "person_min_face_count": 2,
         "person_min_media_count": 2,
+        "person_merge_search_k": 20,
         "person_cluster_max_l2_radius": 1,
         "person_merge_percent_similarity": 75,
         "cluster_batch_size": 15000,
@@ -474,6 +469,7 @@ FACE_RECOGNITION_PRESETS: dict[
         "face_recognition_min_face_pixels": 1200,
         "person_min_face_count": 2,
         "person_min_media_count": 2,
+        "person_merge_search_k": 20,
         "person_cluster_max_l2_radius": 1.02,
         "person_merge_percent_similarity": 70,
         "cluster_batch_size": 15000,
@@ -509,6 +505,7 @@ class FaceRecognitionSettings(BaseModel):
     person_cluster_max_l2_radius: float = 1.02
     # merge previously created persons when their embeddings are extremely similar
     person_merge_percent_similarity: int = 80
+    person_merge_search_k: int = 20
     # reduce if ram is an issue, the higher the more accurate the clustering.
     cluster_batch_size: int = 10000
     # HDBSCAN tuning to reduce over-merged clusters (e.g., side profiles)
@@ -749,9 +746,7 @@ def get_clip_bundle():
     with _clip_lock:
         if _clip_model is None:
             logger.info("Loading OpenCLIP bundle (lazy)...")
-            _clip_model, _clip_preprocess, _clip_tokenizer = get_model(
-                settings
-            )
+            _clip_model, _clip_preprocess, _clip_tokenizer = get_model(settings)
         return _clip_model, _clip_preprocess, _clip_tokenizer
 
 
@@ -868,9 +863,7 @@ def reload_settings():
         run_migrations()
         ensure_vec_tables()
     except Exception as e:
-        logger.warning(
-            "Could not reset database engine or run migrations: %s", e
-        )
+        logger.warning("Could not reset database engine or run migrations: %s", e)
 
     # Invalidate CLIP bundle to reflect possible AI model changes; will reload lazily
     _reset_clip_after_settings_change()

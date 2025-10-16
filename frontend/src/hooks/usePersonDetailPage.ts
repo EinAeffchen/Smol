@@ -33,7 +33,7 @@ import {
   detachFace,
 } from "../services/faceActions";
 
-const RELATIONSHIP_MAX_NODES = 200;
+const RELATIONSHIP_MAX_NODES = 500;
 
 export const usePersonDetailPage = () => {
   const { id } = useParams<{ id: string }>();

@@ -145,6 +145,9 @@ export interface Task {
   current_item?: string;
   current_step?: string;
   failure_count?: number;
+  merge_total?: number;
+  merge_processed?: number;
+  merge_pending?: number;
 }
 
 export interface TaskFailure {
@@ -400,6 +403,7 @@ export interface AppConfig {
     face_recognition_min_face_pixels: number;
     person_min_face_count: number;
     person_min_media_count: number;
+    person_merge_search_k: number;
     person_cluster_max_l2_radius: number;
     person_merge_percent_similarity: number;
     cluster_batch_size: number;

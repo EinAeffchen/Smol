@@ -67,6 +67,7 @@ const facePresets: Record<
     face_recognition_min_face_pixels: 1600,
     person_min_face_count: 3,
     person_min_media_count: 2,
+    person_merge_search_k: 20,
     person_cluster_max_l2_radius: 0.95,
     person_merge_percent_similarity: 80,
     cluster_batch_size: 15000,
@@ -84,6 +85,7 @@ const facePresets: Record<
     face_recognition_min_face_pixels: 1600,
     person_min_face_count: 2,
     person_min_media_count: 2,
+    person_merge_search_k: 20,
     person_cluster_max_l2_radius: 1,
     person_merge_percent_similarity: 75,
     cluster_batch_size: 15000,
@@ -101,6 +103,7 @@ const facePresets: Record<
     face_recognition_min_face_pixels: 1200,
     person_min_face_count: 2,
     person_min_media_count: 2,
+    person_merge_search_k: 20,
     person_cluster_max_l2_radius: 1.02,
     person_merge_percent_similarity: 70,
     cluster_batch_size: 15000,
@@ -1440,6 +1443,22 @@ export default function ConfigurationPage() {
                     margin="normal"
                     type="number"
                     helperText="Distinct media items required before a cluster becomes a person"
+                  />
+                </Grid>
+                <Grid size={{ xs: 12, sm: 6 }}>
+                  <TextField
+                    label="Merge search candidates"
+                    value={config.face_recognition.person_merge_search_k}
+                    onChange={(e) =>
+                      setFaceValue(
+                        "person_merge_search_k",
+                        parseInt(e.target.value, 20)
+                      )
+                    }
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    helperText="How many persons to compare against for merging known people upon clustering"
                   />
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>

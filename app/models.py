@@ -196,6 +196,9 @@ class ProcessingTaskRead(ProcessingTask, table=False):
     current_item: str | None = None
     current_step: str | None = None
     failure_count: int | None = None
+    merge_total: int | None = None
+    merge_processed: int | None = None
+    merge_pending: int | None = None
 
 
 class ExifData(SQLModel, table=True):

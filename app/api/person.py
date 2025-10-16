@@ -105,18 +105,16 @@ def get_person_timeline(
     if cursor:
         try:
             cursor_date = date.fromisoformat(cursor)
-            final_query = final_query.where(
-                timeline_cte.c.timeline_date < cursor_date
-            )
+            final_query = final_query.where(timeline_cte.c.timeline_date < cursor_date)
         except (ValueError, TypeError):
             raise HTTPException(
                 status_code=400,
                 detail="Invalid cursor format. Use YYYY-MM-DD.",
             )
 
-    final_query = final_query.order_by(
-        timeline_cte.c.timeline_date.desc()
-    ).limit(limit + 1)
+    final_query = final_query.order_by(timeline_cte.c.timeline_date.desc()).limit(
+        limit + 1
+    )
 
     page_items_result = session.exec(final_query).all()
 
@@ -177,28 +175,28 @@ def get_person_timeline(
                 continue
 
     def get_date(item: Media | TimelineEvent) -> date:
-        return (
-            item.created_at.date()
-            if isinstance(item, Media)
-            else item.event_date
-        )
+        return item.created_at.date() if isinstance(item, Media) else item.event_date
 
     combined_items.sort(key=get_date, reverse=True)
 
     timeline_items = []
     for item in combined_items:
         if isinstance(item, Media):
-            timeline_items.append({
-                "type": "media",
-                "date": get_date(item),
-                "items": item,
-            })
+            timeline_items.append(
+                {
+                    "type": "media",
+                    "date": get_date(item),
+                    "items": item,
+                }
+            )
         elif isinstance(item, TimelineEvent):
-            timeline_items.append({
-                "type": "event",
-                "date": get_date(item),
-                "event": item,
-            })
+            timeline_items.append(
+                {
+                    "type": "event",
+                    "date": get_date(item),
+                    "event": item,
+                }
+            )
 
     return {"items": timeline_items, "next_cursor": next_cursor}
 
@@ -210,9 +208,7 @@ def create_person_event(
     session: Session = Depends(get_session),
 ):
     """Create a new timeline event for a specific person."""
-    db_event = TimelineEvent.model_validate(
-        event, update={"person_id": person_id}
-    )
+    db_event = TimelineEvent.model_validate(event, update={"person_id": person_id})
     session.add(db_event)
     session.commit()
     session.refresh(db_event)
@@ -255,12 +251,12 @@ def delete_person_event(
 
 @router.get("/", response_model=CursorPage)
 def list_persons(
-    name: str | None = Query(
-        None, description="Filter by substring match on name"
-    ),
+    name: str | None = Query(None, description="Filter by substring match on name"),
     cursor: str | None = Query(
         None,
-        description="encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+        description=(
+            "encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`"
+        ),
     ),
     limit: int = 50,
     session: Session = Depends(get_session),
@@ -339,9 +335,7 @@ def suggest_faces(
     ).bindparams(vec=target, k=limit)
     rows = session.exec(sql).all()
     face_ids = [r[0] for r in rows]
-    distance_map = {
-        int(row[0]): float(row[1]) for row in rows if row[1] is not None
-    }
+    distance_map = {int(row[0]): float(row[1]) for row in rows if row[1] is not None}
 
     faces = session.exec(select(Face).where(Face.id.in_(face_ids))).all()
     id_map = {f.id: f for f in faces}
@@ -384,11 +378,7 @@ def get_faces(
     before_id = None
     if cursor:
         before_id = int(cursor)
-    q = (
-        select(Face)
-        .where(Face.person_id == person.id)
-        .order_by(Face.id.desc())
-    )
+    q = select(Face).where(Face.person_id == person.id).order_by(Face.id.desc())
     if before_id:
         q = q.where(Face.id < before_id)
 
@@ -417,7 +407,9 @@ def get_appearances(
     limit: int = 30,
     cursor: str | None = Query(
         None,
-        description="encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+        description=(
+            "encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`"
+        ),
     ),
     session: Session = Depends(get_session),
 ):
@@ -432,9 +424,7 @@ def get_appearances(
         select(Face.media_id)
         .where(Face.person_id.in_(all_required_ids))
         .group_by(Face.media_id)
-        .having(
-            func.count(func.distinct(Face.person_id)) == required_ids_count
-        )
+        .having(func.count(func.distinct(Face.person_id)) == required_ids_count)
     )
     matching_media_ids = session.exec(media_id_q).all()
 
@@ -459,9 +449,7 @@ def get_appearances(
                 < (cursor_created_at, cursor_media_id)
             )
         except (ValueError, TypeError):
-            raise HTTPException(
-                status_code=400, detail="Invalid cursor format"
-            )
+            raise HTTPException(status_code=400, detail="Invalid cursor format")
 
     q = q.order_by(desc(Media.created_at), desc(Media.id)).limit(limit)
 
@@ -590,11 +578,8 @@ def _merge_person_into_target(
 
     source = session.get(Person, source_id)
     target = session.get(Person, target_id)
-
     if not source or not target:
-        raise HTTPException(
-            status_code=404, detail="Source or target person not found"
-        )
+        raise HTTPException(status_code=404, detail="Source or target person not found")
 
     session.exec(
         update(Face).where(Face.person_id == source_id).values(person_id=target_id)
@@ -622,9 +607,7 @@ def _merge_person_into_target(
     if source_tag_ids:
         target_tag_ids = set(
             session.exec(
-                select(PersonTagLink.tag_id).where(
-                    PersonTagLink.person_id == target_id
-                )
+                select(PersonTagLink.tag_id).where(PersonTagLink.person_id == target_id)
             ).all()
         )
         for tag_id in source_tag_ids - target_tag_ids:
@@ -674,9 +657,9 @@ def _merge_person_into_target(
                 existing_cache[cache_key] = existing
 
         if existing:
-            existing.coappearance_count = (
-                existing.coappearance_count or 0
-            ) + (relationship.coappearance_count or 0)
+            existing.coappearance_count = (existing.coappearance_count or 0) + (
+                relationship.coappearance_count or 0
+            )
             if relationship.updated_at and (
                 existing.updated_at is None
                 or relationship.updated_at > existing.updated_at
@@ -716,8 +699,8 @@ def _merge_person_into_target(
         ).bindparams(p_id=source_id)
     )
     recalculate_person_appearance_counts(session, [target_id])
-    session.refresh(target)
     safe_commit(session)
+    session.refresh(target)
     return target
 
 
@@ -808,12 +791,8 @@ def delete_person(person_id: int, session: Session = Depends(get_session)):
         """
     ).bindparams(p_id=person.id)
     session.exec(sql)
-    session.exec(
-        delete(PersonTagLink).where(PersonTagLink.person_id == person_id)
-    )
-    session.exec(
-        delete(TimelineEvent).where(TimelineEvent.person_id == person_id)
-    )
+    session.exec(delete(PersonTagLink).where(PersonTagLink.person_id == person_id))
+    session.exec(delete(TimelineEvent).where(TimelineEvent.person_id == person_id))
     session.exec(
         delete(PersonRelationship).where(
             or_(
@@ -956,9 +935,7 @@ def auto_merge_similar_persons(
 )
 def get_person_relationships(
     person_id: int,
-    depth: int = Query(
-        3, ge=1, le=5, description="Number of generations to include"
-    ),
+    depth: int = Query(3, ge=1, le=5, description="Number of generations to include"),
     max_nodes: int = Query(
         150, ge=1, le=500, description="Maximum number of nodes to include"
     ),
@@ -1032,9 +1009,7 @@ def get_person_relationships(
 
         for rel in relationships:
             neighbour_id = (
-                rel.person_b_id
-                if rel.person_a_id == current_id
-                else rel.person_a_id
+                rel.person_b_id if rel.person_a_id == current_id else rel.person_a_id
             )
 
             weight = int(rel.coappearance_count or 0)

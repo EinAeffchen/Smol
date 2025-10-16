@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from collections import deque
 from collections.abc import Iterable
 from datetime import datetime, timezone
@@ -96,9 +97,7 @@ def _cluster_embeddings(
 
     embeddings_64 = embeddings.astype(np.float64, copy=False)
 
-    min_faces_required = max(
-        2, int(settings.face_recognition.person_min_face_count)
-    )
+    min_faces_required = max(2, int(settings.face_recognition.person_min_face_count))
     sample_count = embeddings_64.shape[0]
 
     base_min_cluster_size = int(
@@ -194,9 +193,9 @@ def _group_faces_by_cluster(
 
 def rebuild_person_embedding(session: Session, person_id: int) -> None:
     rows = session.exec(
-        text(
-            "SELECT embedding FROM face_embeddings WHERE person_id = :pid"
-        ).bindparams(pid=person_id)
+        text("SELECT embedding FROM face_embeddings WHERE person_id = :pid").bindparams(
+            pid=person_id
+        )
     ).all()
     vectors: list[np.ndarray] = []
     for (stored,) in rows:
@@ -219,9 +218,9 @@ def rebuild_person_embedding(session: Session, person_id: int) -> None:
         )
         if faces_count == 0:
             session.exec(
-                text(
-                    "DELETE FROM person_embeddings WHERE person_id = :pid"
-                ).bindparams(pid=person_id)
+                text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
+                    pid=person_id
+                )
             )
             person = session.get(Person, person_id)
             if person:
@@ -242,9 +241,9 @@ def rebuild_person_embedding(session: Session, person_id: int) -> None:
         return
 
     session.exec(
-        text(
-            "DELETE FROM person_embeddings WHERE person_id = :pid"
-        ).bindparams(pid=person_id)
+        text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
+            pid=person_id
+        )
     )
 
     centroid = np.vstack(vectors).mean(axis=0)
@@ -309,9 +308,9 @@ def _merge_person_pair(
     )
 
     session.exec(
-        text(
-            "DELETE FROM person_embeddings WHERE person_id = :pid"
-        ).bindparams(pid=drop_id)
+        text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
+            pid=drop_id
+        )
     )
     session.delete(drop)
 
@@ -319,6 +318,16 @@ def _merge_person_pair(
     rebuild_person_embedding(session, keep_id)
     safe_commit(session)
     return keep_id, drop_id
+
+
+def _distance_to_similarity(distance: float | None) -> float | None:
+    if distance is None:
+        return None
+    try:
+        similarity = (1.0 - (float(distance) * float(distance)) / 2.0) * 100.0
+    except Exception:
+        return None
+    return round(max(0.0, min(100.0, similarity)), 2)
 
 
 def merge_person_with_similar(
@@ -366,32 +375,31 @@ def merge_person_with_similar(
     candidates = session.exec(
         text(
             """
-            SELECT person_id,
-                   ROUND(
-                       (1.0 - (MIN(distance) * MIN(distance)) / 2.0) * 100,
-                       2
-                   ) AS similarity_pct
+            SELECT person_id, distance
               FROM person_embeddings
              WHERE person_id != :pid
                AND embedding MATCH :vec
-               AND k = :k_val
-          GROUP BY person_id
-          ORDER BY similarity_pct DESC
+          ORDER BY distance ASC
           LIMIT :limit_val
             """
-        ).bindparams(pid=person_id, vec=blob, k_val=k, limit_val=k)
+        ).bindparams(
+            pid=person_id,
+            vec=blob,
+            limit_val=max(1, int(k)),
+        )
     ).all()
 
     merged_ids: list[int] = []
     current_id = person_id
-    for candidate_id, similarity in candidates:
-        if candidate_id is None or similarity is None:
+    for candidate_id, distance in candidates:
+        if candidate_id is None:
+            continue
+        similarity = _distance_to_similarity(distance)
+        if similarity is None:
             continue
         if float(similarity) < threshold:
             continue
-        merge_result = _merge_person_pair(
-            session, current_id, int(candidate_id)
-        )
+        merge_result = _merge_person_pair(session, current_id, int(candidate_id))
         if merge_result is None:
             continue
         keep_id, dropped_id = merge_result
@@ -417,6 +425,17 @@ def merge_similar_persons(
     candidate_ids: set[int] = {
         int(pid) for pid in (candidate_person_ids or []) if pid is not None
     }
+    search_limit = max(
+        1,
+        int(
+            getattr(
+                settings.face_recognition,
+                "person_merge_search_k",
+                20,
+            )
+        ),
+    )
+    max_distance = math.sqrt(max(0.0, 2.0 * (1.0 - percent_threshold / 100.0)))
 
     set_task_progress(
         task_id,
@@ -427,18 +446,28 @@ def merge_similar_persons(
     try:
         if candidate_ids:
             pending = deque(candidate_ids)
-            set_task_progress(
-                task_id,
-                current_step="merging_similar_persons",
-                current_item=f"queued: {len(pending)}",
-            )
-            while pending:
-                person_id = pending.popleft()
+            merge_processed = 0
+
+            def update_progress() -> None:
+                pending_count = len(pending)
+                total_work = merge_processed + pending_count
+                if total_work <= 0:
+                    total_work = max(merge_processed, pending_count)
                 set_task_progress(
                     task_id,
                     current_step="merging_similar_persons",
-                    current_item=f"queued: {len(pending)} (merged {total_merged})",
+                    current_item=f"queued: {pending_count} (merged {total_merged})",
+                    merge_processed=merge_processed,
+                    merge_total=total_work,
+                    merge_pending=pending_count,
                 )
+
+            if pending:
+                update_progress()
+            while pending:
+                person_id = pending.popleft()
+                merge_processed += 1
+                update_progress()
                 with Session(db.engine) as session:
                     task = session.get(ProcessingTask, task_id)
                     if task and task.status == "cancelled":
@@ -446,7 +475,8 @@ def merge_similar_persons(
 
                     row = session.exec(
                         text(
-                            "SELECT embedding FROM person_embeddings WHERE person_id = :pid"
+                            "SELECT embedding FROM person_embeddings WHERE person_id ="
+                            " :pid and k=1"
                         ).bindparams(pid=person_id)
                     ).first()
                     if not row:
@@ -463,29 +493,38 @@ def merge_similar_persons(
                     if blob is None:
                         continue
 
-                    candidates = session.exec(
+                    rows = session.exec(
                         text(
                             """
-                            SELECT person_id, ROUND(
-                                (1.0 - (MIN(distance) * MIN(distance)) / 2.0) * 100,
-                                2
-                            ) AS similarity_pct
+                            SELECT person_id, distance
                               FROM person_embeddings
                              WHERE person_id != :pid
                                AND embedding MATCH :vec
-                               AND similarity_pct >= :thresh
-                               and k = 5
-                             ORDER BY similarity_pct desc
+                               AND distance <= :max_dist
+                          ORDER BY distance ASC
+                          LIMIT :limit_val
                             """
                         ).bindparams(
-                            pid=person_id, vec=blob, thresh=percent_threshold
+                            pid=person_id,
+                            vec=blob,
+                            max_dist=max_distance,
+                            limit_val=search_limit,
                         )
                     ).all()
-                    logger.debug("Got %s candidates", len(candidates))
-                    merged_this_round = False
-                    for candidate_id, similarity in candidates:
-                        if candidate_id is None or similarity is None:
+                    candidate_pairs: list[tuple[int, float]] = []
+                    for candidate_id, distance in rows:
+                        if candidate_id is None:
                             continue
+                        similarity = _distance_to_similarity(distance)
+                        if similarity is None:
+                            continue
+                        if similarity < percent_threshold:
+                            continue
+                        candidate_pairs.append((int(candidate_id), similarity))
+
+                    logger.debug("Got %s candidates", len(candidate_pairs))
+                    merged_this_round = False
+                    for candidate_id, similarity in candidate_pairs:
                         logger.debug(
                             "Merging candidate persons %s and %s (similarity %.2f%%)",
                             person_id,
@@ -499,16 +538,13 @@ def merge_similar_persons(
                             keep_id, _ = merge_result
                             total_merged += 1
                             pending.appendleft(keep_id)
-                            set_task_progress(
-                                task_id,
-                                current_step="merging_similar_persons",
-                                current_item=f"queued: {len(pending)} (merged {total_merged})",
-                            )
+                            update_progress()
                             merged_this_round = True
                             break
 
                     if merged_this_round:
                         continue
+                    update_progress()
             if total_merged:
                 logger.info(
                     "Merged %d newly created person clusters after targeted pass",
@@ -531,7 +567,10 @@ def _filter_embeddings_by_id(
 
 
 def _assign_faces_to_clusters(
-    clusters: dict[int, tuple[list[int], list[np.ndarray]]], task_id: str
+    clusters: dict[int, tuple[list[int], list[np.ndarray]]],
+    task_id: str,
+    *,
+    update_progress: bool = True,
 ) -> tuple[int, list[int]]:
     created = 0
     new_person_ids: list[int] = []
@@ -552,10 +591,7 @@ def _assign_faces_to_clusters(
 
         diffs = embeddings_arr - centroid
         l2_radii = np.linalg.norm(diffs, axis=1)
-        if (
-            np.max(l2_radii)
-            > settings.face_recognition.person_cluster_max_l2_radius
-        ):
+        if np.max(l2_radii) > settings.face_recognition.person_cluster_max_l2_radius:
             logger.info(
                 "Skipping loose cluster (max radius=%.3f > %.3f) with %d faces",
                 float(np.max(l2_radii)),
@@ -615,7 +651,8 @@ def _assign_faces_to_clusters(
             centroid_blob = vector_to_blob(centroid)
             if centroid_blob is None:
                 logger.warning(
-                    "Unable to serialize centroid for new person %s; skipping embedding write",
+                    "Unable to serialize centroid for new person %s; skipping embedding"
+                    " write",
                     new_person.id,
                 )
             else:
@@ -627,8 +664,9 @@ def _assign_faces_to_clusters(
                 ).bindparams(p_id=new_person.id, emb=centroid_blob)
                 session.exec(sql_person_emb)
 
-            task.processed += len(face_ids)
-            session.add(task)
+            if update_progress:
+                task.processed += len(face_ids)
+                session.add(task)
             safe_commit(session)
     return created, new_person_ids
 
@@ -708,9 +746,7 @@ def assign_to_existing_persons(
                         "Found person_embeddings row with NULL person_id; cleaning up."
                     )
                     session.exec(
-                        text(
-                            "DELETE FROM person_embeddings WHERE person_id IS NULL"
-                        )
+                        text("DELETE FROM person_embeddings WHERE person_id IS NULL")
                     )
                     unassigned.append(face_id)
                     task.processed += 1
@@ -728,7 +764,8 @@ def assign_to_existing_persons(
 
                 if person is None:
                     logger.warning(
-                        "Dangling person_id %s in person_embeddings; removing and skipping face %s",
+                        "Dangling person_id %s in person_embeddings; removing and"
+                        " skipping face %s",
                         person_id,
                         face_id,
                     )
@@ -794,9 +831,7 @@ def assign_to_existing_persons(
 
             if task.processed % 100 == 0:
                 if affected_person_ids:
-                    recalculate_person_appearance_counts(
-                        session, affected_person_ids
-                    )
+                    recalculate_person_appearance_counts(session, affected_person_ids)
                     affected_person_ids.clear()
                 session.add(task)
                 safe_commit(session)
@@ -856,9 +891,7 @@ def run_person_clustering(task_id: str) -> None:
                     last_id = batch_face_ids[-1]
 
             if len(batch_face_ids) == 0:
-                logger.info(
-                    "No more unassigned faces found. Finishing process."
-                )
+                logger.info("No more unassigned faces found. Finishing process.")
                 break
 
             logger.info("Processing batch of %d faces...", len(batch_face_ids))
@@ -877,9 +910,7 @@ def run_person_clustering(task_id: str) -> None:
                     threshold_per=settings.face_recognition.face_match_min_percent,
                 )
                 if not unassigned_face_ids:
-                    logger.info(
-                        "All faces in batch were assigned to existing persons."
-                    )
+                    logger.info("All faces in batch were assigned to existing persons.")
                     continue
 
                 new_faces_ids, new_embs = _filter_embeddings_by_id(
@@ -892,23 +923,21 @@ def run_person_clustering(task_id: str) -> None:
                 2, int(settings.face_recognition.person_min_face_count)
             ):
                 labels = _cluster_embeddings(new_embs)
-                clusters = _group_faces_by_cluster(
-                    labels, new_faces_ids, new_embs
-                )
+                clusters = _group_faces_by_cluster(labels, new_faces_ids, new_embs)
                 created_count, created_person_ids = _assign_faces_to_clusters(
-                    clusters, task_id
+                    clusters,
+                    task_id,
+                    update_progress=not person_exists,
                 )
                 if created_person_ids:
                     new_person_candidates.extend(created_person_ids)
                 logger.info(
-                    "Cluster batch produced %d new persons out of %d candidate clusters",
+                    "Cluster batch produced %d new persons out of %d candidate"
+                    " clusters",
                     created_count,
                     len(clusters),
                 )
-            if (
-                len(batch_face_ids)
-                < settings.face_recognition.cluster_batch_size
-            ):
+            if len(batch_face_ids) < settings.face_recognition.cluster_batch_size:
                 break
         merge_similar_persons(task_id, new_person_candidates)
 

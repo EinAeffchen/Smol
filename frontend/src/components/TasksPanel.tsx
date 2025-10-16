@@ -62,7 +62,7 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
   );
   // Track when each task last made progress to enable an indeterminate fallback
   const lastProgressRef = useRef<
-    Record<string, { processed: number; changedAt: number }>
+    Record<string, { value: number; changedAt: number }>
   >({});
 
   const loadFailures = useCallback(
@@ -106,14 +106,21 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
 
   useEffect(() => {
     const now = Date.now();
-    const nextMap: Record<string, { processed: number; changedAt: number }> = {
+    const nextMap: Record<string, { value: number; changedAt: number }> = {
       ...lastProgressRef.current,
     };
 
     activeTasks.forEach((t) => {
+      const effectiveProcessed =
+        t.task_type === "cluster_persons" &&
+        typeof t.merge_processed === "number" &&
+        typeof t.merge_total === "number" &&
+        t.merge_total > 0
+          ? t.merge_processed
+          : t.processed;
       const prev = nextMap[t.id];
-      if (!prev || prev.processed !== t.processed) {
-        nextMap[t.id] = { processed: t.processed, changedAt: now };
+      if (!prev || prev.value !== effectiveProcessed) {
+        nextMap[t.id] = { value: effectiveProcessed, changedAt: now };
       }
     });
 
@@ -229,9 +236,24 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
                 Active Tasks
               </Typography>
               {activeTasks.map((t) => {
+                const isClusterTask = t.task_type === "cluster_persons";
+                const hasMergeProgress =
+                  isClusterTask &&
+                  typeof t.merge_total === "number" &&
+                  t.merge_total > 0 &&
+                  typeof t.merge_processed === "number";
+                const effectiveProcessed = hasMergeProgress
+                  ? t.merge_processed ?? 0
+                  : t.processed;
+                const effectiveTotal = hasMergeProgress
+                  ? t.merge_total ?? 0
+                  : t.total;
                 const pct =
-                  t.total > 0
-                    ? Math.round((t.processed / t.total) * 100)
+                  effectiveTotal > 0
+                    ? Math.min(
+                        100,
+                        Math.round((effectiveProcessed / effectiveTotal) * 100)
+                      )
                     : t.status === "completed"
                       ? 100
                       : 0;
@@ -243,8 +265,18 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
                 // switch to an indeterminate bar to show activity.
                 const showIndeterminate =
                   t.status === "running" &&
-                  (t.total === 0 || staleForMs > 8000);
+                  (effectiveTotal === 0 || staleForMs > 8000);
                 const failureCount = t.failure_count ?? 0;
+                const clusteringPct =
+                  isClusterTask && t.total > 0
+                    ? Math.min(
+                        100,
+                        Math.round((t.processed / t.total) * 100)
+                      )
+                    : null;
+                const totalDisplay =
+                  effectiveTotal > 0 ? effectiveTotal : "?";
+                const pctLabel = showIndeterminate ? "..." : `${pct}%`;
                 return (
                   <Box key={t.id}>
                     <Box
@@ -258,24 +290,80 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
                       <Typography variant="caption" color="text.secondary">
                         {t.status}
                         {t.status === "running" &&
-                          ` (${pct}% - ${t.processed}/${t.total})`}
+                          ` (${pctLabel} - ${effectiveProcessed}/${totalDisplay})`}
                       </Typography>
                     </Box>
-                    <LinearProgress
-                      variant={
-                        showIndeterminate ? "indeterminate" : "determinate"
-                      }
-                      value={showIndeterminate ? undefined : pct}
-                      sx={{
-                        height: 6,
-                        borderRadius: 3,
-                        mt: 0.5,
-                        bgcolor: "divider",
-                        "& .MuiLinearProgress-bar": {
-                          bgcolor: "primary.main",
-                        },
-                      }}
-                    />
+                    {hasMergeProgress ? (
+                      <Box sx={{ mt: 0.5 }}>
+                        {typeof clusteringPct === "number" && (
+                          <>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                            >
+                              {`Clustering: ${clusteringPct}% (${t.processed}/${t.total})`}
+                            </Typography>
+                            <LinearProgress
+                              variant="determinate"
+                              value={clusteringPct}
+                              sx={{
+                                height: 6,
+                                borderRadius: 3,
+                                mt: 0.5,
+                                bgcolor: "divider",
+                                "& .MuiLinearProgress-bar": {
+                                  bgcolor: "primary.main",
+                                },
+                              }}
+                            />
+                          </>
+                        )}
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          sx={{
+                            mt: typeof clusteringPct === "number" ? 1 : 0,
+                          }}
+                        >
+                          {`Merging Similar Persons: ${pctLabel} (${effectiveProcessed}/${totalDisplay})${
+                            typeof t.merge_pending === "number"
+                              ? ` • Queue ${t.merge_pending}`
+                              : ""
+                          }`}
+                        </Typography>
+                        <LinearProgress
+                          variant={
+                            showIndeterminate ? "indeterminate" : "determinate"
+                          }
+                          value={showIndeterminate ? undefined : pct}
+                          sx={{
+                            height: 6,
+                            borderRadius: 3,
+                            mt: 0.5,
+                            bgcolor: "divider",
+                            "& .MuiLinearProgress-bar": {
+                              bgcolor: "primary.main",
+                            },
+                          }}
+                        />
+                      </Box>
+                    ) : (
+                      <LinearProgress
+                        variant={
+                          showIndeterminate ? "indeterminate" : "determinate"
+                        }
+                        value={showIndeterminate ? undefined : pct}
+                        sx={{
+                          height: 6,
+                          borderRadius: 3,
+                          mt: 0.5,
+                          bgcolor: "divider",
+                          "& .MuiLinearProgress-bar": {
+                            bgcolor: "primary.main",
+                          },
+                        }}
+                      />
+                    )}
                     {failureCount > 0 && (
                       <Box
                         display="flex"
