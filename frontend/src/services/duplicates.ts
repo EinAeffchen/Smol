@@ -39,15 +39,16 @@ export const startDuplicateDetection = async (): Promise<Task> => {
 export type ResolveAction =
   | "DELETE_FILES"
   | "DELETE_RECORDS"
-  | "BLACKLIST_RECORDS";
+  | "BLACKLIST_RECORDS"
+  | "MARK_NOT_DUPLICATE";
 export const resolveDuplicates = async (
   groupId: number,
-  masterMediaId: number,
-  action: ResolveAction
+  action: ResolveAction,
+  masterMediaId?: number
 ) => {
   const payload = {
     group_id: groupId,
-    master_media_id: masterMediaId,
+    master_media_id: masterMediaId ?? null,
     action: action,
   };
 

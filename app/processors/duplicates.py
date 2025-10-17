@@ -7,6 +7,7 @@ from app.models import (
     DuplicateGroup,
     DuplicateMedia,
     Blacklist,
+    DuplicateIgnore,
 )
 from sqlalchemy import func
 from datetime import datetime, timezone
@@ -171,6 +172,42 @@ class DuplicateProcessor:
             return
         self._auto_resolve_media_items(session, media_items)
 
+    def _pair_key(self, media_id_a: int, media_id_b: int) -> tuple[int, int]:
+        if media_id_a <= media_id_b:
+            return media_id_a, media_id_b
+        return media_id_b, media_id_a
+
+    def _load_ignored_pairs(self, session: Session) -> set[tuple[int, int]]:
+        rows = session.exec(
+            select(DuplicateIgnore.media_id_a, DuplicateIgnore.media_id_b)
+        ).all()
+        return {(row[0], row[1]) for row in rows}
+
+    def _partition_non_ignored_groups(
+        self, media_ids: list[int], ignored_pairs: set[tuple[int, int]]
+    ) -> list[list[int]]:
+        if len(media_ids) < 2:
+            return []
+
+        uf = UnionFind(media_ids)
+        ordered_ids = list(media_ids)
+        for idx in range(len(ordered_ids)):
+            media_a = ordered_ids[idx]
+            for jdx in range(idx + 1, len(ordered_ids)):
+                media_b = ordered_ids[jdx]
+                if self._pair_key(media_a, media_b) in ignored_pairs:
+                    continue
+                uf.union(media_a, media_b)
+
+        cluster_map: dict[int, list[int]] = {}
+        for media_id in ordered_ids:
+            root = uf.find(media_id)
+            cluster_map.setdefault(root, []).append(media_id)
+
+        return [
+            members for members in cluster_map.values() if len(members) > 1
+        ]
+
     def process(self):
         with Session(db.engine) as session:
             self._update_task_status(session, "running")
@@ -179,6 +216,10 @@ class DuplicateProcessor:
             )
 
             try:
+                ignored_pairs = self._load_ignored_pairs(session)
+                progress_total = 0
+                progress_processed = 0
+
                 # --- Phase 1: Group by IDENTICAL Hashes ---
 
                 # Find all hashes that appear more than once
@@ -192,6 +233,17 @@ class DuplicateProcessor:
                     .having(func.count(Media.id) > 1)
                 )
                 duplicate_hashes = session.exec(stmt).all()
+                progress_total += len(duplicate_hashes)
+
+                if progress_total:
+                    if self._update_task_progress_and_check_status(
+                        session, progress_processed, progress_total
+                    ):
+                        logger.info(
+                            "Duplicate detection task %s cancelled before processing identical hashes",
+                            self.task_id,
+                        )
+                        return
 
                 # For each duplicate hash, find all associated media
                 for phash, count in duplicate_hashes:
@@ -199,38 +251,55 @@ class DuplicateProcessor:
                         Media.phash == phash
                     )
                     media_items = session.exec(media_with_same_hash_stmt).all()
-                    image_ids = [m.id for m in media_items if m.duration is None]
-                    video_ids = [m.id for m in media_items if m.duration is not None]
+                    media_by_id = {m.id: m for m in media_items}
+                    image_ids = [
+                        m.id for m in media_items if m.duration is None
+                    ]
+                    video_ids = [
+                        m.id for m in media_items if m.duration is not None
+                    ]
+
+                    image_groups = self._partition_non_ignored_groups(
+                        image_ids, ignored_pairs
+                    )
+                    video_groups = self._partition_non_ignored_groups(
+                        video_ids, ignored_pairs
+                    )
 
                     if settings.duplicates.duplicate_auto_handling is DuplicateHandlingRule.KEEP:
-                        if len(image_ids) > 1:
-                            self._create_or_update_group(session, image_ids)
-                        if len(video_ids) > 1:
-                            self._create_or_update_group(session, video_ids)
+                        for group_ids in image_groups:
+                            self._create_or_update_group(session, group_ids)
+                        for group_ids in video_groups:
+                            self._create_or_update_group(session, group_ids)
                     else:
-                        if len(image_ids) > 1:
-                            image_id_set = set(image_ids)
+                        for group_ids in image_groups:
                             image_media = [
-                                media
-                                for media in media_items
-                                if media.id in image_id_set
+                                media_by_id[mid] for mid in group_ids
                             ]
-                            self._auto_resolve_media_items(session, image_media)
-                        if len(video_ids) > 1:
-                            video_id_set = set(video_ids)
+                            self._auto_resolve_media_items(
+                                session, image_media
+                            )
+                        for group_ids in video_groups:
                             video_media = [
-                                media
-                                for media in media_items
-                                if media.id in video_id_set
+                                media_by_id[mid] for mid in group_ids
                             ]
-                            self._auto_resolve_media_items(session, video_media)
+                            self._auto_resolve_media_items(
+                                session, video_media
+                            )
 
+                    progress_processed += 1
+                    if self._update_task_progress_and_check_status(
+                        session, progress_processed, progress_total
+                    ):
+                        logger.info(
+                            "Duplicate detection task %s cancelled while processing identical hash %s",
+                            self.task_id,
+                            phash,
+                        )
+                        return
 
                 logger.info(
                     f"Completed grouping {len(duplicate_hashes)} sets of identical media hashes."
-                )
-                self._update_task_progress_and_check_status(
-                    session, 1, 2
                 )
 
                 near_duplicate_groups = 0
@@ -259,9 +328,19 @@ class DuplicateProcessor:
                         valid_video_hashes.append((media_id, hash_obj))
 
                     if len(valid_video_hashes) > 1:
+                        processed_before_video = progress_processed
+                        progress_total += len(valid_video_hashes)
+                        if self._update_task_progress_and_check_status(
+                            session, progress_processed, progress_total
+                        ):
+                            logger.info(
+                                "Duplicate detection task %s cancelled before near-duplicate video analysis",
+                                self.task_id,
+                            )
+                            return
+
                         uf = UnionFind([media_id for media_id, _ in valid_video_hashes])
-                        for idx in range(len(valid_video_hashes)):
-                            media_a, hash_a = valid_video_hashes[idx]
+                        for idx, (media_a, hash_a) in enumerate(valid_video_hashes):
                             for jdx in range(idx + 1, len(valid_video_hashes)):
                                 media_b, hash_b = valid_video_hashes[jdx]
                                 try:
@@ -275,7 +354,23 @@ class DuplicateProcessor:
                                     )
                                     continue
                                 if distance <= self.threshold:
+                                    if (
+                                        self._pair_key(media_a, media_b)
+                                        in ignored_pairs
+                                    ):
+                                        continue
                                     uf.union(media_a, media_b)
+
+                            progress_processed = processed_before_video + idx + 1
+                            if self._update_task_progress_and_check_status(
+                                session, progress_processed, progress_total
+                            ):
+                                logger.info(
+                                    "Duplicate detection task %s cancelled while analysing near-duplicate video %s",
+                                    self.task_id,
+                                    media_a,
+                                )
+                                return
 
                         cluster_map: dict[int, list[int]] = {}
                         for media_id, _ in valid_video_hashes:
@@ -303,9 +398,10 @@ class DuplicateProcessor:
                     near_duplicate_groups,
                     self.threshold,
                 )
-                self._update_task_progress_and_check_status(
-                    session, 2, 2
-                )
+                if progress_total:
+                    self._update_task_progress_and_check_status(
+                        session, progress_processed, progress_total
+                    )
 
                 self._update_task_status(session, "completed")
                 logger.info("pHash duplicate detection task finished.")
@@ -344,33 +440,31 @@ class DuplicateProcessor:
             # Items belong to existing groups, merge them all into the smallest group ID
             target_group_id = min(connected_group_ids)
 
-        # Create a list of mappings for bulk insertion
-        new_duplicate_mappings = []
+        unique_media_ids: list[int] = []
+        seen_media_ids: set[int] = set()
         for media_id in media_ids:
-            # Check if this media is already in the target group
-            is_already_in_target_group = any(
-                dm.media_id == media_id and dm.group_id == target_group_id
-                for dm in existing_dms
-            )
-            if not is_already_in_target_group:
-                new_duplicate_mappings.append(
-                    {"group_id": target_group_id, "media_id": media_id}
-                )
+            if media_id in seen_media_ids:
+                continue
+            seen_media_ids.add(media_id)
+            unique_media_ids.append(media_id)
 
-        # Delete old entries for these media ids before inserting new ones
-        if existing_dms:
-            ids_to_delete = [dm.media_id for dm in existing_dms]
-            session.exec(
-                delete(DuplicateMedia).where(
-                    DuplicateMedia.media_id.in_(ids_to_delete)
-                )
-            )
+        if not unique_media_ids:
+            return
 
-        # Bulk insert new mappings
-        if new_duplicate_mappings:
-            session.bulk_insert_mappings(
-                DuplicateMedia, new_duplicate_mappings
+        # Remove existing mappings for these media so we can rebuild them cleanly
+        session.exec(
+            delete(DuplicateMedia).where(
+                DuplicateMedia.media_id.in_(unique_media_ids)
             )
+        )
+
+        session.bulk_insert_mappings(
+            DuplicateMedia,
+            [
+                {"group_id": target_group_id, "media_id": media_id}
+                for media_id in unique_media_ids
+            ],
+        )
 
         # Merge other groups into the target group if necessary
         if len(connected_group_ids) > 1:

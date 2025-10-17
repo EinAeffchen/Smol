@@ -16,12 +16,17 @@ from app.database import safe_commit
 from app.logger import logger
 from app.models import Media, ProcessingTask
 from app.utils import generate_thumbnail, process_file
-from .state import record_task_failure
+from .state import clear_task_progress, record_task_failure, set_task_progress
 
 __all__ = ["run_scan"]
 
 
 def run_scan(task_id: str) -> None:
+    discovery_update_batch = 200
+    discovery_update_interval = 2.0
+    progress_batch_threshold = 50
+    progress_update_interval = 2.0
+
     with Session(db.engine) as sess:
         task = sess.get(ProcessingTask, task_id)
         if not task:
@@ -31,6 +36,7 @@ def run_scan(task_id: str) -> None:
         task.processed = 0
         task.started_at = datetime.now(timezone.utc)
         safe_commit(sess)
+        set_task_progress(task_id, current_step="indexing", current_item=None)
 
     def walk_candidates():
         for media_dir in settings.general.media_dirs:
@@ -49,7 +55,6 @@ def run_scan(task_id: str) -> None:
                         continue
                     yield (Path(root) / fname).resolve()
 
-    batch_commit = 1000
     new_files: list[Path] = []
     existing_paths: set[str] = set()
     missing_candidates: dict[str, int] = {}
@@ -83,6 +88,7 @@ def run_scan(task_id: str) -> None:
 
         task = sess.get(ProcessingTask, task_id)
         since_update = 0
+        next_total_update = time.monotonic() + discovery_update_interval
         recovered_ids: set[int] = set()
         for path in walk_candidates():
             spath = str(path)
@@ -94,11 +100,15 @@ def run_scan(task_id: str) -> None:
             new_files.append(path)
             existing_paths.add(spath)
             since_update += 1
-            if since_update >= batch_commit:
+            if (
+                since_update >= discovery_update_batch
+                or time.monotonic() >= next_total_update
+            ):
                 task.total = len(new_files)
                 sess.add(task)
                 safe_commit(sess)
                 since_update = 0
+                next_total_update = time.monotonic() + discovery_update_interval
         if recovered_ids:
             sess.exec(
                 update(Media)
@@ -117,6 +127,7 @@ def run_scan(task_id: str) -> None:
             task.status = "completed"
             task.finished_at = datetime.now(timezone.utc)
             safe_commit(sess)
+        clear_task_progress(task_id)
         logger.info("No new files to process. Scan finished.")
         return
 
@@ -132,9 +143,19 @@ def run_scan(task_id: str) -> None:
             batch_since_commit = 0
             check_every_sec = 5
             next_cancel_check = time.monotonic() + check_every_sec
+            next_progress_update = time.monotonic() + progress_update_interval
+
+            set_task_progress(
+                task_id, current_step="processing", current_item=None
+            )
 
             for filepath in new_files:
                 logger.debug("Parsing: %s", filepath)
+                set_task_progress(
+                    task_id,
+                    current_item=os.fspath(filepath),
+                    current_step="processing",
+                )
                 if time.monotonic() >= next_cancel_check:
                     next_cancel_check = time.monotonic() + check_every_sec
                     sess.refresh(task, attribute_names=["status"])
@@ -145,6 +166,9 @@ def run_scan(task_id: str) -> None:
                             sess.add(task)
                             safe_commit(sess)
                             batch_since_commit = 0
+                            next_progress_update = (
+                                time.monotonic() + progress_update_interval
+                            )
                         break
 
                 media_obj, process_error = process_file(filepath)
@@ -188,11 +212,17 @@ def run_scan(task_id: str) -> None:
 
                 processed += 1
                 batch_since_commit += 1
-                if batch_since_commit >= batch_commit:
+                if (
+                    batch_since_commit >= progress_batch_threshold
+                    or time.monotonic() >= next_progress_update
+                ):
                     task.processed = processed
                     sess.add(task)
                     safe_commit(sess)
                     batch_since_commit = 0
+                    next_progress_update = (
+                        time.monotonic() + progress_update_interval
+                    )
 
             sess.refresh(task)
             task.status = (
@@ -203,3 +233,6 @@ def run_scan(task_id: str) -> None:
             if batch_since_commit > 0:
                 task.processed = processed
             safe_commit(sess)
+            set_task_progress(task_id, current_step="finalizing", current_item=None)
+
+    clear_task_progress(task_id)

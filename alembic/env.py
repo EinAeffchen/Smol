@@ -13,10 +13,8 @@ from app.models import SQLModel
 # access to the values within the .ini file in use.
 config = context.config
 
-config.set_main_option(
-    "sqlalchemy.url",
-    f"sqlite:///{settings.general.data_dir}/database/omoide.db?cache=shared&mode=rwc&_journal_mode=WAL&_synchronous=NORMAL",
-)
+# Ensure Alembic targets the same database URL as the running application.
+config.set_main_option("sqlalchemy.url", settings.general.database_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
@@ -157,9 +155,7 @@ def run_migrations_online() -> None:
     # --- END OF BLOCK TO ADD ---
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

@@ -92,7 +92,7 @@ export const getSimilarPersons = async (
 export const getPersonRelationshipGraph = async (
   personId: number,
   depth: number,
-  maxNodes = 500,
+  maxNodes = 100,
   signal?: AbortSignal
 ): Promise<PersonRelationshipGraph> => {
   const params = new URLSearchParams({

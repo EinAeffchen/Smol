@@ -936,14 +936,21 @@ def auto_merge_similar_persons(
 def get_person_relationships(
     person_id: int,
     depth: int = Query(3, ge=1, le=5, description="Number of generations to include"),
-    max_nodes: int = Query(
-        150, ge=1, le=500, description="Maximum number of nodes to include"
+    max_nodes: int | None = Query(
+        None, ge=1, le=500, description="Maximum number of nodes to include"
     ),
     session: Session = Depends(get_session),
 ):
     person = session.get(Person, person_id)
     if not person:
         raise HTTPException(status_code=404, detail="Person not found")
+
+    effective_max_nodes = (
+        max_nodes
+        if max_nodes is not None
+        else settings.general.person_relationship_max_nodes
+    )
+    effective_max_nodes = int(max(1, min(500, effective_max_nodes)))
 
     nodes: dict[int, dict[str, object]] = {}
     edges: dict[tuple[int, int], int] = {}
@@ -983,7 +990,7 @@ def get_person_relationships(
     visited: set[int] = set()
     queue: deque[tuple[int, int]] = deque([(person_id, 0)])
 
-    while queue and len(nodes) < max_nodes:
+    while queue and len(nodes) < effective_max_nodes:
         current_id, current_depth = queue.popleft()
         if current_id in visited:
             continue
@@ -1016,7 +1023,7 @@ def get_person_relationships(
             if weight <= 0:
                 continue
 
-            if len(nodes) >= max_nodes and neighbour_id not in nodes:
+            if len(nodes) >= effective_max_nodes and neighbour_id not in nodes:
                 continue
 
             added = _ensure_node(neighbour_id, current_depth + 1)

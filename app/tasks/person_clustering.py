@@ -422,9 +422,10 @@ def merge_similar_persons(
         )
     )
     logger.debug("Person merge threshold set to: %s", percent_threshold)
-    candidate_ids: set[int] = {
+    unique_candidate_ids = {
         int(pid) for pid in (candidate_person_ids or []) if pid is not None
     }
+    candidate_ids: deque[int] = deque(unique_candidate_ids)
     search_limit = max(
         1,
         int(
@@ -435,8 +436,6 @@ def merge_similar_persons(
             )
         ),
     )
-    max_distance = math.sqrt(max(0.0, 2.0 * (1.0 - percent_threshold / 100.0)))
-
     set_task_progress(
         task_id,
         current_step="merging_similar_persons",
@@ -445,11 +444,20 @@ def merge_similar_persons(
     total_merged = 0
     try:
         if candidate_ids:
-            pending = deque(candidate_ids)
             merge_processed = 0
+            last_saved_progress: tuple[int, int] = (-1, -1)
 
-            def update_progress() -> None:
-                pending_count = len(pending)
+            with Session(db.engine) as session:
+                task = session.get(ProcessingTask, task_id)
+                if task:
+                    task.processed = 0
+                    task.total = len(candidate_ids)
+                    session.add(task)
+                    safe_commit(session)
+
+            def update_progress(force: bool = False) -> None:
+                nonlocal last_saved_progress
+                pending_count = len(candidate_ids)
                 total_work = merge_processed + pending_count
                 if total_work <= 0:
                     total_work = max(merge_processed, pending_count)
@@ -462,10 +470,23 @@ def merge_similar_persons(
                     merge_pending=pending_count,
                 )
 
-            if pending:
-                update_progress()
-            while pending:
-                person_id = pending.popleft()
+                progress_tuple = (merge_processed, total_work)
+                if not force and progress_tuple == last_saved_progress:
+                    return
+
+                with Session(db.engine) as progress_session:
+                    task = progress_session.get(ProcessingTask, task_id)
+                    if task:
+                        task.processed = merge_processed
+                        task.total = total_work
+                        progress_session.add(task)
+                        safe_commit(progress_session)
+                        last_saved_progress = progress_tuple
+
+            if candidate_ids:
+                update_progress(force=True)
+            while candidate_ids:
+                person_id = candidate_ids.popleft()
                 merge_processed += 1
                 update_progress()
                 with Session(db.engine) as session:
@@ -476,7 +497,7 @@ def merge_similar_persons(
                     row = session.exec(
                         text(
                             "SELECT embedding FROM person_embeddings WHERE person_id ="
-                            " :pid and k=1"
+                            " :pid LIMIT 1"
                         ).bindparams(pid=person_id)
                     ).first()
                     if not row:
@@ -500,14 +521,12 @@ def merge_similar_persons(
                               FROM person_embeddings
                              WHERE person_id != :pid
                                AND embedding MATCH :vec
-                               AND distance <= :max_dist
                           ORDER BY distance ASC
                           LIMIT :limit_val
                             """
                         ).bindparams(
                             pid=person_id,
                             vec=blob,
-                            max_dist=max_distance,
                             limit_val=search_limit,
                         )
                     ).all()
@@ -537,7 +556,7 @@ def merge_similar_persons(
                         if merge_result is not None:
                             keep_id, _ = merge_result
                             total_merged += 1
-                            pending.appendleft(keep_id)
+                            candidate_ids.appendleft(keep_id)
                             update_progress()
                             merged_this_round = True
                             break

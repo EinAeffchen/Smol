@@ -23,6 +23,7 @@ interface DuplicateGroupProps {
 }
 
 type ActionType = "DELETE_FILES" | "DELETE_RECORDS" | "BLACKLIST_RECORDS";
+type ExtendedActionType = ActionType | "MARK_NOT_DUPLICATE";
 
 export const DuplicateGroup: React.FC<DuplicateGroupProps> = ({
   group,
@@ -31,7 +32,8 @@ export const DuplicateGroup: React.FC<DuplicateGroupProps> = ({
   // The ID of the media item selected as the "master" to keep
   const [masterId, setMasterId] = useState<number>(group.items[0].id);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<ActionType | null>(null);
+  const [confirmAction, setConfirmAction] =
+    useState<ExtendedActionType | null>(null);
 
   const handleResolve = async () => {
     if (!confirmAction) return;
@@ -39,7 +41,12 @@ export const DuplicateGroup: React.FC<DuplicateGroupProps> = ({
     setIsProcessing(true);
 
     try {
-      await resolveDuplicates(group.group_id, masterId, confirmAction);
+      const requiresMaster = confirmAction !== "MARK_NOT_DUPLICATE";
+      await resolveDuplicates(
+        group.group_id,
+        confirmAction,
+        requiresMaster ? masterId : undefined
+      );
 
       onGroupResolved();
     } catch (error) {
@@ -51,7 +58,7 @@ export const DuplicateGroup: React.FC<DuplicateGroupProps> = ({
     }
   };
 
-  const actionText = {
+  const actionText: Record<ExtendedActionType, string> = {
     DELETE_FILES: `This will KEEP the selected master file and PERMANENTLY DELETE the other ${
       group.items.length - 1
     } files and their database records.`,
@@ -59,6 +66,8 @@ export const DuplicateGroup: React.FC<DuplicateGroupProps> = ({
       group.items.length - 1
     } files. The files will remain on disk.`,
     BLACKLIST_RECORDS: `This will KEEP the selected master file, DELETE the records for the others, and BLACKLIST their paths to prevent re-import.`,
+    MARK_NOT_DUPLICATE:
+      "This will KEEP every file in this group and remember they are not duplicates so future scans will skip them.",
   };
 
   return (
@@ -84,6 +93,7 @@ export const DuplicateGroup: React.FC<DuplicateGroupProps> = ({
             variant="contained"
             onClick={() => setConfirmAction("DELETE_FILES")}
             color="error"
+            disabled={isProcessing}
           >
             Keep Master, Delete Rest (Files)
           </Button>
@@ -92,6 +102,7 @@ export const DuplicateGroup: React.FC<DuplicateGroupProps> = ({
             variant="outlined"
             color="warning"
             onClick={() => setConfirmAction("DELETE_RECORDS")}
+            disabled={isProcessing}
           >
             Keep Master, Delete Rest (Records)
           </Button>
@@ -100,8 +111,18 @@ export const DuplicateGroup: React.FC<DuplicateGroupProps> = ({
             variant="outlined"
             color="secondary"
             onClick={() => setConfirmAction("BLACKLIST_RECORDS")}
+            disabled={isProcessing}
           >
             Keep Master, Blacklist Rest
+          </Button>
+          <Button
+            size="small"
+            variant="outlined"
+            color="success"
+            onClick={() => setConfirmAction("MARK_NOT_DUPLICATE")}
+            disabled={isProcessing}
+          >
+            Keep All, Not Duplicates
           </Button>
         </Box>
       </Box>

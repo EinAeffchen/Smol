@@ -43,5 +43,10 @@ class DuplicateStats(BaseModel):
 
 class ResolveDuplicatesRequest(BaseModel):
     group_id: int
-    master_media_id: int
-    action: Literal["DELETE_FILES", "DELETE_RECORDS", "BLACKLIST_RECORDS"]
+    master_media_id: int | None = None
+    action: Literal[
+        "DELETE_FILES",
+        "DELETE_RECORDS",
+        "BLACKLIST_RECORDS",
+        "MARK_NOT_DUPLICATE",
+    ]

@@ -58,7 +58,7 @@ export default function PersonDetailPage() {
     setConfirmDelete,
     loadSimilar,
     loadRelationshipGraph,
-    loadSuggestedFaces,
+    refreshSuggestedFaces,
     loadMoreDetectedFaces,
     mergeSelectedSimilar,
     autoMergeSimilar,
@@ -75,6 +75,7 @@ export default function PersonDetailPage() {
     onSave,
     handleConfirmMerge,
     isAutoSelectingProfile,
+    isLoadingSuggestedFaces,
   } = usePersonDetailPage();
 
   if (loading || !person) {
@@ -120,11 +121,12 @@ export default function PersonDetailPage() {
         onLoadSimilar={loadSimilar}
         suggestedFaces={suggestedFaces}
         similarPersons={similarPersons}
-        onRefreshSuggestions={loadSuggestedFaces}
+        onRefreshSuggestions={refreshSuggestedFaces}
         handleCreateWrapper={handleCreateWrapper}
         onMergeSelectedSimilar={mergeSelectedSimilar}
         onAutoMergeSimilar={autoMergeSimilar}
         isMergingSimilar={isMergingSimilar}
+        isLoadingSuggestedFaces={isLoadingSuggestedFaces}
         filterPeople={filterPeople}
         onFilterPeopleChange={(people) => setFilterPeople(people)}
         mediaListKey={mediaListKey}
@@ -229,7 +231,7 @@ export default function PersonDetailPage() {
                     src={
                       candidate.profile_face?.thumbnail_path
                         ? `${API}/thumbnails/${encodeURIComponent(
-                            candidate.profile_face.thumbnail_path,
+                            candidate.profile_face.thumbnail_path
                           )}`
                         : undefined
                     }

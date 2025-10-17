@@ -16,7 +16,6 @@ import socket
 
 import uvicorn
 import webview
-from alembic.config import Config
 from anyio import to_thread
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from fastapi import FastAPI, HTTPException, Response
@@ -27,7 +26,6 @@ from sqlalchemy import and_, or_
 from sqlmodel import Session, select
 
 import app.database as db
-from alembic import command
 from app.api import (
     config,
     duplicates,
@@ -179,6 +177,11 @@ def _cleanup_tasks_on_shutdown():
 async def lifespan(app: FastAPI):
     # Load the ML model
     load_processors()
+    # Apply database migrations on startup (idempotent)
+    try:
+        db.run_migrations()
+    except Exception as e:
+        logger.warning("Database migrations failed at startup: %s", e)
     # Ensure vec0 tables exist even if Alembic couldn't create them (binary mode).
     try:
         ensure_vec_tables()
@@ -398,6 +401,9 @@ async def spa_catch_all(full_path: str):
             bool(settings.general.enable_people)
         ),
         "VITE_API_MEME_MODE": _bool_to_js(bool(settings.general.meme_mode)),
+        "PERSON_RELATIONSHIP_MAX_NODES": str(
+            settings.general.person_relationship_max_nodes
+        ),
         "APP_VERSION": APP_VERSION,
     }
     config_script = (
@@ -438,21 +444,7 @@ def run_migrations():
     """
     print("Running database migrations...")
     try:
-        if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
-            base_dir = Path(sys._MEIPASS)
-        else:
-            # Project root relative to this file (app/ -> repo root)
-            base_dir = Path(__file__).resolve().parent.parent
-
-        ini_path = base_dir / "alembic.ini"
-        scripts_path = base_dir / "alembic"
-
-        alembic_cfg = Config(str(ini_path))
-        # Be explicit about the scripts location to avoid CWD issues
-        alembic_cfg.set_main_option("script_location", str(scripts_path))
-        # Let env.py compute URL from settings; no need to override here
-
-        command.upgrade(alembic_cfg, "head")
+        db.run_migrations()
         print("Migrations applied successfully.")
     except Exception as e:
         print(f"Error applying migrations: {e}")

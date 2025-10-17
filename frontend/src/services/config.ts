@@ -47,6 +47,9 @@ export const reloadConfig = async (): Promise<AppConfig> => {
       VITE_API_READ_ONLY: ro,
       VITE_API_ENABLE_PEOPLE: people,
       VITE_API_MEME_MODE: meme,
+      PERSON_RELATIONSHIP_MAX_NODES: String(
+        latest.general.person_relationship_max_nodes ?? 100
+      ),
     } as any;
 
     // Emit a lightweight event that components can listen to if they need

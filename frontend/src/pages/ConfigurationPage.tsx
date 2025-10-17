@@ -978,6 +978,25 @@ export default function ConfigurationPage() {
               helperText="Max thumbnails per subfolder (tune for filesystem inode limits)"
             />
           </Grid>
+          <Grid size={{ xs: 12, sm: 6 }}>
+            <TextField
+              label="Relationship Graph Node Limit"
+              value={config.general.person_relationship_max_nodes}
+              onChange={(e) => {
+                const parsed = parseInt(e.target.value, 10);
+                const sanitized = Number.isFinite(parsed) ? Math.max(1, parsed) : 1;
+                handleValueChange(
+                  "general",
+                  "person_relationship_max_nodes",
+                  sanitized
+                );
+              }}
+              fullWidth
+              margin="normal"
+              type="number"
+              helperText="Maximum people to load when rendering the relationship graph"
+            />
+          </Grid>
         </Grid>
       ),
     },

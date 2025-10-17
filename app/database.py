@@ -48,9 +48,7 @@ def _attach_engine_listeners(eng):
 
                     sqlite_vec.load(dbapi_conn)
                 except Exception as e:
-                    raise RuntimeError(
-                        f"Failed to load sqlite-vec extension: {e}"
-                    )
+                    raise RuntimeError(f"Failed to load sqlite-vec extension: {e}")
         finally:
             dbapi_conn.enable_load_extension(False)
 
@@ -102,8 +100,9 @@ def run_migrations():
     """
     # Try Alembic first
     try:
-        from alembic import command
         from alembic.config import Config
+
+        from alembic import command
 
         # Locate alembic.ini and scripts both in dev and PyInstaller
         if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
@@ -114,27 +113,20 @@ def run_migrations():
         ini_path = base_dir / "alembic.ini"
         scripts_path = base_dir / "alembic"
 
-        alembic_cfg = Config(str(ini_path))
+        if ini_path.exists():
+            alembic_cfg = Config(str(ini_path))
+        else:
+            alembic_cfg = Config()
+
         alembic_cfg.set_main_option("script_location", str(scripts_path))
-        # env.py sets sqlalchemy.url from app settings
+        alembic_cfg.set_main_option("sqlalchemy.url", settings.general.database_url)
+        alembic_cfg.attributes["configure_logger"] = False
 
         command.upgrade(alembic_cfg, "head")
         logger.info("Alembic migrations applied successfully.")
         return
     except Exception as e:
-        logger.warning(
-            "Alembic upgrade failed; falling back to create_all: %s", e
-        )
-
-    # Fallback: create tables for a fresh DB
-    try:
-        from app.models import SQLModel
-
-        SQLModel.metadata.create_all(engine)
-        logger.info("Created SQLModel tables successfully.")
-    except Exception as e:
-        logger.error("Failed to create schema: %s", e)
-        raise
+        logger.warning("Alembic upgrade failed; ", e)
 
 
 def ensure_vec_tables():
@@ -158,9 +150,7 @@ def ensure_vec_tables():
                     "cygwin": "vec0.dll",
                     "darwin": "vec0.dylib",
                 }.get(sys.platform, "vec0.so")
-                os.environ.setdefault(
-                    "SQLITE_VEC_PATH", str(base / vec_name)
-                )
+                os.environ.setdefault("SQLITE_VEC_PATH", str(base / vec_name))
 
     dim_media = settings.ai.clip_model_embedding_size
     with engine.begin() as conn:
@@ -221,9 +211,7 @@ def safe_commit(session, retries=5, delay=0.5):
     raise RuntimeError("Failed to commit due to database lock.")
 
 
-def safe_execute(
-    session: Session, query, retries=5, delay=0.5
-) -> ScalarResult:
+def safe_execute(session: Session, query, retries=5, delay=0.5) -> ScalarResult:
     for i in range(retries):
         try:
             return session.exec(query)

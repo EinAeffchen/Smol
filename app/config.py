@@ -244,6 +244,8 @@ class GeneralSettings(BaseModel):
     is_docker: bool = bool(os.environ.get("IS_DOCKER", False))
     # Whether the app is running as a packaged/binary executable (e.g., PyInstaller)
     is_binary: bool = bool(getattr(sys, "frozen", False))
+    # Maximum nodes to request for the person relationship graph
+    person_relationship_max_nodes: int = 100
     # Which host the system runs on. Mostly only relevant if hosted online.
     domain: str = f"http://localhost:{port}"
     # Optional override to point at a specific ffmpeg binary

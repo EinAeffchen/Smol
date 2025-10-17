@@ -352,11 +352,12 @@ export interface AppConfig {
     port: number;
     read_only: boolean;
     enable_people: boolean;
-    meme_mode: boolean;
-    is_docker: boolean;
-    is_binary: boolean;
-    domain: string;
-    thumb_dir_folder_size: number;
+  meme_mode: boolean;
+  is_docker: boolean;
+  is_binary: boolean;
+  domain: string;
+  person_relationship_max_nodes: number;
+  thumb_dir_folder_size: number;
     data_dir: string;
     database_dir: string;
     omoide_dir: string;

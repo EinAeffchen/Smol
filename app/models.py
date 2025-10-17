@@ -230,6 +230,15 @@ class DuplicateGroup(SQLModel, table=True):
     media_links: list["DuplicateMedia"] = Relationship(back_populates="group")
 
 
+class DuplicateIgnore(SQLModel, table=True):
+    media_id_a: int = Field(foreign_key="media.id", primary_key=True)
+    media_id_b: int = Field(foreign_key="media.id", primary_key=True)
+    created_at: datetime = Field(default_factory=datetime.now)
+
+    class Config:
+        from_attributes = True
+
+
 class DuplicateMedia(SQLModel, table=True):
     group_id: int = Field(foreign_key="duplicategroup.id", primary_key=True)
     media_id: int = Field(foreign_key="media.id", primary_key=True)

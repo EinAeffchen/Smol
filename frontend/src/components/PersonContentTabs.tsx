@@ -65,8 +65,9 @@ interface PersonContentTabsProps {
   onAutoMergeSimilar: () => Promise<MergeResult | void> | MergeResult | void;
   isMergingSimilar: boolean;
   onTagUpdate: (obj: Person | Media) => void;
-  onRefreshSuggestions: () => void;
+  onRefreshSuggestions: () => void | Promise<void>;
   onLoadSimilar: () => Promise<void> | void;
+  isLoadingSuggestedFaces: boolean;
   filterPeople: PersonReadSimple[];
   onFilterPeopleChange: (people: PersonReadSimple[]) => void;
   mediaListKey: string;
@@ -97,6 +98,7 @@ export function PersonContentTabs({
   onTagUpdate,
   onRefreshSuggestions,
   onLoadSimilar,
+  isLoadingSuggestedFaces,
   filterPeople,
   onFilterPeopleChange,
   mediaListKey,
@@ -302,14 +304,22 @@ export function PersonContentTabs({
             <Button
               variant="outlined"
               size="small"
-              onClick={onRefreshSuggestions}
+              onClick={() => {
+                void onRefreshSuggestions();
+              }}
+              disabled={isLoadingSuggestedFaces}
+              startIcon={
+                isLoadingSuggestedFaces ? (
+                  <CircularProgress size={16} color="inherit" />
+                ) : undefined
+              }
             >
-              Refresh Suggestions
+              {isLoadingSuggestedFaces ? "Refreshing..." : "Refresh Suggestions"}
             </Button>
           </Box>
           <Suspense fallback={<CircularProgress />}>
             <DetectedFaces
-              isProcessing={isProcessingFaces}
+              isProcessing={isProcessingFaces || isLoadingSuggestedFaces}
               title="Suggested Faces"
               faces={suggestedFaces}
               onAssign={handleAssign}

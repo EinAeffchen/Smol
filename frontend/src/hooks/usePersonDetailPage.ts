@@ -15,6 +15,8 @@ import {
   autoSelectProfileFace as requestAutoSelectProfileFace,
   updatePerson,
 } from "../services/personActions";
+import { getConfig } from "../services/config";
+import appConfig from "../config";
 import type { MergeResult } from "../services/personActions";
 import { defaultListState, useListStore } from "../stores/useListStore";
 import {
@@ -32,8 +34,6 @@ import {
   deleteFace,
   detachFace,
 } from "../services/faceActions";
-
-const RELATIONSHIP_MAX_NODES = 500;
 
 export const usePersonDetailPage = () => {
   const { id } = useParams<{ id: string }>();
@@ -58,11 +58,17 @@ export const usePersonDetailPage = () => {
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState(searchTerm);
   const [similarPersons, setSimilarPersons] = useState<SimilarPerson[]>([]);
   const [suggestedFaces, setSuggestedFaces] = useState<FaceRead[]>([]);
+  const [isLoadingSuggestedFaces, setIsLoadingSuggestedFaces] =
+    useState(false);
   const [relationshipGraph, setRelationshipGraph] =
     useState<PersonRelationshipGraph | null>(null);
   const [relationshipDepth, setRelationshipDepth] = useState(3);
   const [isLoadingRelationships, setIsLoadingRelationships] = useState(false);
   const [hasLoadedRelationships, setHasLoadedRelationships] = useState(false);
+  const [relationshipMaxNodes, setRelationshipMaxNodes] = useState<number>(() => {
+    const initial = appConfig.PERSON_RELATIONSHIP_MAX_NODES;
+    return Number.isFinite(initial) && initial > 0 ? initial : 100;
+  });
 
   const [filterPeople, setFilterPeople] = useState<PersonReadSimple[]>([]);
 
@@ -145,19 +151,32 @@ export const usePersonDetailPage = () => {
     );
   }, [id, loadMore, detectedFacesListKey]);
 
-  const loadSuggestedFaces = useCallback(
+  const fetchSuggestedFaces = useCallback(
     async (signal?: AbortSignal) => {
       if (!id) return;
+      setIsLoadingSuggestedFaces(true);
       try {
         const data = await getSuggestedFaces(Number(id), signal);
-        setSuggestedFaces(data);
+        if (signal?.aborted) {
+          return;
+        }
+        setSuggestedFaces(Array.isArray(data) ? data : []);
       } catch (err) {
         if (signal?.aborted !== true) {
           console.error("Error loading suggested faces:", err);
         }
+      } finally {
+        if (signal?.aborted !== true) {
+          setIsLoadingSuggestedFaces(false);
+        }
       }
     },
     [id],
+  );
+
+  const refreshSuggestedFaces = useCallback(
+    () => fetchSuggestedFaces(),
+    [fetchSuggestedFaces],
   );
 
   const loadSimilar = useCallback(
@@ -188,7 +207,7 @@ export const usePersonDetailPage = () => {
         const graph = await getPersonRelationshipGraph(
           Number(id),
           depthToRequest,
-          RELATIONSHIP_MAX_NODES,
+          relationshipMaxNodes,
           signal,
         );
         setRelationshipGraph(graph);
@@ -204,8 +223,49 @@ export const usePersonDetailPage = () => {
         }
       }
     },
-    [id, relationshipDepth],
+    [id, relationshipDepth, relationshipMaxNodes],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const syncMaxNodes = async () => {
+      try {
+        const cfg = await getConfig();
+        if (cancelled) {
+          return;
+        }
+        const value = cfg.general.person_relationship_max_nodes ?? 100;
+        if (Number.isFinite(value) && value > 0) {
+          setRelationshipMaxNodes(value);
+        }
+      } catch (err) {
+        if (!cancelled && import.meta.env.DEV) {
+          console.warn("Failed to load relationship graph settings", err);
+        }
+      }
+    };
+
+    void syncMaxNodes();
+
+    const handleRuntimeConfigUpdate = () => {
+      const raw = window.runtimeConfig?.PERSON_RELATIONSHIP_MAX_NODES;
+      const parsed = raw ? Number(raw) : NaN;
+      if (Number.isFinite(parsed) && parsed > 0) {
+        setRelationshipMaxNodes(parsed);
+      }
+    };
+
+    window.addEventListener("runtime-config-updated", handleRuntimeConfigUpdate);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        "runtime-config-updated",
+        handleRuntimeConfigUpdate,
+      );
+    };
+  }, []);
 
   const reloadRelationshipGraphIfLoaded = useCallback(async () => {
     if (!id || !hasLoadedRelationships) {
@@ -246,7 +306,7 @@ export const usePersonDetailPage = () => {
       try {
         await Promise.all([
           loadDetail(controller.signal),
-          loadSuggestedFaces(controller.signal),
+          fetchSuggestedFaces(controller.signal),
         ]);
         await Promise.all([
           refreshDetectedFaces(),
@@ -273,7 +333,7 @@ export const usePersonDetailPage = () => {
     location.state,
     clearList,
     loadDetail,
-    loadSuggestedFaces,
+    fetchSuggestedFaces,
     refreshDetectedFaces,
     refreshMediaAppearances,
   ]);
@@ -298,6 +358,18 @@ export const usePersonDetailPage = () => {
     setHasLoadedRelationships(false);
     setRelationshipDepth(3);
   }, [id]);
+
+  useEffect(() => {
+    if (!id || !hasLoadedRelationships) {
+      return;
+    }
+    void reloadRelationshipGraphIfLoaded();
+  }, [
+    id,
+    hasLoadedRelationships,
+    relationshipMaxNodes,
+    reloadRelationshipGraphIfLoaded,
+  ]);
 
   useEffect(() => {
     if (!mergeOpen || !debouncedSearchTerm.trim()) {
@@ -325,44 +397,47 @@ export const usePersonDetailPage = () => {
   const handleAssignWrapper = async (
     faceIds: number[],
     personId: number,
-  ) => {
-    if (!id) return;
-    try {
-      await assignFace(faceIds, personId);
-      await Promise.all([refreshDetectedFaces(), loadDetail()]);
-      setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-      await refreshMediaAppearances();
-      await reloadRelationshipGraphIfLoaded();
-    } catch (err) {
-      console.error("Failed to assign face:", err);
-      showMessage("Failed to assign face", "error");
-    }
+    ) => {
+      if (!id) return;
+      try {
+        await assignFace(faceIds, personId);
+        await Promise.all([refreshDetectedFaces(), loadDetail()]);
+        setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+        await refreshMediaAppearances();
+        await refreshSuggestedFaces();
+        await reloadRelationshipGraphIfLoaded();
+      } catch (err) {
+        console.error("Failed to assign face:", err);
+        showMessage("Failed to assign face", "error");
+      }
   };
 
   const handleDeleteWrapper = async (faceIds: number[]) => {
-    try {
-      await deleteFace(faceIds);
-      removeItems(detectedFacesListKey, faceIds);
-      setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-      await Promise.all([refreshMediaAppearances(), loadDetail()]);
-      await reloadRelationshipGraphIfLoaded();
-    } catch (err) {
-      console.error("Failed to delete face:", err);
-      showMessage("Failed to delete face", "error");
-    }
+      try {
+        await deleteFace(faceIds);
+        removeItems(detectedFacesListKey, faceIds);
+        setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+        await Promise.all([refreshMediaAppearances(), loadDetail()]);
+        await refreshSuggestedFaces();
+        await reloadRelationshipGraphIfLoaded();
+      } catch (err) {
+        console.error("Failed to delete face:", err);
+        showMessage("Failed to delete face", "error");
+      }
   };
 
   const handleDetachWrapper = async (faceIds: number[]) => {
-    try {
-      await detachFace(faceIds);
-      removeItems(detectedFacesListKey, faceIds);
-      setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-      await Promise.all([refreshMediaAppearances(), loadDetail()]);
-      await reloadRelationshipGraphIfLoaded();
-    } catch (err) {
-      console.error("Failed to detach face:", err);
-      showMessage("Failed to detach face", "error");
-    }
+      try {
+        await detachFace(faceIds);
+        removeItems(detectedFacesListKey, faceIds);
+        setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+        await Promise.all([refreshMediaAppearances(), loadDetail()]);
+        await refreshSuggestedFaces();
+        await reloadRelationshipGraphIfLoaded();
+      } catch (err) {
+        console.error("Failed to detach face:", err);
+        showMessage("Failed to detach face", "error");
+      }
   };
 
   const handleCreateWrapper = async (
@@ -371,17 +446,18 @@ export const usePersonDetailPage = () => {
   ): Promise<Person> => {
     try {
       const newPerson = await createPersonFromFaces(faceIds, name);
-      await Promise.all([
-        refreshDetectedFaces(),
-        loadDetail(),
-        refreshMediaAppearances(),
-      ]);
-      setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
-      await reloadRelationshipGraphIfLoaded();
-      return newPerson;
-    } catch (err) {
-      console.error("Failed to create person:", err);
-      showMessage("Failed to create person", "error");
+        await Promise.all([
+          refreshDetectedFaces(),
+          loadDetail(),
+          refreshMediaAppearances(),
+        ]);
+        setSuggestedFaces((prev) => prev.filter((f) => !faceIds.includes(f.id)));
+        await refreshSuggestedFaces();
+        await reloadRelationshipGraphIfLoaded();
+        return newPerson;
+      } catch (err) {
+        console.error("Failed to create person:", err);
+        showMessage("Failed to create person", "error");
       throw err;
     }
   };
@@ -401,14 +477,15 @@ export const usePersonDetailPage = () => {
           if (skippedCount > 0) {
             messageParts.push(`skipped ${skippedCount}`);
           }
-          showMessage(messageParts.join(", "));
-          await Promise.all([
-            loadDetail(),
-            refreshDetectedFaces(),
-            refreshMediaAppearances(),
-          ]);
-          await loadSimilar();
-          await reloadRelationshipGraphIfLoaded();
+            showMessage(messageParts.join(", "));
+            await Promise.all([
+              loadDetail(),
+              refreshDetectedFaces(),
+              refreshMediaAppearances(),
+              refreshSuggestedFaces(),
+            ]);
+            await loadSimilar();
+            await reloadRelationshipGraphIfLoaded();
         } else {
           showMessage("No similar persons were merged.", "error");
         }
@@ -420,15 +497,16 @@ export const usePersonDetailPage = () => {
         setIsMergingSimilar(false);
       }
     },
-    [
-      id,
-      loadDetail,
-      loadSimilar,
-      refreshDetectedFaces,
-      refreshMediaAppearances,
-      reloadRelationshipGraphIfLoaded,
-      showMessage,
-    ]
+      [
+        id,
+        loadDetail,
+        loadSimilar,
+        refreshDetectedFaces,
+        refreshMediaAppearances,
+        refreshSuggestedFaces,
+        reloadRelationshipGraphIfLoaded,
+        showMessage,
+      ]
   );
 
   const autoMergeSimilar = useCallback(async (): Promise<MergeResult | void> => {
@@ -443,12 +521,13 @@ export const usePersonDetailPage = () => {
         if (skippedCount > 0) {
           messageParts.push(`skipped ${skippedCount}`);
         }
-        showMessage(messageParts.join(", "));
-        await Promise.all([
-          loadDetail(),
-          refreshDetectedFaces(),
-          refreshMediaAppearances(),
-        ]);
+          showMessage(messageParts.join(", "));
+          await Promise.all([
+            loadDetail(),
+            refreshDetectedFaces(),
+            refreshMediaAppearances(),
+            refreshSuggestedFaces(),
+          ]);
         await loadSimilar();
         await reloadRelationshipGraphIfLoaded();
       } else {
@@ -470,6 +549,7 @@ export const usePersonDetailPage = () => {
     loadSimilar,
     refreshDetectedFaces,
     refreshMediaAppearances,
+    refreshSuggestedFaces,
     reloadRelationshipGraphIfLoaded,
     showMessage,
   ]);
@@ -481,6 +561,7 @@ export const usePersonDetailPage = () => {
       const updatedPerson = await requestAutoSelectProfileFace(Number(id));
       setPerson(updatedPerson);
       await loadDetail();
+      await refreshSuggestedFaces();
       showMessage("Selected a new profile photo");
     } catch (err) {
       console.error("Failed to auto-select profile face:", err);
@@ -488,20 +569,21 @@ export const usePersonDetailPage = () => {
     } finally {
       setIsAutoSelectingProfile(false);
     }
-  }, [id, loadDetail]);
+  }, [id, loadDetail, refreshSuggestedFaces]);
 
   const handleProfileAssignmentWrapper = async (
     faceId: number,
     personId: number,
   ) => {
     try {
-      await setProfileFace(faceId, personId);
-      await loadDetail();
-      showMessage("Profile picture updated");
-    } catch (err) {
-      console.error("Failed to set profile picture:", err);
-      showMessage("Failed to set profile picture", "error");
-    }
+        await setProfileFace(faceId, personId);
+        await loadDetail();
+        await refreshSuggestedFaces();
+        showMessage("Profile picture updated");
+      } catch (err) {
+        console.error("Failed to set profile picture:", err);
+        showMessage("Failed to set profile picture", "error");
+      }
   };
 
   const handlePersonUpdate = async () => {
@@ -599,9 +681,8 @@ export const usePersonDetailPage = () => {
     setSnackbar,
     confirmDelete,
     setConfirmDelete,
-    loadDetail,
     loadMoreDetectedFaces,
-    loadSuggestedFaces,
+    refreshSuggestedFaces,
     loadSimilar,
     loadRelationshipGraph,
     handleAssignWrapper,
@@ -619,5 +700,6 @@ export const usePersonDetailPage = () => {
     onSave,
     handleConfirmMerge,
     isAutoSelectingProfile,
+    isLoadingSuggestedFaces,
   };
 };

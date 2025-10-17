@@ -44,6 +44,16 @@ const config = {
     }
     return getBooleanEnv(window.runtimeConfig?.VITE_API_MEME_MODE);
   },
+  get PERSON_RELATIONSHIP_MAX_NODES(): number {
+    if (import.meta.env.DEV) {
+      const raw = import.meta.env.VITE_PERSON_RELATIONSHIP_MAX_NODES;
+      const parsed = raw ? Number(raw) : NaN;
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+    }
+    const raw = window.runtimeConfig?.PERSON_RELATIONSHIP_MAX_NODES;
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+  },
   get APP_VERSION(): string {
     if (import.meta.env.DEV) {
       return import.meta.env.VITE_APP_VERSION ?? "dev";

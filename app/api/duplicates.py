@@ -1,4 +1,5 @@
 from collections import defaultdict
+from itertools import combinations
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -7,7 +8,13 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import Session, delete, select
 
 from app.database import get_session
-from app.models import Blacklist, DuplicateGroup, DuplicateMedia, Media
+from app.models import (
+    Blacklist,
+    DuplicateGroup,
+    DuplicateIgnore,
+    DuplicateMedia,
+    Media,
+)
 from app.schemas.duplicates import (
     DuplicateFolderStat,
     DuplicateGroup as DuplicateGroupSchema,
@@ -245,33 +252,72 @@ def resolve_duplicate_group(
     all_duplicates_in_group = session.exec(stmt).all()
     all_media_ids_in_group = {dm.media_id for dm in all_duplicates_in_group}
 
-    # Ensure the master ID is actually in the group
-    if request.master_media_id not in all_media_ids_in_group:
+    if not all_media_ids_in_group:
         raise HTTPException(
-            status_code=404,
-            detail="Master media ID not found in the specified group.",
+            status_code=404, detail="Duplicate group not found."
         )
 
-    ids_to_process = all_media_ids_in_group - {request.master_media_id}
+    if len(all_media_ids_in_group) <= 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Duplicate group must contain at least two items.",
+        )
 
-    media_to_process_stmt = select(Media).where(Media.id.in_(ids_to_process))
-    media_to_process = session.exec(media_to_process_stmt).all()
+    if request.action == "MARK_NOT_DUPLICATE":
+        sorted_ids = sorted(all_media_ids_in_group)
+        existing_pairs = {
+            (row[0], row[1])
+            for row in session.exec(
+                select(
+                    DuplicateIgnore.media_id_a, DuplicateIgnore.media_id_b
+                ).where(
+                    DuplicateIgnore.media_id_a.in_(sorted_ids),
+                    DuplicateIgnore.media_id_b.in_(sorted_ids),
+                )
+            ).all()
+        }
+        for media_a, media_b in combinations(sorted_ids, 2):
+            pair = (min(media_a, media_b), max(media_a, media_b))
+            if pair in existing_pairs:
+                continue
+            session.add(
+                DuplicateIgnore(media_id_a=pair[0], media_id_b=pair[1])
+            )
+    else:
+        if request.master_media_id is None:
+            raise HTTPException(
+                status_code=400, detail="master_media_id is required."
+            )
+        if request.master_media_id not in all_media_ids_in_group:
+            raise HTTPException(
+                status_code=404,
+                detail="Master media ID not found in the specified group.",
+            )
 
-    # 2. Perform the requested action on all other media items
-    for media in media_to_process:
-        if request.action == "DELETE_FILES":
-            # Delete the file from disk (add your file deletion logic here)
-            # delete_file_from_disk(media.path)
-            delete_file(session, media.id)
+        ids_to_process = all_media_ids_in_group - {request.master_media_id}
 
-        elif request.action == "DELETE_RECORDS":
-            delete_record(media.id, session)
+        media_to_process_stmt = select(Media).where(
+            Media.id.in_(ids_to_process)
+        )
+        media_to_process = session.exec(media_to_process_stmt).all()
 
-        elif request.action == "BLACKLIST_RECORDS":
-            # Add to blacklist table
-            blacklist_entry = Blacklist(path=media.path)
-            session.add(blacklist_entry)
-            delete_record(media.id, session)
+        # 2. Perform the requested action on all other media items
+        for media in media_to_process:
+            if request.action == "DELETE_FILES":
+                delete_file(session, media.id)
+
+            elif request.action == "DELETE_RECORDS":
+                delete_record(media.id, session)
+
+            elif request.action == "BLACKLIST_RECORDS":
+                blacklist_entry = Blacklist(path=media.path)
+                session.add(blacklist_entry)
+                delete_record(media.id, session)
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Unsupported action {request.action}",
+                )
 
     # 3. Delete the original DuplicateMedia entries and the group itself
     session.exec(
