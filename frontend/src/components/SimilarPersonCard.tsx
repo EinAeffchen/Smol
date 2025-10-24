@@ -77,9 +77,7 @@ export default function SimilarPersonCard({
         backgroundSize: "cover",
         backgroundPosition: "center",
         border: selectable
-          ? `2px solid ${
-              selected ? theme.palette.primary.main : "transparent"
-            }`
+          ? `2px solid ${selected ? theme.palette.primary.main : "transparent"}`
           : "none",
         boxShadow: selected ? theme.shadows[10] : theme.shadows[4],
 
@@ -98,11 +96,12 @@ export default function SimilarPersonCard({
               event.stopPropagation();
               handleToggle();
             }}
+            onClick={handleToggle}
             sx={{
               position: "absolute",
               top: 8,
               left: 8,
-              zIndex: 2,
+              zIndex: 10,
               color: theme.palette.common.white,
               "&.Mui-checked": {
                 color: theme.palette.primary.main,
@@ -168,7 +167,10 @@ export default function SimilarPersonCard({
         </Typography>
         <Typography
           variant="caption"
-          sx={{ color: (theme) => alpha(theme.palette.common.white, 0.7), mt: 0.5 }}
+          sx={{
+            color: (theme) => alpha(theme.palette.common.white, 0.7),
+            mt: 0.5,
+          }}
         >
           {similarity != null ? `${similarity.toFixed(1)}% match` : ""}
         </Typography>

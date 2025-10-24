@@ -6,6 +6,11 @@ export interface MergeResult {
   skipped_ids: number[];
 }
 
+export interface DeletePersonsResult {
+  deleted_ids: number[];
+  skipped_ids: number[];
+}
+
 export const updatePerson = async (
   personId: number,
   data: { name?: string; profile_face_id?: number }
@@ -24,6 +29,18 @@ export const deletePerson = async (personId: number) => {
     method: "DELETE",
   });
   if (!res.ok) throw new Error("Failed to delete person");
+};
+
+export const deletePersonsBulk = async (
+  personIds: number[],
+): Promise<DeletePersonsResult> => {
+  const res = await fetch(`${API}/api/person/bulk-delete`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ person_ids: personIds }),
+  });
+  if (!res.ok) throw new Error("Failed to delete selected people");
+  return res.json();
 };
 
 export const mergePersons = async (sourceId: number, targetId: number) => {

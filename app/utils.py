@@ -16,8 +16,8 @@ from fastapi import HTTPException
 from PIL import Image, ImageOps, UnidentifiedImageError
 from scenedetect import FrameTimecode, HistogramDetector, detect
 from scenedetect.video_splitter import TimecodePair
-from sqlalchemy import delete, distinct, func, text
-from sqlmodel import Session, select, update
+from sqlalchemy import delete, distinct, func, or_, text
+from sqlmodel import Session, delete, select, text, update
 from tqdm import tqdm
 
 from app.config import settings
@@ -32,8 +32,10 @@ from app.models import (
     MediaTagLink,
     Person,
     PersonRelationship,
+    PersonTagLink,
     ProcessingTask,
     Scene,
+    TimelineEvent,
 )
 from app.subprocess_helpers import run_silent
 
@@ -53,9 +55,7 @@ def _coerce_vector_array(value: Any) -> np.ndarray | None:
         try:
             parsed = json.loads(value)
         except json.JSONDecodeError:
-            logger.debug(
-                "Failed to decode embedding JSON; value=%s", value[:32]
-            )
+            logger.debug("Failed to decode embedding JSON; value=%s", value[:32])
             return None
         return _coerce_vector_array(parsed)
     else:
@@ -122,9 +122,7 @@ def auto_select_profile_face(session: Session, person_id: int) -> int | None:
     if not person:
         return None
 
-    faces = session.exec(
-        select(Face).where(Face.person_id == person_id)
-    ).all()
+    faces = session.exec(select(Face).where(Face.person_id == person_id)).all()
 
     if not faces:
         if person.profile_face_id is not None:
@@ -207,9 +205,7 @@ def get_image_taken_date(img_path: Path | None = None) -> datetime:
         try:
             return datetime.strptime(creation_date, format_code)
         except ValueError:
-            logger.debug(
-                "Received invalid time for %s: %s", img_path, creation_date
-            )
+            logger.debug("Received invalid time for %s: %s", img_path, creation_date)
     return alt_time
 
 
@@ -237,9 +233,7 @@ def _ffprobe_json(path: Path, timeout: int = 15) -> dict | None:
             timeout=timeout,
         )
         if result.returncode != 0:
-            logger.warning(
-                "ffprobe failed for %s: %s", path, result.stderr.strip()
-            )
+            logger.warning("ffprobe failed for %s: %s", path, result.stderr.strip())
             return None
         return json.loads(result.stdout or "{}")
     except subprocess.TimeoutExpired:
@@ -274,9 +268,7 @@ def process_file(filepath: Path) -> tuple[Media | None, str | None]:
             probe = _ffprobe_json(filepath, timeout=15)
             if probe:
                 try:
-                    duration = float(
-                        probe.get("format", {}).get("duration", 0)
-                    )
+                    duration = float(probe.get("format", {}).get("duration", 0))
                 except Exception:
                     duration = 0.0
                 try:
@@ -292,9 +284,7 @@ def process_file(filepath: Path) -> tuple[Media | None, str | None]:
                     width = width or None
                     height = height or None
             else:
-                logger.warning(
-                    "Skipping video probe metadata for %s", filepath
-                )
+                logger.warning("Skipping video probe metadata for %s", filepath)
         else:
             # Images: avoid ffprobe entirely; use PIL for dimensions if possible
             try:
@@ -303,9 +293,7 @@ def process_file(filepath: Path) -> tuple[Media | None, str | None]:
             except UnidentifiedImageError:
                 logger.warning("Skipping %s, not an image!", filepath)
             except OSError as exc:
-                logger.warning(
-                    "Image %s could not be opened: %s", filepath, exc
-                )
+                logger.warning("Image %s could not be opened: %s", filepath, exc)
 
         media = Media(
             path=str(filepath),
@@ -416,9 +404,7 @@ def _generate_video_perceptual_hash(media: Media) -> str | None:
         timestamps: list[float] = []
         if duration > 0:
             effective_samples = (
-                min(target_samples, frame_count)
-                if frame_count
-                else target_samples
+                min(target_samples, frame_count) if frame_count else target_samples
             )
             effective_samples = max(effective_samples, 1)
             timestamps = (
@@ -512,9 +498,7 @@ def generate_perceptual_hash(
     except UnidentifiedImageError:
         logger.warning("Skipping %s, not an image!", media.path)
     except OSError:
-        logger.warning(
-            "Media %s is truncated and can't be processed:", media.path
-        )
+        logger.warning("Media %s is truncated and can't be processed:", media.path)
 
 
 def generate_thumbnail(media: Media) -> tuple[str | None, str | None]:
@@ -548,14 +532,10 @@ def generate_thumbnail(media: Media) -> tuple[str | None, str | None]:
                 check=True,
             )
         except subprocess.TimeoutExpired:
-            logger.error(
-                "ffmpeg timed out generating thumbnail for %s (20s)", filepath
-            )
+            logger.error("ffmpeg timed out generating thumbnail for %s (20s)", filepath)
             return None, "ffmpeg timed out while generating thumbnail"
         except subprocess.CalledProcessError as e:
-            logger.error(
-                "ffmpeg failed to generate thumbnail for %s: %s", filepath, e
-            )
+            logger.error("ffmpeg failed to generate thumbnail for %s: %s", filepath, e)
             return None, f"ffmpeg failed to generate thumbnail: {e}"
         except Exception as exc:  # pragma: no cover - defensive safeguard
             logger.exception(
@@ -587,9 +567,7 @@ def generate_thumbnail(media: Media) -> tuple[str | None, str | None]:
             logger.warning("Couldn't open %s", filepath)
             return None, "File is not a valid image"
         except OSError as exc:
-            logger.warning(
-                "Failed to process image %s, because of: %s", filepath, exc
-            )
+            logger.warning("Failed to process image %s, because of: %s", filepath, exc)
             return None, f"Unable to read image: {exc}"
 
         if not thumb_path.is_file():
@@ -684,16 +662,12 @@ def _split_by_scenes(
     media: Media, scenes: Iterable[TimecodePair]
 ) -> list[tuple[Scene, cv2.typing.MatLike]]:
     scene_objs = []
-    for i, (start_time, end_time) in tqdm(
-        enumerate(scenes), total=len(scenes)
-    ):
+    for i, (start_time, end_time) in tqdm(enumerate(scenes), total=len(scenes)):
         thumb_dir = get_thumb_folder(settings.general.thumb_dir / "scenes")
         thumbnail_path = thumb_dir / f"{i}_{Path(media.path).stem}.jpg"
         ffmpeg.input(media.path, ss=start_time.get_seconds()).filter(
             "scale", 480, -1
-        ).output(str(thumbnail_path), vframes=1).run(
-            quiet=True, overwrite_output=True
-        )
+        ).output(str(thumbnail_path), vframes=1).run(quiet=True, overwrite_output=True)
         out, _ = (
             ffmpeg.input(media.path, ss=start_time.get_seconds())
             .output(
@@ -781,9 +755,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
                 stderr=subprocess.PIPE,
             )
         except Exception as exc:
-            logger.warning(
-                "ffmpeg frame extraction failed at %.2fs: %s", ts, exc
-            )
+            logger.warning("ffmpeg frame extraction failed at %.2fs: %s", ts, exc)
             continue
 
         if result.returncode != 0 or not result.stdout:
@@ -808,9 +780,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
         if width > target_width:
             scale = target_width / float(width)
             new_size = (target_width, max(1, int(height * scale)))
-            thumb_bgr = cv2.resize(
-                frame_bgr, new_size, interpolation=cv2.INTER_AREA
-            )
+            thumb_bgr = cv2.resize(frame_bgr, new_size, interpolation=cv2.INTER_AREA)
         else:
             thumb_bgr = frame_bgr
 
@@ -820,9 +790,7 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
 
         next_ts = (
-            timestamps[idx + 1]
-            if idx + 1 < len(timestamps)
-            else max(ts, duration)
+            timestamps[idx + 1] if idx + 1 < len(timestamps) else max(ts, duration)
         )
 
         scene = Scene(
@@ -913,9 +881,7 @@ def _limit_scene_results(
     if duration_seconds <= 0:
         target_count = min(max_total, max(len(scenes), min_total))
     else:
-        max_by_density = int(
-            math.ceil(duration_seconds / density_window_seconds)
-        )
+        max_by_density = int(math.ceil(duration_seconds / density_window_seconds))
         target_count = min(max_total, max(min_total, max_by_density))
 
     if len(scenes) <= target_count:
@@ -936,9 +902,7 @@ def _limit_scene_results(
     return limited
 
 
-def split_video(
-    media: Media, path: Path
-) -> list[tuple[Scene, cv2.typing.MatLike]]:
+def split_video(media: Media, path: Path) -> list[tuple[Scene, cv2.typing.MatLike]]:
     """Returns select frames from a video and a list of scenes"""
     if settings.video.auto_scene_detection:
         scenes = detect(
@@ -1031,13 +995,9 @@ def delete_record(media_id, session: Session):
     session.exec(delete(ExifData).where(ExifData.media_id == media_id))
     session.exec(delete(Scene).where(Scene.media_id == media.id))
     session.exec(
-        delete(PersonRelationship).where(
-            PersonRelationship.last_media_id == media.id
-        )
+        delete(PersonRelationship).where(PersonRelationship.last_media_id == media.id)
     )
-    session.exec(
-        delete(DuplicateMedia).where(DuplicateMedia.media_id == media.id)
-    )
+    session.exec(delete(DuplicateMedia).where(DuplicateMedia.media_id == media.id))
     for pid in affected_person_ids:
         auto_select_profile_face(session, pid)
     session.delete(media)
@@ -1077,3 +1037,50 @@ def delete_file(session: Session, media_id: int):
         pass
     except OSError as exc:
         logger.warning("Failed to delete thumbnail %s: %s", thumb, exc)
+
+
+def remove_person(person_id, session):
+    if settings.general.read_only:
+        return HTTPException(
+            status_code=403,
+            detail="Not allowed in settings.general.read_only mode.",
+        )
+    person = session.get(Person, person_id)
+    if not person:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    faces = session.exec(select(Face).where(Face.person_id == person_id)).all()
+    for face in faces:
+        face.person_id = None
+        sql = text(
+            """
+                Update face_embeddings
+                SET person_id=-1
+                WHERE face_id=:f_id
+                """
+        ).bindparams(f_id=face.id)
+        session.exec(sql)
+    sql = text(
+        """
+        DELETE FROM person_embeddings
+        WHERE person_id=:p_id
+        """
+    ).bindparams(p_id=person.id)
+    session.exec(sql)
+    session.exec(delete(PersonTagLink).where(PersonTagLink.person_id == person_id))
+    session.exec(delete(TimelineEvent).where(TimelineEvent.person_id == person_id))
+    session.exec(
+        delete(PersonRelationship).where(
+            or_(
+                PersonRelationship.person_a_id == person_id,
+                PersonRelationship.person_b_id == person_id,
+            )
+        )
+    )
+    session.delete(person)
+    safe_commit(session)
+
+
+def _distance_to_similarity(dist: float) -> float:
+    similarity = (1.0 - (float(dist) * float(dist)) / 2.0) * 100.0
+    return round(max(0.0, min(100.0, similarity)), 2)

@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import math
 from collections import deque
 from collections.abc import Iterable
 from datetime import datetime, timezone
 
 import hdbscan
 import numpy as np
-from sqlalchemy import delete, func, or_, text, update
+from sqlalchemy import func, text, update
 from sqlmodel import Session, select
 from tqdm import tqdm
 
@@ -19,13 +18,14 @@ from app.logger import logger
 from app.models import (
     Face,
     Person,
-    PersonRelationship,
     ProcessingTask,
     TimelineEvent,
 )
 from app.utils import (
+    _distance_to_similarity,
     complete_task,
     recalculate_person_appearance_counts,
+    remove_person,
     vector_from_stored,
     vector_to_blob,
 )
@@ -207,6 +207,9 @@ def rebuild_person_embedding(session: Session, person_id: int) -> None:
             continue
         vectors.append((vec / norm).astype(np.float32, copy=False))
 
+    # In case the person we try to recalculate the embedding for has no faces,
+    # we can safely remove that person, otherwise only remove the person embeddings
+    # so it can be recalculated later, when face embeddings are calculated
     if not vectors:
         faces_count_row = session.exec(
             select(func.count(Face.id)).where(Face.person_id == person_id)
@@ -217,22 +220,7 @@ def rebuild_person_embedding(session: Session, person_id: int) -> None:
             else int(faces_count_row)
         )
         if faces_count == 0:
-            session.exec(
-                text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
-                    pid=person_id
-                )
-            )
-            person = session.get(Person, person_id)
-            if person:
-                session.exec(
-                    delete(PersonRelationship).where(
-                        or_(
-                            PersonRelationship.person_a_id == person_id,
-                            PersonRelationship.person_b_id == person_id,
-                        )
-                    )
-                )
-                session.delete(person)
+            remove_person(person_id, session)
         else:
             logger.debug(
                 "Skipping centroid rebuild for person %s; no embeddings available yet",
@@ -307,27 +295,13 @@ def _merge_person_pair(
         .values(person_id=keep_id)
     )
 
-    session.exec(
-        text("DELETE FROM person_embeddings WHERE person_id = :pid").bindparams(
-            pid=drop_id
-        )
-    )
-    session.delete(drop)
+    remove_person(drop_id, session)
 
+    safe_commit(session)
     recalculate_person_appearance_counts(session, [keep_id])
     rebuild_person_embedding(session, keep_id)
     safe_commit(session)
     return keep_id, drop_id
-
-
-def _distance_to_similarity(distance: float | None) -> float | None:
-    if distance is None:
-        return None
-    try:
-        similarity = (1.0 - (float(distance) * float(distance)) / 2.0) * 100.0
-    except Exception:
-        return None
-    return round(max(0.0, min(100.0, similarity)), 2)
 
 
 def merge_person_with_similar(
@@ -395,8 +369,6 @@ def merge_person_with_similar(
         if candidate_id is None:
             continue
         similarity = _distance_to_similarity(distance)
-        if similarity is None:
-            continue
         if float(similarity) < threshold:
             continue
         merge_result = _merge_person_pair(session, current_id, int(candidate_id))
@@ -494,58 +466,45 @@ def merge_similar_persons(
                     if task and task.status == "cancelled":
                         return total_merged
 
-                    row = session.exec(
+                    person_embedding = session.exec(
                         text(
-                            "SELECT embedding FROM person_embeddings WHERE person_id ="
-                            " :pid LIMIT 1"
+                            "SELECT person_id, embedding FROM person_embeddings WHERE"
+                            " person_id=:pid"
                         ).bindparams(pid=person_id)
-                    ).first()
-                    if not row:
+                    ).all()
+                    if not person_embedding:
+                        logger.debug("No embedding found for person %s", person_id)
                         continue
 
-                    vec = vector_from_stored(row[0])
-                    if vec is None or vec.size == 0:
-                        continue
-                    norm = float(np.linalg.norm(vec))
-                    if not np.isfinite(norm) or norm == 0.0:
-                        continue
-                    normed_vec = (vec / norm).astype(np.float32, copy=False)
-                    blob = vector_to_blob(normed_vec)
-                    if blob is None:
-                        continue
+                    logger.debug("Embeddings: %s", person_embedding)
 
                     rows = session.exec(
                         text(
                             """
                             SELECT person_id, distance
                               FROM person_embeddings
-                             WHERE person_id != :pid
-                               AND embedding MATCH :vec
-                          ORDER BY distance ASC
-                          LIMIT :limit_val
+                             WHERE embedding MATCH vec_f32((
+                                SELECT embedding 
+                                FROM person_embeddings
+                                WHERE person_id = :pid))
+                             AND person_id != :pid
+                             AND k=:limit_val
+                          ORDER BY distance 
                             """
                         ).bindparams(
                             pid=person_id,
-                            vec=blob,
                             limit_val=search_limit,
-                        )
-                    ).all()
-                    candidate_pairs: list[tuple[int, float]] = []
-                    for candidate_id, distance in rows:
-                        if candidate_id is None:
-                            continue
-                        similarity = _distance_to_similarity(distance)
-                        if similarity is None:
-                            continue
-                        if similarity < percent_threshold:
-                            continue
-                        candidate_pairs.append((int(candidate_id), similarity))
+                        )  # type: ignore
+                    ).all()  # type: ignore
+                    candidate_pairs = _reduce_candidates_by_threshold(
+                        percent_threshold, rows
+                    )
 
                     logger.debug("Got %s candidates", len(candidate_pairs))
                     merged_this_round = False
                     for candidate_id, similarity in candidate_pairs:
                         logger.debug(
-                            "Merging candidate persons %s and %s (similarity %.2f%%)",
+                            "Merging candidate persons %s and %s (similarity %.2f %%)",
                             person_id,
                             candidate_id,
                             similarity,
@@ -573,6 +532,18 @@ def merge_similar_persons(
 
     finally:
         clear_task_progress(task_id)
+
+
+def _reduce_candidates_by_threshold(percent_threshold, rows):
+    candidate_pairs: list[tuple[int, float]] = []
+    for candidate_id, distance in rows:
+        if candidate_id is None:
+            continue
+        similarity = _distance_to_similarity(distance)
+        if similarity < percent_threshold:
+            continue
+        candidate_pairs.append((int(candidate_id), similarity))
+    return candidate_pairs
 
 
 def _filter_embeddings_by_id(
@@ -724,127 +695,128 @@ def assign_to_existing_persons(
 
             sql = text(
                 """
-                SELECT person_id, ROUND(
-                    (1.0 - (MIN(distance) * MIN(distance)) / 2.0) * 100,
-                    2
-                ) AS similarity_pct
-                    FROM person_embeddings
+                    SELECT distance FROM person_embeddings
                     WHERE embedding MATCH :vec
                     and k = 2
-                    ORDER BY similarity_pct desc
+                    ORDER BY distance
                 """
             ).bindparams(vec=vec_param)
             rows = session.exec(sql).all()
 
-            if rows and rows[0][1] >= threshold_per:
-                person_id = rows[0][0]
-
-                if len(rows) > 1:
-                    best_cos = 1.0 - 0.5 * float(rows[0][1]) ** 2
-                    second_cos = 1.0 - 0.5 * float(rows[1][1]) ** 2
-                    min_margin = getattr(
-                        settings.face_recognition,
-                        "existing_person_min_cosine_margin",
-                        0.0,
-                    )
-                    if (best_cos - second_cos) < float(min_margin):
-                        unassigned.append(face_id)
-                        task.processed += 1
-                        if task.processed % 100 == 0:
-                            if affected_person_ids:
-                                recalculate_person_appearance_counts(
-                                    session, affected_person_ids
-                                )
-                                affected_person_ids.clear()
-                            session.add(task)
-                            safe_commit(session)
-                        continue
-
-                if person_id is None:
-                    logger.warning(
-                        "Found person_embeddings row with NULL person_id; cleaning up."
-                    )
-                    session.exec(
-                        text("DELETE FROM person_embeddings WHERE person_id IS NULL")
-                    )
-                    unassigned.append(face_id)
-                    task.processed += 1
-                    if task.processed % 100 == 0:
-                        if affected_person_ids:
-                            recalculate_person_appearance_counts(
-                                session, affected_person_ids
-                            )
-                            affected_person_ids.clear()
-                        session.add(task)
-                        safe_commit(session)
-                    continue
-
-                person = session.get(Person, person_id)
-
-                if person is None:
-                    logger.warning(
-                        "Dangling person_id %s in person_embeddings; removing and"
-                        " skipping face %s",
-                        person_id,
-                        face_id,
-                    )
-                    session.exec(
-                        text(
-                            "DELETE FROM person_embeddings WHERE person_id = :p_id"
-                        ).bindparams(p_id=person_id)
-                    )
-                    unassigned.append(face_id)
-                    task.processed += 1
-                    if task.processed % 100 == 0:
-                        if affected_person_ids:
-                            recalculate_person_appearance_counts(
-                                session, affected_person_ids
-                            )
-                            affected_person_ids.clear()
-                        session.add(task)
-                        safe_commit(session)
-                    continue
-
-                min_apps = getattr(
-                    settings.face_recognition,
-                    "existing_person_min_appearances",
-                    0,
-                )
-                if (person.appearance_count or 0) < int(min_apps):
-                    unassigned.append(face_id)
-                    task.processed += 1
-                    if task.processed % 100 == 0:
-                        if affected_person_ids:
-                            recalculate_person_appearance_counts(
-                                session, affected_person_ids
-                            )
-                            affected_person_ids.clear()
-                        session.add(task)
-                        safe_commit(session)
-                    continue
-
-                if face is not None:
-                    face.person_id = person_id
-                    session.add(face)
-
-                    session.exec(
-                        text(
-                            """
-                            UPDATE face_embeddings
-                               SET person_id = :p_id
-                             WHERE face_id   = :f_id
-                            """
-                        ).bindparams(p_id=person_id, f_id=face_id)
-                    )
-
-                    affected_person_ids.add(person_id)
-                else:
-                    logger.warning(
-                        "Face %s not found during assignment; skipping update.",
-                        face_id,
-                    )
-            else:
+            if not rows or not len(rows[0]) > 1:
                 unassigned.append(face_id)
+                continue
+
+            if not _distance_to_similarity(rows[0][1]) >= threshold_per:
+                unassigned.append(face_id)
+                continue
+
+            person_id = rows[0][0]
+
+            if len(rows) > 1:
+                best_cos = 1.0 - 0.5 * float(rows[0][1]) ** 2
+                second_cos = 1.0 - 0.5 * float(rows[1][1]) ** 2
+                min_margin = getattr(
+                    settings.face_recognition,
+                    "existing_person_min_cosine_margin",
+                    0.0,
+                )
+                if (best_cos - second_cos) < float(min_margin):
+                    unassigned.append(face_id)
+                    task.processed += 1
+                    if task.processed % 100 == 0:
+                        if affected_person_ids:
+                            recalculate_person_appearance_counts(
+                                session, affected_person_ids
+                            )
+                            affected_person_ids.clear()
+                        session.add(task)
+                        safe_commit(session)
+                    continue
+
+            if person_id is None:
+                logger.warning(
+                    "Found person_embeddings row with NULL person_id; cleaning up."
+                )
+                session.exec(
+                    text("DELETE FROM person_embeddings WHERE person_id IS NULL")
+                )
+                unassigned.append(face_id)
+                task.processed += 1
+                if task.processed % 100 == 0:
+                    if affected_person_ids:
+                        recalculate_person_appearance_counts(
+                            session, affected_person_ids
+                        )
+                        affected_person_ids.clear()
+                    session.add(task)
+                    safe_commit(session)
+                continue
+
+            person = session.get(Person, person_id)
+
+            if person is None:
+                logger.warning(
+                    "Dangling person_id %s in person_embeddings; removing and"
+                    " skipping face %s",
+                    person_id,
+                    face_id,
+                )
+                session.exec(
+                    text(
+                        "DELETE FROM person_embeddings WHERE person_id = :p_id"
+                    ).bindparams(p_id=person_id)
+                )
+                unassigned.append(face_id)
+                task.processed += 1
+                if task.processed % 100 == 0:
+                    if affected_person_ids:
+                        recalculate_person_appearance_counts(
+                            session, affected_person_ids
+                        )
+                        affected_person_ids.clear()
+                    session.add(task)
+                    safe_commit(session)
+                continue
+
+            min_apps = getattr(
+                settings.face_recognition,
+                "existing_person_min_appearances",
+                0,
+            )
+            if (person.appearance_count or 0) < int(min_apps):
+                unassigned.append(face_id)
+                task.processed += 1
+                if task.processed % 100 == 0:
+                    if affected_person_ids:
+                        recalculate_person_appearance_counts(
+                            session, affected_person_ids
+                        )
+                        affected_person_ids.clear()
+                    session.add(task)
+                    safe_commit(session)
+                continue
+
+            if face is not None:
+                face.person_id = person_id
+                session.add(face)
+
+                session.exec(
+                    text(
+                        """
+                        UPDATE face_embeddings
+                            SET person_id = :p_id
+                            WHERE face_id   = :f_id
+                        """
+                    ).bindparams(p_id=person_id, f_id=face_id)
+                )
+
+                affected_person_ids.add(person_id)
+            else:
+                logger.warning(
+                    "Face %s not found during assignment; skipping update.",
+                    face_id,
+                )
 
             task.processed += 1
 

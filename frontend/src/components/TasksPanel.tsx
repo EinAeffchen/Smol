@@ -83,6 +83,11 @@ export default function TaskManager({ isActive }: TaskManagerProps) {
               sev: "success",
             });
           }
+          setFailureEntries([]);
+          setFailureTaskId(null);
+          if (openDialog) {
+            setFailureDialogOpen(false);
+          }
           return entries;
         }
         setFailureEntries(entries);

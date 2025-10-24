@@ -75,6 +75,15 @@ class MergePersonsResult(BaseModel):
     skipped_ids: list[int]
 
 
+class PersonBulkDeleteRequest(BaseModel):
+    person_ids: list[int]
+
+
+class PersonBulkDeleteResponse(BaseModel):
+    deleted_ids: list[int]
+    skipped_ids: list[int]
+
+
 class SimilarPerson(SQLModel):
     id: int
     name: str | None

@@ -126,7 +126,7 @@ def run_migrations():
         logger.info("Alembic migrations applied successfully.")
         return
     except Exception as e:
-        logger.warning("Alembic upgrade failed; ", e)
+        logger.warning("Alembic upgrade failed: %s ", e)
 
 
 def ensure_vec_tables():

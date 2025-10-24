@@ -41,6 +41,8 @@ from app.schemas.person import (
     PersonDetail,
     PersonRead,
     PersonReadSimple,
+    PersonBulkDeleteRequest,
+    PersonBulkDeleteResponse,
     PersonUpdate,
     ProfileFace,
     RelationshipEdge,
@@ -54,9 +56,11 @@ from app.schemas.timeline import (
     TimelinePage,
 )
 from app.utils import (
+    _distance_to_similarity,
     auto_select_profile_face,
     get_person_embedding,
     recalculate_person_appearance_counts,
+    remove_person,
     update_person_embedding,
 )
 
@@ -341,24 +345,19 @@ def suggest_faces(
     id_map = {f.id: f for f in faces}
     ordered = [id_map[f] for f in face_ids if f in id_map]
 
-    def _distance_to_similarity(dist: float | None) -> float | None:
-        if dist is None:
-            return None
-        try:
-            similarity = (1.0 - (float(dist) * float(dist)) / 2.0) * 100.0
-        except Exception:
-            return None
-        return round(max(0.0, min(100.0, similarity)), 2)
-
-    return [
-        FaceRead(
-            id=f.id,
-            media_id=f.media_id,
-            thumbnail_path=f.thumbnail_path,
-            similarity=_distance_to_similarity(distance_map.get(f.id)),
-        )
-        for f in ordered
-    ]
+    face_return = []
+    for f in ordered:
+        if dist := distance_map.get(f.id):
+            similarity = _distance_to_similarity(dist)
+            face_return.append(
+                FaceRead(
+                    id=f.id,
+                    media_id=f.media_id,
+                    thumbnail_path=f.thumbnail_path,
+                    similarity=similarity,
+                )
+            )
+    return face_return
 
 
 @router.get("/{person_id}/faces", response_model=FaceCursorPage)
@@ -758,51 +757,64 @@ def merge_multiple_persons(
     return MergePersonsResult(merged_ids=merged_ids, skipped_ids=skipped_ids)
 
 
+@router.post(
+    "/bulk-delete",
+    response_model=PersonBulkDeleteResponse,
+    summary="Delete multiple persons and their related data",
+)
+def delete_persons_bulk(
+    payload: PersonBulkDeleteRequest,
+    session: Session = Depends(get_session),
+):
+    if settings.general.read_only:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed in settings.general.read_only mode.",
+        )
+
+    deleted_ids: list[int] = []
+    skipped_ids: list[int] = []
+    seen: set[int] = set()
+
+    for person_id in payload.person_ids:
+        if person_id in seen:
+            continue
+        seen.add(person_id)
+
+        try:
+            result = remove_person(person_id, session)
+            if isinstance(result, HTTPException):
+                raise result
+            deleted_ids.append(person_id)
+            session.expire_all()
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_403_FORBIDDEN:
+                raise
+            skipped_ids.append(person_id)
+            logger.warning(
+                "Skipping deletion of person %s due to API error: %s",
+                person_id,
+                exc.detail,
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            skipped_ids.append(person_id)
+            logger.exception(
+                "Unexpected error while deleting person %s", person_id
+            )
+
+    return PersonBulkDeleteResponse(
+        deleted_ids=deleted_ids,
+        skipped_ids=skipped_ids,
+    )
+
+
 @router.delete(
     "/{person_id}",
     summary="Delete a person and all their faces",
     status_code=status.HTTP_204_NO_CONTENT,
 )
 def delete_person(person_id: int, session: Session = Depends(get_session)):
-    if settings.general.read_only:
-        return HTTPException(
-            status_code=403,
-            detail="Not allowed in settings.general.read_only mode.",
-        )
-    person = session.get(Person, person_id)
-    if not person:
-        raise HTTPException(status_code=404, detail="Person not found")
-
-    faces = session.exec(select(Face).where(Face.person_id == person_id)).all()
-    for face in faces:
-        face.person_id = None
-        sql = text(
-            """
-                Update face_embeddings
-                SET person_id=-1
-                WHERE face_id=:f_id
-                """
-        ).bindparams(f_id=face.id)
-        session.exec(sql)
-    sql = text(
-        """
-        DELETE FROM person_embeddings
-        WHERE person_id=:p_id
-        """
-    ).bindparams(p_id=person.id)
-    session.exec(sql)
-    session.exec(delete(PersonTagLink).where(PersonTagLink.person_id == person_id))
-    session.exec(delete(TimelineEvent).where(TimelineEvent.person_id == person_id))
-    session.exec(
-        delete(PersonRelationship).where(
-            or_(
-                PersonRelationship.person_a_id == person_id,
-                PersonRelationship.person_b_id == person_id,
-            )
-        )
-    )
-    session.delete(person)
-    safe_commit(session)
+    return remove_person(person_id, session)
 
 
 @router.get(

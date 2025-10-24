@@ -6,7 +6,6 @@ import React, {
   useState,
 } from "react";
 import { alpha } from "@mui/material/styles";
-import { Renderer as SVGRenderer } from "@antv/g-svg";
 import {
   Box,
   Button,
@@ -120,6 +119,9 @@ const CLUSTER_COLORS = [
 
 const MIN_SPACING = 90;
 const MAX_SPACING = 260;
+const DENSE_NODE_THRESHOLD = 160;
+const DENSE_EDGE_THRESHOLD = 240;
+const HIGH_LAYOUT_NODE_THRESHOLD = 180;
 
 const clampForceSpacing = (value: number) =>
   Math.max(MIN_SPACING, Math.min(MAX_SPACING, value));
@@ -216,12 +218,20 @@ const applyWeightedSpringLayout = (
     indexMap.set(node.id, index);
   });
 
-  const areaEdge = spacing * Math.max(2.2, Math.sqrt(nodeCount) * 0.9);
+  const sqrtCount = Math.sqrt(nodeCount);
+  const areaEdge = spacing * Math.max(2.2, sqrtCount * 0.9);
   const idealArea = Math.pow(areaEdge, 2);
   const k = Math.sqrt(idealArea / nodeCount);
 
-  let temperature = spacing * Math.max(2.6, Math.sqrt(nodeCount) * 1.6);
-  const iterations = Math.min(160, Math.max(60, nodeCount * 4));
+  const highDensityLayout = nodeCount >= HIGH_LAYOUT_NODE_THRESHOLD;
+  let temperature = spacing * Math.max(
+    highDensityLayout ? 2.1 : 2.6,
+    sqrtCount * (highDensityLayout ? 1.18 : 1.6)
+  );
+  const iterations = highDensityLayout
+    ? Math.min(120, Math.max(48, Math.round(nodeCount * 2.4)))
+    : Math.min(160, Math.max(60, Math.round(nodeCount * 4)));
+  const coolingFactor = highDensityLayout ? 0.88 : 0.92;
   const displacements = nodes.map(() => ({ x: 0, y: 0 }));
 
   for (let iteration = 0; iteration < iterations; iteration += 1) {
@@ -245,9 +255,11 @@ const applyWeightedSpringLayout = (
         const dist = Math.sqrt(distSq);
         const minSep = radii[i] + radii[j] + spacing * 0.18;
 
-        let repulsive = ((k * k) / dist) * 0.75;
+        const repulsiveStrength = highDensityLayout ? 0.62 : 0.75;
+        let repulsive = ((k * k) / dist) * repulsiveStrength;
         if (dist < minSep) {
-          repulsive += ((minSep - dist) / minSep) * k * 1.6;
+          const overlapPush = highDensityLayout ? 1.2 : 1.6;
+          repulsive += ((minSep - dist) / minSep) * k * overlapPush;
         }
 
         const fx = (dx / dist) * repulsive;
@@ -290,7 +302,7 @@ const applyWeightedSpringLayout = (
         radii[targetIndex] +
         spacing * (0.18 + (1 - weight) * 1.1);
       const diff = dist - desired;
-      const adjustedStrength = 0.28 + weight * 1.1;
+      const adjustedStrength = 0.28 + weight * (highDensityLayout ? 0.85 : 1.1);
       const force =
         (diff / (desired + 1e-6)) * (k * adjustedStrength);
       const fx = (dx / dist) * force;
@@ -315,7 +327,7 @@ const applyWeightedSpringLayout = (
         (nodes[i].style.y ?? 0) + (disp.y / dispLength) * limited;
     }
 
-    temperature *= 0.92;
+    temperature *= coolingFactor;
   }
 
   const averageX =
@@ -468,6 +480,9 @@ const applyClustering = (
       style: { ...(edge.style ?? {}) },
     })
   );
+  const denseGraph =
+    nodes.length >= DENSE_NODE_THRESHOLD ||
+    edges.length >= DENSE_EDGE_THRESHOLD;
 
   if (!nodes.length) {
     return { nodes, edges, clusters: [] };
@@ -761,10 +776,18 @@ const applyClustering = (
       edge.style = {
         ...edge.style,
         stroke: strokeColor,
-        lineWidth: Math.max(2.2, edge.visualWidth ?? 2.2),
-        opacity: Math.max(edge.intensity ?? 0.08, 0.08 + normalized * 0.32),
-        shadowColor: alpha(strokeColor, 0.3 + normalized * 0.45),
-        shadowBlur: Math.max(edge.style?.shadowBlur ?? 0, 12 + normalized * 8),
+        lineWidth: denseGraph
+          ? Math.max(1.8, (edge.visualWidth ?? 2.2) * 0.8)
+          : Math.max(2.2, edge.visualWidth ?? 2.2),
+        opacity: denseGraph
+          ? Math.max(0.18, Math.min(0.6, 0.12 + normalized * 0.4))
+          : Math.max(edge.intensity ?? 0.08, 0.08 + normalized * 0.32),
+        shadowColor: denseGraph
+          ? alpha(strokeColor, Math.min(0.35, 0.18 + normalized * 0.28))
+          : alpha(strokeColor, 0.3 + normalized * 0.45),
+        shadowBlur: denseGraph
+          ? edge.style?.shadowBlur ?? 0
+          : Math.max(edge.style?.shadowBlur ?? 0, 12 + normalized * 8),
         lineDash: undefined,
         lineCap: "round",
         lineJoin: "round",
@@ -783,23 +806,34 @@ const applyClustering = (
         node.isRoot ? 0.6 : 0.45
       );
       const stroke = interpolateHexColor(backgroundColor, clusterColor, 0.92);
-      const shadow = alpha(clusterColor, node.isRoot ? 0.6 : 0.45);
+      const shadow = alpha(
+        clusterColor,
+        denseGraph ? (node.isRoot ? 0.45 : 0.35) : node.isRoot ? 0.6 : 0.45
+      );
+      const clusterShadowBlur = denseGraph
+        ? node.isRoot
+          ? 14
+          : 8
+        : node.isRoot
+        ? 26
+        : 16;
       node.style = {
         ...node.style,
         fill,
         stroke,
         lineWidth: Math.max(node.style?.lineWidth ?? 2, node.isRoot ? 3.6 : 2.4),
         shadowColor: shadow,
-        shadowBlur: Math.max(node.style?.shadowBlur ?? 0, node.isRoot ? 26 : 16),
+        shadowBlur: clusterShadowBlur,
       };
     }
     if (node.isRoot) {
+      const rootShadowBlur = denseGraph ? 18 : 28;
       node.style = {
         ...node.style,
         stroke: "#FFFFFF",
         lineWidth: Math.max(node.style?.lineWidth ?? 0, 4),
-        shadowColor: alpha("#FFFFFF", 0.5),
-        shadowBlur: Math.max(node.style?.shadowBlur ?? 0, 28),
+        shadowColor: alpha("#FFFFFF", denseGraph ? 0.4 : 0.5),
+        shadowBlur: rootShadowBlur,
       };
     }
   });
@@ -1015,6 +1049,20 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
       };
       });
 
+    const denseGraph =
+      nodes.length >= DENSE_NODE_THRESHOLD ||
+      connectedEdges.length >= DENSE_EDGE_THRESHOLD;
+
+    if (denseGraph) {
+      nodes.forEach((node) => {
+        const baseBlur = node.isRoot ? 8 : 4;
+        node.style = {
+          ...node.style,
+          shadowBlur: Math.min(node.style?.shadowBlur ?? baseBlur, baseBlur),
+        };
+      });
+    }
+
     const strongColor = theme.palette.primary.main;
     const weakColor =
       theme.palette.grey[700] ?? theme.palette.grey[500] ?? "#4C5A73";
@@ -1031,7 +1079,15 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
           : Math.pow(normalizedWeight, 1.8) * 0.1;
       const visualWidth =
         0.9 + easedWeight * 12 + Math.log2(weight + 1) * 1.1;
-      const intensity = 0.04 + Math.pow(normalizedWeight, 1.25) * 0.96;
+      const intensity = denseGraph
+        ? 0.06 + Math.pow(normalizedWeight, 1.1) * 0.55
+        : 0.04 + Math.pow(normalizedWeight, 1.25) * 0.96;
+      const baseShadowBlur = denseGraph
+        ? 0
+        : Math.max(0, Math.round(visualWidth * 0.8));
+      const lineAppendWidth = denseGraph
+        ? Math.max(8, visualWidth + 6)
+        : Math.max(10, visualWidth + 10);
       const color = interpolateHexColor(
         weakColor,
         strongColor,
@@ -1055,11 +1111,13 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
         label: showEdgeLabels ? formattedLabel : "",
         style: {
           stroke: color,
-          lineWidth: visualWidth,
+          lineWidth: denseGraph
+            ? Math.max(1.8, visualWidth * 0.88)
+            : visualWidth,
           opacity: intensity,
-          shadowColor: alpha(color, 0.35),
-          shadowBlur: Math.max(0, Math.round(visualWidth * 0.8)),
-          lineAppendWidth: Math.max(10, visualWidth + 10),
+          shadowColor: denseGraph ? undefined : alpha(color, 0.35),
+          shadowBlur: baseShadowBlur,
+          lineAppendWidth,
           lineCap: "round",
           lineJoin: "round",
           cursor: "pointer",
@@ -1105,7 +1163,6 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
 
     const graphInstance = new G6Graph({
       container: containerRef.current,
-      renderer: () => new SVGRenderer(),
       width,
       height,
       pixelRatio: Math.min(2, window.devicePixelRatio * 1.1),
@@ -1152,7 +1209,7 @@ const PersonRelationshipGraph: React.FC<PersonRelationshipGraphProps> = ({
         state: {
           highlight: {
             style: {
-              shadowBlur: 18,
+              shadowBlur: 14,
               shadowColor: alpha(theme.palette.primary.main, 0.7),
               opacity: 1,
             },

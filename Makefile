@@ -43,14 +43,14 @@ backup:
 
 build-image:
 	docker build --build-arg APP_VERSION=${VERSION} -t omoide .
-	docker tag omoide einaeffchen/omoide
+	docker tag omoide einaeffchen/omoide:latest
 	docker tag omoide einaeffchen/omoide:${VERSION}
 
 build-release: build-image
 	git tag v${VERSION} -m "Release v${VERSION}"
 
 push: build-image
-	docker push einaeffchen/omoide
+	docker push einaeffchen/omoide:latest
 	docker push einaeffchen/omoide:${VERSION}
 	git push origin v${VERSION}
 

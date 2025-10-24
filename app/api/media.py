@@ -16,7 +16,6 @@ from app.config import (
 from app.database import get_session
 from app.logger import logger
 from app.models import ExifData, Face, Media, Person, Scene, Tag
-from app.subprocess_helpers import popen_silent
 from app.schemas.face import FaceRead
 from app.schemas.media import (
     CursorPage,
@@ -33,6 +32,7 @@ from app.schemas.media import (
     SceneRead,
 )
 from app.schemas.person import PersonRead
+from app.subprocess_helpers import popen_silent
 from app.utils import (
     delete_file,
     delete_record,
@@ -143,12 +143,12 @@ def list_media(
     tags: list[str] | None = Query(
         None, description="Filter by tag name(s), comma-separated"
     ),
-    person_id: int | None = Query(
-        None, description="Filter by detected person ID"
-    ),
+    person_id: int | None = Query(None, description="Filter by detected person ID"),
     folder: str | None = Query(
         None,
-        description="Relative folder path (POSIX style). Use empty string for root-level items.",
+        description=(
+            "Relative folder path (POSIX style). Use empty string for root-level items."
+        ),
     ),
     recursive: bool = Query(
         True,
@@ -157,7 +157,10 @@ def list_media(
     sort: Annotated[str, Query(enum=["newest", "latest"])] = "newest",
     cursor: str | None = Query(
         None,
-        description="encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+        description=(
+            "encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or"
+            " `2500_1234`"
+        ),
     ),
     limit: int = Query(100, ge=1, le=200),
     session: Session = Depends(get_session),
@@ -201,9 +204,7 @@ def list_media(
             q = q.where(
                 or_(
                     sort_col < prev_cursor_val,
-                    and_(
-                        sort_col == prev_cursor_val, Media.id < prev_cursor_id
-                    ),
+                    and_(sort_col == prev_cursor_val, Media.id < prev_cursor_id),
                 )
             )
     if person_id:
@@ -389,12 +390,13 @@ def list_images(
     sort: Annotated[str, Query(enum=["newest", "latest"])] = "newest",
     cursor: str | None = Query(
         None,
-        description="encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+        description=(
+            "encoded as `<value>_<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or"
+            " `2500_1234`"
+        ),
     ),
 ):
-    stmt = select(Media).where(
-        Media.duration.is_(None)
-    )  # images have no duration
+    stmt = select(Media).where(Media.duration.is_(None))  # images have no duration
 
     if sort == "newest":
         sort_col = Media.created_at
@@ -418,9 +420,7 @@ def list_images(
             stmt = stmt.where(
                 or_(
                     sort_col < prev_cursor_val,
-                    and_(
-                        sort_col == prev_cursor_val, Media.id < prev_cursor_id
-                    ),
+                    and_(sort_col == prev_cursor_val, Media.id < prev_cursor_id),
                 )
             )
 
@@ -441,12 +441,12 @@ def list_videos(
     session: Session = Depends(get_session),
     cursor: str | None = Query(
         None,
-        description="encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`",
+        description=(
+            "encoded as `<id>`; e.g. `2025-05-05T12:34:56.789012_1234` or `2500_1234`"
+        ),
     ),
 ):
-    stmt = select(Media).where(
-        Media.duration != None
-    )  # videos have a duration
+    stmt = select(Media).where(Media.duration != None)  # videos have a duration
     stmt = stmt.order_by(Media.inserted_at.desc())
     if cursor:
         before_id = int(cursor)
@@ -523,16 +523,12 @@ def get_neighbors(
         )
 
     previous_query = (
-        q.where(
-            tuple_(sort_col, Media.id) > (original_sort_value, original.id)
-        )
+        q.where(tuple_(sort_col, Media.id) > (original_sort_value, original.id))
         .order_by(sort_col.asc(), Media.id.asc())
         .limit(1)
     )
     next_query = (
-        q.where(
-            tuple_(sort_col, Media.id) < (original_sort_value, original.id)
-        )
+        q.where(tuple_(sort_col, Media.id) < (original_sort_value, original.id))
         .order_by(sort_col.desc(), Media.id.desc())
         .limit(1)
     )
@@ -600,9 +596,7 @@ def scenes_vtt(
     media_id: int, request: Request, session: Session = Depends(get_session)
 ):
     scenes = session.exec(
-        select(Scene)
-        .where(Scene.media_id == media_id)
-        .order_by(Scene.start_time)
+        select(Scene).where(Scene.media_id == media_id).order_by(Scene.start_time)
     ).all()
     if not scenes:
         if request.method == "HEAD":
@@ -657,9 +651,7 @@ def delete_media_record(
 
 @router.get("/exif/{media_id}", response_model=ExifData)
 def read_exif(media_id: int, session=Depends(get_session)):
-    ex = session.exec(
-        select(ExifData).where(ExifData.media_id == media_id)
-    ).first()
+    ex = session.exec(select(ExifData).where(ExifData.media_id == media_id)).first()
     if not ex:
         raise HTTPException(404, "No EXIF data")
     return ex
@@ -681,13 +673,14 @@ def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
     rows = session.exec(
         text(
             """
-            SELECT media_id, distance
+            SELECT media_id
               FROM media_embeddings
              WHERE embedding MATCH (
                        SELECT embedding
                          FROM media_embeddings
                         WHERE media_id = :id
                    )
+                AND media_id != :id
                AND k = :k
                AND distance < :maxd
              ORDER BY distance
@@ -696,13 +689,11 @@ def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
     ).all()
 
     # Exclude the anchor and preserve order; cap to k
-    media_ids = [row[0] for row in rows if row[0] != media_id][:k]
-    if not media_ids:
+    if not rows:
         return []
 
-    media_objs = session.exec(
-        select(Media).where(Media.id.in_(media_ids))
-    ).all()
+    media_ids = [row.media_id for row in rows]
+    media_objs = session.exec(select(Media).where(Media.id.in_(media_ids))).all()
     id_to_obj = {m.id: m for m in media_objs}
     ordered = [id_to_obj[mid] for mid in media_ids if mid in id_to_obj]
     return [MediaPreview.model_validate(m) for m in ordered]
@@ -711,9 +702,7 @@ def get_similar_media(media_id: int, k: int = 8, session=Depends(get_session)):
 @router.get("/{media_id}/scenes", response_model=list[SceneRead])
 def get_scenes(media_id: int, session: Session = Depends(get_session)):
     return session.exec(
-        select(Scene)
-        .where(Scene.media_id == media_id)
-        .order_by(Scene.start_time)
+        select(Scene).where(Scene.media_id == media_id).order_by(Scene.start_time)
     ).all()
 
 
@@ -729,9 +718,7 @@ def update_geolocation(
             detail="Not allowed in settings.general.read_only mode.",
         )
     media = session.exec(
-        select(Media)
-        .options(selectinload(Media.exif))
-        .where(Media.id == media_id)
+        select(Media).options(selectinload(Media.exif)).where(Media.id == media_id)
     ).first()
     if not media:
         raise HTTPException(404, "Media not found")

@@ -5,10 +5,10 @@ Revises: 4472c47816da
 Create Date: 2025-10-08 12:30:00.000000
 """
 
-import sqlite3
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+from sqlalchemy.exc import OperationalError
 
 from alembic import op
 
@@ -45,7 +45,7 @@ def upgrade() -> None:
             "person_relationship",
             ["coappearance_count"],
         )
-    except sqlite3.OperationalError:
+    except OperationalError:
         print("Skipping creating of person_relationship as it already exists")
 
 
