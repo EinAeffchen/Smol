@@ -721,6 +721,8 @@ def _split_by_frames(media: Media) -> list[tuple[Scene, cv2.typing.MatLike]]:
     timestamps: list[float] = []
     if duration and duration > 0:
         step = duration / max_frames
+        min_step = 2
+        step = max(step, min_step)
         timestamps = [max(0.0, i * step) for i in range(max_frames)]
         if timestamps and timestamps[-1] + 1.0 < duration:
             timestamps.append(duration)
