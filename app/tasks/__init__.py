@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from . import state
 from .common import create_and_run_task
+from .auto_tagging import run_custom_auto_tagging, schedule_custom_auto_tagging
 from .duplicates import run_duplicate_detection
 from .hashes import generate_hashes
 from .maintenance import clean_missing_files, reset_clustering, reset_processing
@@ -36,7 +37,9 @@ __all__ = [
     "rebuild_person_embedding",
     "reset_clustering",
     "reset_processing",
+    "run_custom_auto_tagging",
     "run_cleanup_and_chain",
+    "schedule_custom_auto_tagging",
     "run_duplicate_detection",
     "run_media_processing",
     "run_media_processing_and_chain",

@@ -1,6 +1,6 @@
 services:
   omoide:
-    image: einaeffchen/omoide
+    image: einaeffchen/omoide:latest
     container_name: omoide
     ports:
       - "${PORT}:8123"
@@ -13,6 +13,5 @@ services:
     # /local/photo/folder:/app/media/photos
     volumes:
       - ${HOST_MEDIA_DIR}:/app/media
-      # - /mnt/d/GooglePhotos:/app/media/Google #/mnt/d/GooglePhotos
       - ${HOST_DATA_DIR}:/app/data
     restart: unless-stopped

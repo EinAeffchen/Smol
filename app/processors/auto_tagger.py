@@ -12,6 +12,7 @@ from app.database import safe_commit
 from app.logger import logger
 from app.models import Media, Scene
 from app.processors.base import MediaProcessor
+from app.tagging import build_tag_vector_map, sanitize_custom_tag_list
 from app.utils import vector_from_stored
 
 
@@ -104,20 +105,38 @@ class AutoTagger(MediaProcessor):
     tag_map: dict[str, np.ndarray] = dict()
 
     def load_model(self):
-        if settings.tagging.auto_tagging:
-            self.active = True
+        self.active = settings.tagging.auto_tagging
+        if not self.active:
+            self.tag_map = {}
+            return
 
-        custom_tags_list = []
-        if custom_tags := os.environ.get("CUSTOM_TAGS"):
-            custom_tags_list = [tag.strip() for tag in custom_tags.split(",")]
-        tags = list(set(self.default_tags + custom_tags_list))
+        tags: list[str] = []
+        if settings.tagging.use_default_tags:
+            tags.extend(self.default_tags)
+
+        # Merge config-driven and legacy environment-provided custom tags
+        config_custom = sanitize_custom_tag_list(settings.tagging.custom_tags)
+        if config_custom:
+            tags.extend(config_custom)
+
+        if env_custom := os.environ.get("CUSTOM_TAGS"):
+            tags.extend(
+                sanitize_custom_tag_list(env_custom.split(","))
+            )
+
+        tags = sanitize_custom_tag_list(tags)
+        if not tags:
+            self.tag_map = {}
+            return
+
         # Use shared CLIP and keep it warm to avoid re-init leaks
         self._clip_model, _, self._tokenizer = get_clip_bundle()
-        self.tag_map = {tag: self._tag_to_vector(tag) for tag in tags}
+        self.tag_map = build_tag_vector_map(tags)
 
     def unload(self):
         """Used to load models into memory before use"""
         self.tags = []
+        self.tag_map = {}
 
     def _tag_to_vector(self, tag) -> np.ndarray:
         tokenized_text = self._tokenizer([tag])

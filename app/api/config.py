@@ -15,6 +15,8 @@ from app.config import (
     write_bootstrap,
 )
 from app.models import ProcessingTask
+from app.tagging import sanitize_custom_tag_list
+from app.tasks import schedule_custom_auto_tagging
 
 def _ensure_config_access_allowed() -> None:
     if settings.general.read_only:
@@ -55,7 +57,27 @@ async def save_settings_endpoint(
     settings_model: AppSettings,
 ):
     """Saves the settings model to the config.yaml file."""
+    incoming_custom = sanitize_custom_tag_list(
+        settings_model.tagging.custom_tags
+    )
+    existing_custom = sanitize_custom_tag_list(settings.tagging.custom_tags)
+
+    existing_normalized = {tag.lower() for tag in existing_custom}
+    new_tags: list[str] = []
+    seen_new: set[str] = set()
+    for tag in incoming_custom:
+        normalized = tag.lower()
+        if normalized in existing_normalized or normalized in seen_new:
+            continue
+        seen_new.add(normalized)
+        new_tags.append(tag)
+
+    # Persist sanitized tags in the saved configuration
+    settings_model.tagging.custom_tags = incoming_custom
     save_settings(settings_model)
+
+    if new_tags and settings_model.tagging.auto_tagging:
+        schedule_custom_auto_tagging(new_tags)
     return settings_model
 
 
