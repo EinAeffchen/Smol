@@ -115,14 +115,18 @@ export default function MediaCard({
     <Card
       elevation={0}
       sx={{
-        borderRadius: 2,
+        borderRadius: 3, // More rounded
         overflow: "hidden",
         position: "relative",
-        transition: "transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out",
+        transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+        backgroundColor: "background.paper",
         "&:hover": {
-          transform: "scale(1.02)",
-          boxShadow: theme.shadows[10],
+          transform: "translateY(-4px)", // Lift effect
+          boxShadow: "0 12px 24px -8px rgba(0, 0, 0, 0.15)", // Soft shadow
           zIndex: 10,
+          "& .media-overlay": {
+            opacity: 1,
+          }
         },
       }}
     >
@@ -139,7 +143,7 @@ export default function MediaCard({
             position: "relative",
             display: "block",
             width: "100%",
-            paddingTop: "100%",
+            paddingTop: "100%", // 1:1 Aspect Ratio
           }}
         >
           <Box
@@ -149,6 +153,7 @@ export default function MediaCard({
               left: 0,
               width: "100%",
               height: "100%",
+              bgcolor: "action.hover", // Placeholder color
             }}
           >
             {/* We now explicitly render the thumbnail image for videos */}
@@ -195,63 +200,97 @@ export default function MediaCard({
             )}
           </Box>
 
-          {/* Overlays */}
+          {/* Play Icon Overlay */}
           {isVideo && (
             <Box
               sx={{
                 position: "absolute",
                 top: "50%",
                 left: "50%",
-                transform: "translate(-50%, -50%)",
-                transition: "opacity 0.3s ease-in-out",
-                opacity: isPlayerActive ? 0 : 0.8, // Hide play icon when player is active
+                transform: "translate(-50%, -50%) scale(0.8)",
+                transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                opacity: isPlayerActive ? 0 : 0.6,
                 pointerEvents: "none",
+                bgcolor: "rgba(0,0,0,0.3)",
+                borderRadius: "50%",
+                p: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                backdropFilter: "blur(4px)",
+                ".MuiCardActionArea-root:hover &": {
+                    transform: "translate(-50%, -50%) scale(1)",
+                    opacity: isPlayerActive ? 0 : 1,
+                    bgcolor: "rgba(0,0,0,0.5)",
+                }
               }}
             >
               <PlayArrowIcon
                 sx={{
-                  fontSize: "3rem",
-                  color: (theme) => theme.palette.common.white,
+                  fontSize: "2.5rem",
+                  color: "common.white",
                 }}
               />
             </Box>
           )}
 
+          {/* Info Overlay */}
           <Box
+            className="media-overlay"
             sx={{
               position: "absolute",
               bottom: 0,
               left: 0,
               width: "100%",
-              p: 1.5,
-              color: (theme) => theme.palette.common.white,
-              background: (theme) =>
-                `linear-gradient(to top, ${theme.palette.mode === "dark" ? "rgba(0,0,0,0.8)" : "rgba(0,0,0,0.7)"} 0%, rgba(0,0,0,0) 50%)`,
+              p: 2,
+              background: "linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, rgba(0,0,0,0) 100%)",
               pointerEvents: "none",
+              opacity: 0.8, // Always slightly visible
+              transition: "opacity 0.3s ease-in-out",
             }}
           >
             <Box
               sx={{
                 display: "flex",
                 justifyContent: "space-between",
-                alignItems: "center",
+                alignItems: "flex-end",
               }}
             >
               {isVideo && media ? (
-                <Box display="flex" alignItems="center" gap={0.5}>
-                  <PlayCircleOutlineIcon sx={{ fontSize: "1rem" }} />
-                  <Typography variant="caption" lineHeight={1}>
+                <Box 
+                    display="flex" 
+                    alignItems="center" 
+                    gap={0.5} 
+                    sx={{ 
+                        bgcolor: "rgba(0,0,0,0.6)", 
+                        borderRadius: 1, 
+                        px: 0.8, 
+                        py: 0.2,
+                        backdropFilter: "blur(4px)"
+                    }}
+                >
+                  <PlayCircleOutlineIcon sx={{ fontSize: "0.9rem", color: "common.white" }} />
+                  <Typography variant="caption" sx={{ color: "common.white", fontWeight: 600, letterSpacing: 0.5 }}>
                     {formatDuration(media.duration)}
                   </Typography>
                 </Box>
               ) : (
                 <div />
               )}
-              <Typography variant="caption" lineHeight={1}>
-                {media && media.width && media.height
-                  ? `${media.width}×${media.height}`
-                  : ""}
-              </Typography>
+              
+              {(media?.width && media?.height) && (
+                  <Typography 
+                    variant="caption" 
+                    sx={{ 
+                        color: "rgba(255,255,255,0.9)", 
+                        textShadow: "0 1px 2px rgba(0,0,0,0.5)",
+                        fontFamily: "monospace",
+                        fontSize: "0.7rem"
+                    }}
+                  >
+                    {media.width}×{media.height}
+                  </Typography>
+              )}
             </Box>
           </Box>
         </CardActionArea>

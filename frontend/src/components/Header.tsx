@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import {
-  NavLink as RouterNavLink,
   useNavigate,
   useLocation,
   Link,
@@ -9,135 +8,42 @@ import {
   AppBar,
   Box,
   Toolbar,
-  Button,
   TextField,
   Select,
-  Menu,
   MenuItem,
   IconButton,
   Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemText,
-  ListSubheader,
-  Divider,
   Typography,
-  styled,
+  Badge,
+  Tooltip,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import SearchIcon from "@mui/icons-material/Search";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import SettingsIcon from "@mui/icons-material/Settings";
 import TaskManager from "../components/TasksPanel";
 import ThemeToggleButton from "../components/ThemeToggleButton";
 import { searchByImage } from "../services/searchActions";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import AssignmentIcon from "@mui/icons-material/Assignment";
 import config from "../config";
 import { useTheme } from "@mui/material/styles";
+import { useTaskEvents } from "../TaskEventsContext";
+import { Sidebar } from "./Sidebar";
 
-type NavItem = { label: string; to: string };
-type NavSection = { label: string; items: NavItem[] };
+function TaskStatusButton({ onClick }: { onClick: () => void }) {
+  const { activeTasks } = useTaskEvents();
+  const activeCount = activeTasks.filter(
+    (t) => t.status === "running" || t.status === "pending"
+  ).length;
 
-const StyledNavLink = styled(RouterNavLink)(({ theme }) => ({
-  color: theme.palette.text.primary,
-  textDecoration: "none",
-  fontWeight: 500,
-  padding: theme.spacing(1, 2),
-  borderRadius: theme.shape.borderRadius,
-  transition: "color 0.2s ease-in-out, background-color 0.2s ease-in-out",
-
-  "&:hover": {
-    backgroundColor: theme.palette.action.hover,
-  },
-  "&.active": {
-    color: theme.palette.accent.main,
-  },
-}));
-
-function MobileDrawer({
-  open,
-  onClose,
-  navSections,
-}: {
-  open: boolean;
-  onClose: () => void;
-  navSections: NavSection[];
-}) {
-  const theme = useTheme();
-  const base = import.meta.env.BASE_URL || "/";
-  const wordmarkSrc = `${base}brand/omoide_header_${theme.palette.mode}.png`;
   return (
-    <Drawer
-      anchor="right"
-      open={open}
-      onClose={onClose}
-      slotProps={{
-        paper: {
-          sx: {
-            backgroundColor: "background.default",
-            color: "text.primary",
-            width: 280,
-          },
-        },
-      }}
-    >
-      <Box sx={{ p: 1, display: "flex", alignItems: "center" }}>
-        <Link to="/" onClick={onClose}>
-          <Box
-            component="img"
-            src={wordmarkSrc}
-            alt="omoide"
-            sx={{ width: 160, height: "auto" }}
-          />
-        </Link>
-      </Box>
-      <Divider />
-
-      <List>
-        {navSections.map((section) => (
-          <React.Fragment key={section.label}>
-            <ListSubheader
-              disableSticky
-              sx={{
-                backgroundColor: "background.default",
-                color: "text.secondary",
-                fontWeight: 600,
-              }}
-            >
-              {section.label}
-            </ListSubheader>
-            {section.items.map(({ label, to }) => (
-              <ListItem key={to} disablePadding>
-                <ListItemButton
-                  component={RouterNavLink}
-                  to={to}
-                  onClick={onClose}
-                >
-                  <ListItemText primary={label} />
-                </ListItemButton>
-              </ListItem>
-            ))}
-          </React.Fragment>
-        ))}
-      </List>
-
-      {!config.READ_ONLY && (
-        <>
-          <Divider />
-          <Box sx={{ p: 2 }}>
-            <Typography
-              variant="overline"
-              color="text.secondary"
-              sx={{ display: "block", mb: 1 }}
-            >
-              Control Panel
-            </Typography>
-            <TaskManager isActive={open} />
-          </Box>
-        </>
-      )}
-    </Drawer>
+    <Tooltip title="Tasks & Processing">
+      <IconButton onClick={onClick} color={activeCount > 0 ? "primary" : "default"}>
+        <Badge badgeContent={activeCount} color="primary">
+          <AssignmentIcon />
+        </Badge>
+      </IconButton>
+    </Tooltip>
   );
 }
 
@@ -149,8 +55,6 @@ export function Header() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [q, setQ] = useState("");
-  const [menuAnchorEl, setMenuAnchorEl] = useState<HTMLElement | null>(null);
-  const [openSectionLabel, setOpenSectionLabel] = useState<string | null>(null);
   const [category, setCategory] = useState<
     "media" | "person" | "tag" | "scene"
   >("media");
@@ -170,79 +74,6 @@ export function Header() {
       );
   }, []);
 
-  const RAW_SECTIONS: NavSection[] = [
-    {
-      label: "Library",
-      items: [
-        { label: "Images", to: "/images" },
-        { label: "Videos", to: "/videos" },
-        { label: "Tags", to: "/tags" },
-      ],
-    },
-    {
-      label: "People",
-      items: [
-        { label: "People", to: "/people" },
-        { label: "Faces", to: "/orphanfaces" },
-      ],
-    },
-    {
-      label: "Map",
-      items: [
-        { label: "Map", to: "/map" },
-        { label: "Geotagger", to: "/maptagger" },
-      ],
-    },
-    {
-      label: "Maintenance",
-      items: [
-        { label: "Duplicates", to: "/duplicates" },
-        { label: "Review Missing", to: "/missing" },
-      ],
-    },
-    {
-      label: "Configuration",
-      items: [{ label: "Configuration", to: "/configuration" }],
-    },
-  ];
-
-  const pathsToExcludeInReadOnly: string[] = [
-    "/orphanfaces",
-    "/maptagger",
-    "/duplicates",
-    "/configuration",
-    "/missing",
-  ];
-  const pathsToExcludeInPeopleDisabled: string[] = ["/people", "/orphanfaces"];
-  const shouldHidePath = (path: string) =>
-    (config.READ_ONLY && pathsToExcludeInReadOnly.includes(path)) ||
-    (!config.ENABLE_PEOPLE && pathsToExcludeInPeopleDisabled.includes(path));
-
-  const navSections: NavSection[] = RAW_SECTIONS.map((section) => ({
-    ...section,
-    items: section.items.filter((it) => !shouldHidePath(it.to)),
-  })).filter((section) => section.items.length > 0);
-
-  const flatVisibleNavItems: NavItem[] = navSections.flatMap((s) => s.items);
-
-  const openSection = (label: string) => (e: React.MouseEvent<HTMLElement>) => {
-    setMenuAnchorEl(e.currentTarget);
-    setOpenSectionLabel(label);
-  };
-
-  const closeMenu = () => {
-    setMenuAnchorEl(null);
-    setOpenSectionLabel(null);
-  };
-
-  const isSectionOpen = (label: string) => openSectionLabel === label;
-
-  const isSectionActive = (section: NavSection) =>
-    section.items.some((it) => location.pathname.startsWith(it.to));
-
-  const sectionMenuId = (label: string) =>
-    `section-menu-${label.toLowerCase().replace(/\s+/g, "-")}`;
-
   function onSearchSubmit(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = q.trim();
@@ -257,138 +88,54 @@ export function Header() {
 
   const renderDefaultHeader = () => (
     <>
-      <Link to="/">
-        <Box
-          component="img"
-          src={wordmarkSrc}
-          alt="omoide logo"
-          sx={{
-            width: 180,
-            height: "auto",
-            display: { xs: "none", sm: "block" },
-            mr: 2,
-          }}
-        />
-        <Box
-          component="img"
-          src={wordmarkSrc}
-          alt="omoide logo"
-          sx={{
-            width: 150,
-            height: "auto",
-            display: { xs: "block", sm: "none" },
-          }}
-        />
-      </Link>
+      {/* Mobile Menu Button */}
+      <IconButton
+        color="inherit"
+        aria-label="open drawer"
+        edge="start"
+        onClick={() => setIsDrawerOpen(true)}
+        sx={{ mr: 2, display: { md: "none" } }}
+      >
+        <MenuIcon />
+      </IconButton>
 
-      <Box sx={{ display: { xs: "none", lg: "flex" } /* ... */ }}>
+      {/* Logo (Mobile Only - Desktop uses Sidebar) */}
+      <Box sx={{ display: { xs: "block", md: "none" }, flexGrow: 1 }}>
+        <Link to="/">
+          <Box
+            component="img"
+            src={wordmarkSrc}
+            alt="omoide logo"
+            sx={{
+              height: 32,
+              width: "auto",
+              display: "block",
+            }}
+          />
+        </Link>
+      </Box>
+
+      {/* Search Inputs (Desktop) */}
+      <Box sx={{ display: { xs: "none", md: "flex" }, flexGrow: 1, maxWidth: 600, mx: 4 }}>
         {renderSearchInputs()}
       </Box>
 
-      <Box sx={{ flexGrow: 1 }} />
-      <Box
-        sx={{
-          display: { xs: "none", lg: "flex" },
-          alignItems: "center",
-          gap: 0.5,
-        }}
-      >
-        {navSections.map((section) => {
-          const active = isSectionActive(section);
-          const menuId = sectionMenuId(section.label);
-          if (section.items.length === 1) {
-            const [item] = section.items;
-            return (
-              <Button
-                key={section.label}
-                component={RouterNavLink}
-                to={item.to}
-                replace
-                state={{}}
-                sx={{
-                  textTransform: "none",
-                  fontWeight: 600,
-                  borderRadius: 1,
-                  "&:hover": { backgroundColor: "action.hover" },
-                  color: active ? "accent.main" : "text.primary",
-                }}
-              >
-                {item.label}
-              </Button>
-            );
-          }
-          return (
-            <React.Fragment key={section.label}>
-              <Button
-                onClick={openSection(section.label)}
-                aria-controls={
-                  isSectionOpen(section.label) ? menuId : undefined
-                }
-                aria-haspopup="true"
-                aria-expanded={
-                  isSectionOpen(section.label) ? "true" : undefined
-                }
-                sx={{
-                  textTransform: "none",
-                  fontWeight: 600,
-                  borderRadius: 1,
-                  "&:hover": { backgroundColor: "action.hover" },
-                  color: active ? "accent.main" : "text.primary",
-                }}
-              >
-                {section.label}
-              </Button>
-
-              <Menu
-                id={menuId}
-                anchorEl={menuAnchorEl}
-                open={isSectionOpen(section.label)}
-                onClose={closeMenu}
-                keepMounted
-                anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-                transformOrigin={{ vertical: "top", horizontal: "left" }}
-                MenuListProps={{ "aria-labelledby": menuId }}
-              >
-                {section.items.map((item) => (
-                  <MenuItem
-                    key={item.to}
-                    component={RouterNavLink}
-                    to={item.to}
-                    // keep your navigation behavior consistent
-                    replace
-                    state={{}}
-                    onClick={closeMenu}
-                    sx={{ minWidth: 200 }}
-                  >
-                    {item.label}
-                  </MenuItem>
-                ))}
-              </Menu>
-            </React.Fragment>
-          );
-        })}
-
-        <ThemeToggleButton />
-
+      <Box sx={{ flexGrow: { xs: 0, md: 1 } }} />
+      
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+        <Box sx={{ display: { xs: "none", md: "flex" } }}>
+             <ThemeToggleButton />
+        </Box>
+       
         {!config.READ_ONLY && (
-          <IconButton
-            onClick={() => setIsControlPanelOpen(true)}
-            color="primary"
-            title="Open Control Panel"
-          >
-            <SettingsIcon />
-          </IconButton>
+          <TaskStatusButton onClick={() => setIsControlPanelOpen(true)} />
         )}
-      </Box>
-
-      <Box sx={{ display: { xs: "flex", lg: "none" }, alignItems: "center" }}>
-        <IconButton color="primary" onClick={() => setIsSearchVisible(true)}>
-          <SearchIcon />
-        </IconButton>
-        <ThemeToggleButton />
-        <IconButton color="primary" onClick={() => setIsDrawerOpen(true)}>
-          <MenuIcon />
-        </IconButton>
+        
+        <Box sx={{ display: { xs: "flex", md: "none" } }}>
+             <IconButton color="primary" onClick={() => setIsSearchVisible(true)}>
+              <SearchIcon />
+            </IconButton>
+        </Box>
       </Box>
     </>
   );
@@ -406,7 +153,12 @@ export function Header() {
         onChange={(e) =>
           setCategory(e.target.value as "media" | "person" | "tag" | "scene")
         }
-        sx={{ borderTopRightRadius: 0, borderBottomRightRadius: 0 }}
+        sx={{ 
+            borderTopRightRadius: 0, 
+            borderBottomRightRadius: 0,
+            bgcolor: 'background.paper',
+            minWidth: 100
+        }}
       >
         <MenuItem value="media">Media</MenuItem>
         <MenuItem value="person">People</MenuItem>
@@ -419,11 +171,12 @@ export function Header() {
         fullWidth
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="Search by text..."
+        placeholder="Search..."
         sx={{
           "& .MuiOutlinedInput-root": {
             borderTopLeftRadius: 0,
             borderBottomLeftRadius: 0,
+            bgcolor: 'background.paper'
           },
         }}
       />
@@ -480,10 +233,12 @@ export function Header() {
       />
       <AppBar
         position="sticky"
+        elevation={0}
         sx={{
-          backgroundColor: "background.paper",
+          backgroundColor: "background.default", // Transparent/Default to blend with content
           borderBottom: "1px solid",
           borderColor: "divider",
+          backdropFilter: "blur(8px)",
         }}
       >
         <Toolbar sx={{ gap: 2 }}>
@@ -491,11 +246,20 @@ export function Header() {
         </Toolbar>
       </AppBar>
 
-      <MobileDrawer
+      <Drawer
+        anchor="left"
         open={isDrawerOpen}
         onClose={() => setIsDrawerOpen(false)}
-        navSections={navSections}
-      />
+        ModalProps={{
+            keepMounted: true, // Better open performance on mobile.
+        }}
+        sx={{
+            display: { xs: 'block', md: 'none' },
+            '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280 },
+        }}
+      >
+        <Sidebar />
+      </Drawer>
 
       <Drawer
         anchor="right"
@@ -506,21 +270,23 @@ export function Header() {
             sx: {
               backgroundColor: "background.default",
               color: "text.primary",
-              width: 280,
+              width: 320,
             },
           },
         }}
       >
         {!config.READ_ONLY && (
-          <Box sx={{ p: 2 }}>
+          <Box sx={{ p: 2, height: '100%', display: 'flex', flexDirection: 'column' }}>
             <Typography
               variant="overline"
               color="text.secondary"
-              sx={{ display: "block", mb: 1 }}
+              sx={{ display: "block", mb: 2, fontWeight: 700 }}
             >
-              Control Panel
+              Task Manager
             </Typography>
-            <TaskManager isActive={isControlPanelOpen} />
+            <Box sx={{ flexGrow: 1, overflowY: 'auto' }}>
+                <TaskManager isActive={isControlPanelOpen} />
+            </Box>
           </Box>
         )}
       </Drawer>
