@@ -21,9 +21,12 @@ import SortIcon from "@mui/icons-material/Sort";
 import GridViewIcon from "@mui/icons-material/GridView";
 import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import FolderIcon from "@mui/icons-material/Folder";
+import SearchOffIcon from "@mui/icons-material/SearchOff";
 import { useListStore, defaultListState } from "../stores/useListStore";
 import MediaCard from "../components/MediaCard";
 import FolderCard from "../components/FolderCard";
+import { MediaSkeleton } from "../components/MediaSkeleton";
+import { EmptyState } from "../components/EmptyState";
 import { getMediaFolders, getMediaList } from "../services/media";
 import { useTaskCompletionVersion } from "../TaskEventsContext";
 import { MediaFolderListing } from "../types";
@@ -418,19 +421,55 @@ export default function IndexPage() {
         </>
       )}
 
-      <Masonry
-        breakpointCols={breakpointColumnsObj}
-        className="my-masonry-grid"
-        columnClassName="my-masonry-grid_column"
-      >
-        {items.map((mediaItem) => (
-          <div key={mediaItem.id}>
-            <MediaCard media={mediaItem} mediaListKey={mediaListKey} />
-          </div>
-        ))}
-      </Masonry>
+      {/* Loading Skeletons */}
+      {items.length === 0 && isLoading && (
+        <Box
+          sx={{
+            display: "grid",
+            gap: 2,
+            // Approximate masonry layout with grid for skeletons
+            gridTemplateColumns: {
+               xs: "repeat(2, 1fr)",
+               sm: "repeat(3, 1fr)",
+               md: "repeat(4, 1fr)",
+               lg: "repeat(5, 1fr)",
+            }
+          }}
+        >
+          {[...Array(15)].map((_, i) => (
+            <Box key={i} sx={{ aspectRatio: "3/4" }}>
+              <MediaSkeleton />
+            </Box>
+          ))}
+        </Box>
+      )}
 
-      {isLoading && (
+      {/* Empty State */}
+      {items.length === 0 && !isLoading && (
+        <EmptyState
+          icon={<SearchOffIcon />}
+          title="No media found"
+          description="Try adjusting your filters or adding new media."
+        />
+      )}
+
+      {/* Media Grid */}
+      {items.length > 0 && (
+        <Masonry
+          breakpointCols={breakpointColumnsObj}
+          className="my-masonry-grid"
+          columnClassName="my-masonry-grid_column"
+        >
+          {items.map((mediaItem) => (
+            <div key={mediaItem.id}>
+              <MediaCard media={mediaItem} mediaListKey={mediaListKey} />
+            </div>
+          ))}
+        </Masonry>
+      )}
+
+      {/* Load More Spinner */}
+      {items.length > 0 && isLoading && (
         <Box textAlign="center" py={3}>
           <CircularProgress />
         </Box>

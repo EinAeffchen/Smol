@@ -11,16 +11,18 @@ interface MediaDisplayProps {
 export function MediaDisplay({ media, initialTime }: MediaDisplayProps) {
   const mediaUrl = (media) ? `${API}/originals/${media.path}` : `${API}/static/brand/404.png`;
   const filename = (media) ? media.filename : "404 Not found";
+  
   return (
-    <Box display="flex" justifyContent="center" mb={2}>
+    <Box display="flex" justifyContent="center" mb={2} sx={{ width: "100%" }}>
       <Paper
         elevation={4}
         sx={{
           width: "100%",
           maxWidth: "100%",
           overflow: "hidden",
-          borderRadius: 2,
+          borderRadius: { xs: 0, sm: 2 },
           bgcolor: "background.paper",
+          boxShadow: { xs: "none", sm: 4 },
         }}
       >
         {media && media.duration ? (
@@ -37,7 +39,7 @@ export function MediaDisplay({ media, initialTime }: MediaDisplayProps) {
             sx={{
               width: "100%",
               height: "auto",
-              maxHeight: "80vh",
+              maxHeight: { xs: "100vh", sm: "80vh" },
               objectFit: "contain",
               display: "block",
             }}

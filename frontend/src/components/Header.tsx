@@ -258,7 +258,7 @@ export function Header() {
             '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 280 },
         }}
       >
-        <Sidebar />
+        <Sidebar variant="temporary" onClose={() => setIsDrawerOpen(false)} />
       </Drawer>
 
       <Drawer

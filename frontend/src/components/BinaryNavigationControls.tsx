@@ -167,7 +167,7 @@ export function BinaryNavigationControls({ variant = "global", sx }: BinaryNavig
       <Fade in={isBinaryEnvironment}>
         <Box
           sx={{
-            display: "flex",
+            display: { xs: "none", md: "flex" },
             alignItems: "center",
             gap: 1,
             px: 1,
@@ -198,6 +198,7 @@ export function BinaryNavigationControls({ variant = "global", sx }: BinaryNavig
           backgroundColor: "background.default",
           borderBottom: "1px solid",
           borderColor: "divider",
+          display: { xs: "none", md: "block" },
           ...sx,
         }}
       >

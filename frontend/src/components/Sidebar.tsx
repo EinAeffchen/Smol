@@ -21,6 +21,7 @@ import MapIcon from "@mui/icons-material/Map";
 import AddLocationIcon from "@mui/icons-material/AddLocation";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import ImageSearchIcon from "@mui/icons-material/ImageSearch";
+import BrokenImageIcon from "@mui/icons-material/BrokenImage";
 import SettingsIcon from "@mui/icons-material/Settings";
 import config from "../config";
 
@@ -37,11 +38,17 @@ type NavSection = {
   items: NavItem[];
 };
 
-export function Sidebar() {
+interface SidebarProps {
+  variant?: "permanent" | "temporary";
+  onClose?: () => void;
+}
+
+export function Sidebar({ variant = "permanent", onClose }: SidebarProps) {
   const theme = useTheme();
   const location = useLocation();
   const base = import.meta.env.BASE_URL || "/";
   const wordmarkSrc = `${base}brand/omoide_header_${theme.palette.mode}.png`;
+  const isTemporary = variant === "temporary";
 
   const RAW_SECTIONS: NavSection[] = [
     {
@@ -56,21 +63,21 @@ export function Sidebar() {
       label: "People",
       items: [
         { label: "People", to: "/people", icon: <PeopleIcon /> },
-        { label: "Faces", to: "/orphanfaces", icon: <FaceIcon /> },
+        { label: "Unassigned Faces", to: "/orphanfaces", icon: <FaceIcon /> },
       ],
     },
     {
       label: "Map",
       items: [
-        { label: "Map", to: "/map", icon: <MapIcon /> },
-        { label: "Geotagger", to: "/maptagger", icon: <AddLocationIcon /> },
+        { label: "Map View", to: "/map", icon: <MapIcon /> },
+        { label: "Add Locations", to: "/geotagger", icon: <AddLocationIcon /> },
       ],
     },
     {
       label: "Maintenance",
       items: [
         { label: "Duplicates", to: "/duplicates", icon: <ContentCopyIcon /> },
-        { label: "Review Missing", to: "/missing", icon: <ImageSearchIcon /> },
+        { label: "Missing Files", to: "/missing", icon: <BrokenImageIcon /> },
       ],
     },
     {
@@ -101,14 +108,14 @@ export function Sidebar() {
   return (
     <Box
       sx={{
-        width: DRAWER_WIDTH,
+        width: isTemporary ? "100%" : DRAWER_WIDTH,
         flexShrink: 0,
-        borderRight: "1px solid",
+        borderRight: isTemporary ? "none" : "1px solid",
         borderColor: "divider",
-        height: "100vh",
-        position: "sticky",
+        height: isTemporary ? "100%" : "100vh",
+        position: isTemporary ? "static" : "sticky",
         top: 0,
-        display: { xs: "none", md: "flex" },
+        display: isTemporary ? "flex" : { xs: "none", md: "flex" },
         flexDirection: "column",
         bgcolor: "background.paper",
         overflowY: "auto",

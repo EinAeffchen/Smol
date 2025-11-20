@@ -25,6 +25,7 @@ import { ActionDialogs } from "../components/ActionDialogs";
 import { MediaDisplay } from "../components/MediaDisplay";
 import { MediaHeader } from "../components/MediaHeader";
 import { MediaContentTabs } from "../components/MediaContentTabs";
+import { SwipeHint } from "../components/SwipeHint";
 
 import { Media, MediaDetail, Tag, Task } from "../types";
 import { getMedia } from "../services/media";
@@ -213,10 +214,6 @@ export default function MediaDetailPage() {
       if (!hintShown) {
         setShowSwipeHint(true);
         sessionStorage.setItem("swipeHintShown", "true");
-        const timer = setTimeout(() => {
-          setShowSwipeHint(false);
-        }, 3500);
-        return () => clearTimeout(timer);
       }
     }
   }, [isMobile, neighbors.nextId, neighbors.previousId]);
@@ -302,7 +299,7 @@ export default function MediaDetailPage() {
   const confirmDeleteRecord = async () => {
     if (!detail || !detail.media) return;
     try {
-      removeItem(mediaListKey, detail.media.id)
+      if (mediaListKey) removeItem(mediaListKey, detail.media.id);
       await deleteMediaRecord(detail.media.id);
       setSnackbar({
         open: true,
@@ -348,11 +345,13 @@ export default function MediaDetailPage() {
       onClose={handleClose}
       fullWidth
       maxWidth="xl"
+      fullScreen={isMobile}
       slotProps={{
         backdrop: { sx: { backgroundColor: (theme) => `rgba(0,0,0,${theme.palette.mode === 'dark' ? 0.85 : 0.8})` } },
         paper: {
           sx: {
-            mt: { xs: 2, sm: 4, md: 8 },
+            mt: { xs: 0, sm: 4, md: 8 },
+            borderRadius: { xs: 0, sm: 2 },
           },
         },
       }}
@@ -370,11 +369,15 @@ export default function MediaDetailPage() {
           top: 8,
           zIndex: 1000,
           color: "grey.500",
+          bgcolor: { xs: "rgba(0,0,0,0.3)", sm: "transparent" },
+          "&:hover": {
+             bgcolor: { xs: "rgba(0,0,0,0.5)", sm: "rgba(0,0,0,0.04)" },
+          }
         }}
       >
         <CloseIcon />
       </IconButton>
-      <DialogContent sx={{ p: { xs: 0.8, sm: 2, md: 3 } }}>
+      <DialogContent sx={{ p: { xs: 0, sm: 2, md: 3 } }}>
         {isLoading ? (
           <Box
             sx={{
@@ -388,7 +391,7 @@ export default function MediaDetailPage() {
           </Box>
         ) : (
           detail && (
-            <Container maxWidth="xl" sx={{ pt: 2, pb: 6 }}>
+            <Container maxWidth="xl" sx={{ pt: { xs: 0, sm: 2 }, pb: { xs: 2, sm: 6 }, px: { xs: 0, sm: 3 } }}>
               {task &&
                 (task.status === "running" || task.status === "pending") && (
                   <Box mb={2}>
@@ -456,42 +459,7 @@ export default function MediaDetailPage() {
                     initialTime={sceneStartTime ?? undefined}
                   />
                 </Box>
-                <Fade in={showSwipeHint}>
-                  <Box
-                    sx={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      px: 2,
-                      color: (theme) => theme.palette.common.white,
-                      pointerEvents: "none", // Allow swipes to pass through
-                      zIndex: 100,
-                    }}
-                  >
-                    <ArrowBackIosNew
-                      sx={{ fontSize: "2.5rem", opacity: 0.6 }}
-                    />
-                    <Typography
-                      sx={{
-                        bgcolor: (theme) => `rgba(0,0,0,${theme.palette.mode==='dark'?0.6:0.5})`,
-                        px: 2,
-                        py: 1,
-                        borderRadius: 2,
-                        userSelect: "none",
-                      }}
-                    >
-                      Swipe to navigate
-                    </Typography>
-                    <ArrowForwardIos
-                      sx={{ fontSize: "2.5rem", opacity: 0.6 }}
-                    />
-                  </Box>
-                </Fade>
+                {showSwipeHint && <SwipeHint />}
                 {!isMobile && neighbors.nextId && (
                   <IconButton
                     onClick={() => handleNavigate("next")}
