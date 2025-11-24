@@ -4,196 +4,126 @@
 
 [![Buy Me a Coffee](https://img.shields.io/badge/buy%20me%20a%20coffee-donate-yellow?logo=buymeacoffee&style=flat-square)](https://buymeacoffee.com/einaeffchen)
 
-## Offline-first Memory Organization & Intelligent Discovery Engine
+# Omoide
+**Offline-first Memory Organization & Intelligent Discovery Engine**
 
-Self‑hosted, offline‑capable photo & video library with AI features. No cloud services required. Everything runs locally after an initial one‑time model setup.
-
-<a href="https://photos.dummer.dev">Read‑only Demo</a>
-
-![Screenshot: Library Grid](docs/screenshots/library-grid.png)
+Omoide is a self-hosted, offline-capable photo and video library designed for privacy and longevity. It uses local AI to organize your media, making it searchable and discoverable without sending a single byte to the cloud.
 
 ---
 
-## Highlights
+## 📥 Download
 
-- **Offline by design:**
-  - Uses SQLite + sqlite‑vec for metadata and vector search. No external DB.
-  - Runs face detection, clustering, tagging, and semantic search locally.
-  - After first‑run model downloads, the app works fully offline.
+**[Download the latest release for Windows](https://github.com/EinAeffchen/Omoide/releases/latest)**
 
-- **Face recognition & people:**
-  - Detects faces (InsightFace), stores thumbnails and embeddings.
-  - Clusters faces into people using HDBSCAN; assign names; browse appearances.
-
-- **Semantic search & auto‑tagging:**
-  - OpenCLIP embeddings enable multi‑lingual text → image search and “search by image”.
-  - Optional auto‑tagging suggests broad scene/subject tags; add your custom tags.
-
-- **Duplicates & similarity:**
-  - Perceptual hash (pHash) to find exact/near‑exact image duplicates.
-  - Vector similarity for “more like this”.
-
-- **Maps & EXIF:**
-  - Extracts EXIF; shows media on a world map; edit/add GPS in the UI.
-
-- **Profiles:**
-  - Switch between libraries (“profiles”). Safe fallback if a profile path is missing.
-
-- **Desktop or Docker:**
-  - Packaged desktop app (PyInstaller + PySide6/WebView) or Docker container.
+*Also available as a [Docker container](#-quick-start-docker) for Linux/NAS.*
 
 ---
 
-## Features
+## ✨ Key Features
 
-- **Library**: Infinite‑scroll grid for photos and videos; per‑item detail with faces, tags, EXIF, scenes.
-- **Face pipeline**: Detect → embed → cluster persons; assign names; view person pages and appearances.
-- **Search**:
-  - Text search (multi‑lingual via CLIP) over your media embeddings.
-  - “Search by image” uploads a reference picture and finds similar content.
-- **Auto‑tagging**: Optional CLIP‑based category tags + custom tag support.
-- **Duplicates**: pHash duplicate groups with select/cleanup actions.
-- **Video scenes**: Scene thumbnails and representative frames.
-- **EXIF & GPS**: Read EXIF; add/update GPS; map view of media locations.
-- **Tasks**: Background tasks for scan, process media, cluster persons, find duplicates, clean missing files. Safe cancel and progress reporting.
-- **Profiles**: Multiple library roots; add/switch/remove profiles from Settings.
-- **Read‑only mode**: Serve an immutable library safely.
-- **Co-appearance graph**: See the relationships between the people in your media through their co-appearances.
----
+### 🔒 Private & Offline
+- **100% Local**: No cloud services, no subscriptions. Your data stays on your drive.
+- **Offline-First**: Works fully offline after the initial model download.
+- **Portable**: Run it as a desktop app on Windows or host it via Docker.
 
-## Offline Operation
+### 🧠 Intelligent Organization
+- **Face Recognition**: Automatically detects and clusters faces. Name them once, and Omoide finds them everywhere.
+- **Semantic Search**: Search for "dog in the snow" or "birthday party" using natural language. Powered by OpenCLIP.
+- **Auto-Tagging**: Optional AI categorization of your images.
+- **Co-appearance Graph**: Visualize how people in your library are connected.
 
-- After first run, all processing happens locally. What is needed initially:
-  - CLIP model weights (OpenCLIP) for embeddings/search/auto‑tagging.
-  - InsightFace ONNX models for detection/recognition.
-  - FFmpeg binaries available in PATH (desktop). Docker image includes FFmpeg.
-- Models are cached under your profile’s `.omoide/models` directory. You can pre‑place models there to avoid any network access.
-- Vector search uses the bundled `sqlite‑vec` extension; no external services.
+### ⚡ Powerful Tools
+- **Duplicate Detection**: Find and clean up exact or near-duplicates using perceptual hashing.
+- **Map View**: Explore your photos on a world map. Edit or add GPS data directly.
+- **Video Support**: Scans and plays videos, extracting scenes for easy preview.
+- **Orphan Face Management**: Review and merge fragmented face clusters.
+
+### 🛠️ Flexible Management
+- **Multiple Profiles**: Switch between different libraries easily.
+- **Read-Only Mode**: safely serve your archive to others.
+- **Background Tasks**: Robust task management for scanning and processing large libraries.
 
 ---
 
-## Quick Start (Docker)
+## 📸 Screenshots
 
-> For arm64, ensure `sqlite‑vec` matches your platform (e.g. 0.1.7a2) and build with `docker buildx build --platform linux/arm64 …`.
+| Library Grid | Media Detail |
+|:---:|:---:|
+| ![Library grid](docs/screenshots/library-grid.png) | ![Media detail](docs/screenshots/media-detail.png) |
 
-1) Copy env file:
+| Semantic Search | People Overview |
+|:---:|:---:|
+| ![Text search](docs/screenshots/search-text.png) | ![People overview](docs/screenshots/people-list.png) |
+
+| Map View | Co-appearance Graph |
+|:---:|:---:|
+| ![Map](docs/screenshots/map.png) | ![Co-Appearance Graph](docs/screenshots/coappearance-graph.png) |
+
+---
+
+## 🚀 Quick Start (Docker)
+
+Perfect for NAS or always-on servers.
+
+1.  **Copy the template**:
+    ```bash
+    cp .env.template .env
+    ```
+
+2.  **Configure `.env`**:
+    Set your media directories and ports.
+
+3.  **Run**:
+    ```bash
+    docker compose up -d
+    ```
+
+4.  **Open**: `http://localhost:8123`
+
+> **Note for arm64**: Ensure `sqlite-vec` matches your platform (e.g. 0.1.7a2) and build with `docker buildx`.
+
+---
+
+## 🖥️ Quick Start (Desktop Development)
+
+Requirements: Python 3.12+, FFmpeg, Node 18+.
 
 ```bash
-cp .env.template .env
-```
-
-2) Adjust variables in `.env` (host media/data dirs, ports).
-
-3) Add omoide.env for further customization
-E.g. to set the system to read only, set `OMOIDE_GENERAL__READ_ONLY=true`
-The env generally follows the pattern of `OMOIDE_` name of the config object, name of the variable. 
-For all configs see: [/app/config.py](/app/config.py#L579)
-
-4) Start:
-
-```bash
-docker compose up -d
-```
-
-4) Open: http://localhost:8123
-
----
-
-## Quick Start (Desktop)
-
-- Requirements: Python 3.12+, FFmpeg in PATH, Node 18+ (to build the UI), platform toolchain.
-- Build frontend then run locally or build a binary:
-
-```bash
-# Build frontend
+# 1. Build Frontend
 cd frontend && npm ci && npm run build && cd ..
 
-# Run from source
+# 2. Run Backend
 uvicorn app.main:app --host 127.0.0.1 --port 8123
-
-# Or build a binary (PyInstaller)
-pyinstaller main.spec
-dist/omoide-*/omoide-*.exe
 ```
 
-On first start, open Settings → Profiles and set your media folder(s). Click Scan, then Process Media, then Cluster Persons.
+To build a standalone binary:
+```bash
+pyinstaller main.spec
+```
 
 ---
 
-## Screenshots
+## 🧩 How It Works
 
-- Library grid: ![Library grid](docs/screenshots/library-grid.png)
-- Media detail (faces, tags, EXIF): ![Media detail](docs/screenshots/media-detail.png)
-- Search by text: ![Text search](docs/screenshots/search-text.png)
-- Search for scenes ![Scene search](docs/screenshots/search-scene.PNG)
-- People overview: ![People overview](docs/screenshots/people-list.png)
-- Person detail: ![Perosn Detailview](docs/screenshots/person-detail.png)
-- Duplicates: ![Duplicates](docs/screenshots/duplicates.png)
-- Map view: ![Map](docs/screenshots/map.png)
-- Orphan faces review: ![Orphan faces](docs/screenshots/orphan-faces.png)
-- Configuration / Profiles: ![Profiles](docs/screenshots/settings-profiles.png)
-- Co-appearance graph: ![Co-Appearance Graph](docs/screenshots/coappearance-graph.png)
+- **Backend**: FastAPI + SQLModel (SQLite).
+- **Vector Search**: `sqlite-vec` for high-performance similarity search.
+- **AI Models**:
+    - **Vision**: OpenCLIP for embeddings and search.
+    - **Faces**: InsightFace (ONNX) for detection and recognition.
+    - **Clustering**: HDBSCAN for grouping faces.
+- **Frontend**: React + MUI.
 
 ---
 
-## How It Works (Tech Overview)
+## 📄 License
 
-- Backend: FastAPI + SQLModel (SQLite/WAL), `sqlite‑vec` for vector search.
-- Embeddings: OpenCLIP (CPU by default) via `open‑clip‑torch`.
-- Faces: InsightFace with ONNXRuntime (CPU), stored as normalized vectors.
-- Clustering: HDBSCAN groups faces into people.
-- Similarity: cosine distances in `media_embeddings` and `face_embeddings` virtual tables.
-- Thumbnails/Scenes: FFmpeg extracts frames for images/videos.
-- UI: React + MUI; desktop uses PySide6 + pywebview to embed the UI.
+**PolyForm Noncommercial License 1.0.0**
+Free for personal, non-commercial use. See `LICENSE.md` for details.
 
 ---
 
-## Tips & Troubleshooting
+## ❤️ Support
 
-- FFmpeg must be available to generate thumbnails and probe media (Docker image includes it).
-- Profiles: if a previously selected profile path is missing, the app falls back to a safe local profile instead of crashing; relink from Settings.
-- Large scans: scanning is batched and uses path range preloads for speed; model downloads can take time on first run.
+Omoide is a passion project maintained in my free time. If it helps you rediscover your memories, consider supporting its development!
 
----
-
-## License
-
-- Project license: PolyForm Noncommercial License 1.0.0. See `LICENSE.md`.
-- Third‑party software remains under its own licenses. See `THIRD_PARTY_NOTICES.md`.
-
-Noncommercial only: You may use, run, modify, and share this project for non‑commercial purposes, but commercial use is not permitted under this license.
-
-## Redistribution Notes (Binaries and Docker)
-
-- Binaries (PyInstaller):
-  - The application may bundle Qt/PySide6 components. PySide6 is licensed under LGPL‑3.0.
-  - Include copies of the LGPL‑3.0 and relevant Qt/PySide6 license texts in your distribution, allow reverse engineering for debugging such modifications, and ensure dynamic linking to Qt libraries (PyInstaller typically bundles shared libraries).
-  - If you include Apache‑2.0 components with `NOTICE` files (e.g., some ML libraries), include their `NOTICE` content.
-
-- Docker Image:
-  - The image installs `ffmpeg` via Debian packages. FFmpeg’s licenses and notices are included in the image (e.g., `/usr/share/doc/ffmpeg/`). Preserve those when redistributing the image and comply with the license terms for enabled codecs.
-  - The image contains additional third‑party packages installed via `uv` (Python). Refer to `THIRD_PARTY_NOTICES.md` for attribution and consider including generated license reports in releases.
-
-## Third‑Party License Reports (Optional)
-
-For precise attribution per release, you can generate machine‑readable reports:
-
-- Python:
-  - `uv pip install pip-licenses`
-  - `uv run pip-licenses --with-system --format=markdown --output-file THIRD_PARTY_LICENSES_PY.md`
-
-- Frontend:
-  - `npm i -g license-checker`
-  - `license-checker --production --summary --json > THIRD_PARTY_LICENSES_JS.json`
-
----
-## ❤️ Support Development
-
-Omoide is built and maintained in my free time.  
-If it helps you organize your memories, please consider supporting the project:  
-
-- [☕ Buy Me a Coffee](https://buymeacoffee.com/einaeffchen)  
-
-Your donations enable me to spend more time on optimizing Omoide and adding new features.
-
----
+[**☕ Buy Me a Coffee**](https://buymeacoffee.com/einaeffchen)
