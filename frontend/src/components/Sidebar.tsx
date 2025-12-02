@@ -90,7 +90,7 @@ export function Sidebar({ variant = "permanent", onClose }: SidebarProps) {
 
   const pathsToExcludeInReadOnly: string[] = [
     "/orphanfaces",
-    "/maptagger",
+    "/geotagger",
     "/duplicates",
     "/configuration",
     "/missing",

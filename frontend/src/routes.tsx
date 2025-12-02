@@ -32,7 +32,7 @@ export const AppRoutes = () => {
           <Route path="/images" element={<ImagesPage />} />
           <Route path="/map" element={<MapPage />} />
           <Route
-            path="/maptagger"
+            path="/geotagger"
             element={
               <WriteModeBoundary description="Geo-tagging tools are disabled while the system is in read-only mode.">
                 <MapEditorPage />
