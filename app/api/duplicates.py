@@ -1,3 +1,4 @@
+import os
 from collections import defaultdict
 from itertools import combinations
 from pathlib import Path
@@ -171,17 +172,20 @@ def get_duplicate_stats(session: Session = Depends(get_session)) -> DuplicateSta
     group_sizes: dict[int, list[int]] = defaultdict(list)
     folder_totals: dict[str, dict[str, int]] = defaultdict(lambda: {"items": 0, "size": 0})
     folder_groups: dict[str, set[int]] = defaultdict(set)
+    folder_labels: dict[str, str] = {}
     type_items = {"image": 0, "video": 0}
     type_sizes = {"image": 0, "video": 0}
     type_groups: dict[str, set[int]] = {"image": set(), "video": set()}
 
-    def folder_from_path(path_value: str | None) -> str:
+    def folder_from_path(path_value: str | None) -> tuple[str, str]:
         if not path_value:
-            return "Unknown"
+            return ("unknown", "Unknown")
         try:
-            return Path(path_value).parent.as_posix()
+            folder_display = Path(path_value).parent.as_posix()
         except Exception:
-            return str(path_value)
+            folder_display = str(path_value)
+        folder_key = folder_display.casefold() if os.name == "nt" else folder_display
+        return (folder_key, folder_display)
 
     for group_id, media_path, media_size, media_duration in rows:
         if group_id not in active_group_ids:
@@ -196,11 +200,12 @@ def get_duplicate_stats(session: Session = Depends(get_session)) -> DuplicateSta
         type_sizes[media_type] += size_value
         type_groups[media_type].add(group_id)
 
-        folder_key = folder_from_path(media_path)
+        folder_key, folder_display = folder_from_path(media_path)
         totals = folder_totals[folder_key]
         totals["items"] += 1
         totals["size"] += size_value
         folder_groups[folder_key].add(group_id)
+        folder_labels.setdefault(folder_key, folder_display)
 
     total_groups = len(active_group_ids)
     total_reclaimable = sum(
@@ -220,12 +225,12 @@ def get_duplicate_stats(session: Session = Depends(get_session)) -> DuplicateSta
 
     folder_entries = [
         DuplicateFolderStat(
-            folder=folder_name,
+            folder=folder_labels.get(folder_key, folder_key),
             items=totals["items"],
-            groups=len(folder_groups[folder_name]),
+            groups=len(folder_groups[folder_key]),
             size_bytes=totals["size"],
         )
-        for folder_name, totals in folder_totals.items()
+        for folder_key, totals in folder_totals.items()
     ]
     folder_entries.sort(key=lambda entry: (entry.items, entry.size_bytes), reverse=True)
 
