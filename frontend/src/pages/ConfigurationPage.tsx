@@ -63,7 +63,6 @@ const facePresets: Record<
     face_match_min_percent: 80,
     existing_person_cosine_threshold: 0.86,
     existing_person_min_cosine_margin: 0.07,
-    existing_person_min_appearances: 4,
     face_recognition_min_face_pixels: 1600,
     person_min_face_count: 3,
     person_min_media_count: 2,
@@ -81,7 +80,6 @@ const facePresets: Record<
     face_match_min_percent: 75,
     existing_person_cosine_threshold: 0.8,
     existing_person_min_cosine_margin: 0.05,
-    existing_person_min_appearances: 3,
     face_recognition_min_face_pixels: 1600,
     person_min_face_count: 2,
     person_min_media_count: 2,
@@ -99,7 +97,6 @@ const facePresets: Record<
     face_match_min_percent: 70,
     existing_person_cosine_threshold: 0.75,
     existing_person_min_cosine_margin: 0.03,
-    existing_person_min_appearances: 2,
     face_recognition_min_face_pixels: 1200,
     person_min_face_count: 2,
     person_min_media_count: 2,
@@ -395,7 +392,8 @@ export default function ConfigurationPage() {
     if (!config?.processors.image_embedding_processor_active && value) {
       setSnackbar({
         open: true,
-        message: "Enable the image embeddings processor before turning on Auto Tagger.",
+        message:
+          "Enable the image embeddings processor before turning on Auto Tagger.",
         severity: "info",
       });
       return;
@@ -467,9 +465,7 @@ export default function ConfigurationPage() {
     setFaceSettingsMode("presets");
   };
 
-  const setFaceValue = <
-    K extends keyof AppConfig["face_recognition"]
-  >(
+  const setFaceValue = <K extends keyof AppConfig["face_recognition"]>(
     key: K,
     value: AppConfig["face_recognition"][K]
   ) => {
@@ -660,9 +656,8 @@ export default function ConfigurationPage() {
                   {profileHealth &&
                     (!profileHealth.active_exists || !profileHealth.has_db) && (
                       <Alert severity="warning" sx={{ mt: 2 }}>
-                        The active profile looks missing or empty. If you
-                        moved it, choose the new location and click Save to
-                        relink.
+                        The active profile looks missing or empty. If you moved
+                        it, choose the new location and click Save to relink.
                         <Button
                           size="small"
                           sx={{ ml: 2 }}
@@ -746,7 +741,11 @@ export default function ConfigurationPage() {
                     selectedProfilePath !== profiles.active_path && (
                       <Typography
                         variant="caption"
-                        sx={{ mt: 1, display: "block", color: "text.secondary" }}
+                        sx={{
+                          mt: 1,
+                          display: "block",
+                          color: "text.secondary",
+                        }}
                       >
                         Selected profile will become active when you click Save
                         below.
@@ -928,9 +927,7 @@ export default function ConfigurationPage() {
                 control={
                   <Switch
                     checked={config.general.enable_people}
-                    onChange={(e) =>
-                      handleEnablePeopleToggle(e.target.checked)
-                    }
+                    onChange={(e) => handleEnablePeopleToggle(e.target.checked)}
                   />
                 }
                 label="Enable People"
@@ -947,7 +944,11 @@ export default function ConfigurationPage() {
                   <Switch
                     checked={config.general.meme_mode}
                     onChange={(e) =>
-                      handleValueChange("general", "meme_mode", e.target.checked)
+                      handleValueChange(
+                        "general",
+                        "meme_mode",
+                        e.target.checked
+                      )
                     }
                   />
                 }
@@ -984,7 +985,9 @@ export default function ConfigurationPage() {
               value={config.general.person_relationship_max_nodes}
               onChange={(e) => {
                 const parsed = parseInt(e.target.value, 10);
-                const sanitized = Number.isFinite(parsed) ? Math.max(1, parsed) : 1;
+                const sanitized = Number.isFinite(parsed)
+                  ? Math.max(1, parsed)
+                  : 1;
                 handleValueChange(
                   "general",
                   "person_relationship_max_nodes",
@@ -1059,7 +1062,8 @@ export default function ConfigurationPage() {
                 variant="caption"
                 sx={{ ml: 6, mt: -1, display: "block" }}
               >
-                Flags missing files after each scan so you can review or auto-remove them later.
+                Flags missing files after each scan so you can review or
+                auto-remove them later.
               </Typography>
               <FormControlLabel
                 control={
@@ -1080,7 +1084,8 @@ export default function ConfigurationPage() {
                 variant="caption"
                 sx={{ ml: 6, mt: -1, display: "block" }}
               >
-                When enabled, missing files are deleted automatically after the grace period below.
+                When enabled, missing files are deleted automatically after the
+                grace period below.
               </Typography>
               <TextField
                 label="Cleanup Grace Period (hours)"
@@ -1398,24 +1403,6 @@ export default function ConfigurationPage() {
                 </Grid>
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
-                    label="Existing Person Min Appearances"
-                    value={
-                      config.face_recognition.existing_person_min_appearances
-                    }
-                    onChange={(e) =>
-                      setFaceValue(
-                        "existing_person_min_appearances",
-                        parseInt(e.target.value, 10)
-                      )
-                    }
-                    fullWidth
-                    margin="normal"
-                    type="number"
-                    helperText="Do not attach to very small/immature persons (reduces noise)"
-                  />
-                </Grid>
-                <Grid size={{ xs: 12, sm: 6 }}>
-                  <TextField
                     label="Min Face Pixels"
                     value={
                       config.face_recognition.face_recognition_min_face_pixels
@@ -1483,9 +1470,7 @@ export default function ConfigurationPage() {
                 <Grid size={{ xs: 12, sm: 6 }}>
                   <TextField
                     label="Person Cluster Max L2 Radius"
-                    value={
-                      config.face_recognition.person_cluster_max_l2_radius
-                    }
+                    value={config.face_recognition.person_cluster_max_l2_radius}
                     onChange={(e) =>
                       setFaceValue(
                         "person_cluster_max_l2_radius",
@@ -1574,8 +1559,7 @@ export default function ConfigurationPage() {
                     <Select
                       labelId="hdbscan-method-manual-label"
                       value={
-                        config.face_recognition
-                          .hdbscan_cluster_selection_method
+                        config.face_recognition.hdbscan_cluster_selection_method
                       }
                       label="HDBSCAN Cluster Selection Method"
                       onChange={(e) =>
@@ -1602,8 +1586,7 @@ export default function ConfigurationPage() {
                   <TextField
                     label="HDBSCAN Selection Epsilon"
                     value={
-                      config.face_recognition
-                        .hdbscan_cluster_selection_epsilon
+                      config.face_recognition.hdbscan_cluster_selection_epsilon
                     }
                     onChange={(e) =>
                       setFaceValue(
@@ -1641,7 +1624,8 @@ export default function ConfigurationPage() {
                   handleValueChange(
                     "duplicates",
                     "duplicate_auto_handling",
-                    e.target.value as AppConfig["duplicates"]["duplicate_auto_handling"]
+                    e.target
+                      .value as AppConfig["duplicates"]["duplicate_auto_handling"]
                   )
                 }
               >
@@ -1671,7 +1655,8 @@ export default function ConfigurationPage() {
                   handleValueChange(
                     "duplicates",
                     "duplicate_auto_keep_rule",
-                    e.target.value as AppConfig["duplicates"]["duplicate_auto_keep_rule"]
+                    e.target
+                      .value as AppConfig["duplicates"]["duplicate_auto_keep_rule"]
                   )
                 }
               >
@@ -1799,7 +1784,8 @@ export default function ConfigurationPage() {
             variant="caption"
             sx={{ ml: 6, mt: -1, display: "block" }}
           >
-            Generates CLIP embeddings for search, similarity, and related content.
+            Generates CLIP embeddings for search, similarity, and related
+            content.
           </Typography>
           <FormControlLabel
             control={
@@ -1849,8 +1835,8 @@ export default function ConfigurationPage() {
           }
         >
           A newer version
-          {latestVersionLabel ? ` ${latestVersionLabel}` : ""} is available.
-          You are running {updateInfo?.current_version}.
+          {latestVersionLabel ? ` ${latestVersionLabel}` : ""} is available. You
+          are running {updateInfo?.current_version}.
         </Alert>
       )}
       {showUpdateError && (

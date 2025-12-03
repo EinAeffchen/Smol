@@ -68,10 +68,13 @@ Perfect for NAS or always-on servers.
 1.  **Copy the template**:
     ```bash
     cp .env.template .env
+    cp omoide.env.example omoide.env
     ```
 
 2.  **Configure `.env`**:
     Set your media directories and ports.
+    Ensure the folders you set in your .env actually exist in your system, to prevent permission issues on automatic creation.
+
 
 3.  **Run**:
     ```bash

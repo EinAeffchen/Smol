@@ -781,7 +781,7 @@ def assign_to_existing_persons(
 
             min_apps = getattr(
                 settings.face_recognition,
-                "existing_person_min_appearances",
+                "existing_person_min_media_count",
                 0,
             )
             if (person.appearance_count or 0) < int(min_apps):

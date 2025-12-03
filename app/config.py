@@ -431,7 +431,6 @@ FACE_RECOGNITION_PRESETS: dict[FaceClusteringPreset, dict[str, float | int | str
         "face_match_min_percent": 80,
         "existing_person_cosine_threshold": 0.86,
         "existing_person_min_cosine_margin": 0.07,
-        "existing_person_min_appearances": 4,
         "face_recognition_min_face_pixels": 1600,
         "person_min_face_count": 3,
         "person_min_media_count": 2,
@@ -449,7 +448,6 @@ FACE_RECOGNITION_PRESETS: dict[FaceClusteringPreset, dict[str, float | int | str
         "face_match_min_percent": 75,
         "existing_person_cosine_threshold": 0.80,
         "existing_person_min_cosine_margin": 0.05,
-        "existing_person_min_appearances": 3,
         "face_recognition_min_face_pixels": 1600,
         "person_min_face_count": 2,
         "person_min_media_count": 2,
@@ -467,7 +465,6 @@ FACE_RECOGNITION_PRESETS: dict[FaceClusteringPreset, dict[str, float | int | str
         "face_match_min_percent": 70,
         "existing_person_cosine_threshold": 0.75,
         "existing_person_min_cosine_margin": 0.03,
-        "existing_person_min_appearances": 2,
         "face_recognition_min_face_pixels": 1200,
         "person_min_face_count": 2,
         "person_min_media_count": 2,
@@ -484,7 +481,7 @@ FACE_RECOGNITION_PRESETS: dict[FaceClusteringPreset, dict[str, float | int | str
 
 
 class FaceRecognitionSettings(BaseModel):
-    preset: FaceClusteringPreset = FaceClusteringPreset.NORMAL
+    preset: FaceClusteringPreset = FaceClusteringPreset.LOOSE
     # minimum confidence needed to extract a face
     face_recognition_min_confidence: float = 0.5
     # minimum threshold for a face needed to be matched to a person
@@ -493,8 +490,6 @@ class FaceRecognitionSettings(BaseModel):
     existing_person_cosine_threshold: float = 0.80
     # requires a margin between best and second-best match (cosine space)
     existing_person_min_cosine_margin: float = 0.05
-    # avoid attaching to very small/immature persons (helps prevent noise)
-    existing_person_min_appearances: int = 3
     # minimum size of a face in pixels to be detected. Base size for detection
     # is the original image, not a thumbnail!
     face_recognition_min_face_pixels: int = 1600
@@ -615,24 +610,36 @@ def load_config_from_file() -> dict:
         return yaml.safe_load(f) or {}
 
 
-def _coerce_env_value(value: str) -> Any:
-    lowered = value.lower()
+def _coerce_env_value(value: str, current_value: Any = None) -> Any:
+    """
+    Convert raw env strings into reasonable Python types.
+
+    Uses the existing config value to disambiguate list overrides so that
+    blank list values (e.g., CUSTOM_TAGS=) become [] instead of "".
+    """
+    trimmed = value.strip()
+
+    # Keep list overrides usable (comma-separated or explicit empty)
+    if isinstance(current_value, list) or "," in trimmed:
+        if trimmed == "":
+            return []
+        return [v.strip() for v in trimmed.split(",") if v.strip()]
+
+    lowered = trimmed.lower()
     if lowered in {"true", "false"}:
         return lowered == "true"
     if lowered == "null":
         return None
     try:
-        if "_" not in value:
-            return int(value)
+        if "_" not in trimmed:
+            return int(trimmed)
     except ValueError:
         pass
     try:
-        return float(value)
+        return float(trimmed)
     except ValueError:
         pass
-    if "," in value:
-        return [v.strip() for v in value.split(",") if v.strip()]
-    return value
+    return trimmed
 
 
 def _apply_env_overrides(config_data: dict) -> None:
@@ -651,7 +658,8 @@ def _apply_env_overrides(config_data: dict) -> None:
                 target[segment_lower] = current
             target = current
         final_key = path_segments[-1].lower()
-        target[final_key] = _coerce_env_value(raw_value)
+        current_value = target.get(final_key)
+        target[final_key] = _coerce_env_value(raw_value, current_value)
 
 
 def load_settings() -> AppSettings:

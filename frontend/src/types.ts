@@ -400,7 +400,6 @@ export interface AppConfig {
     face_match_min_percent: number;
     existing_person_cosine_threshold: number;
     existing_person_min_cosine_margin: number;
-    existing_person_min_appearances: number;
     face_recognition_min_face_pixels: number;
     person_min_face_count: number;
     person_min_media_count: number;
