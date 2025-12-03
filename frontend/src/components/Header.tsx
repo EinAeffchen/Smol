@@ -16,6 +16,8 @@ import {
   Typography,
   Badge,
   Tooltip,
+  Button,
+  useMediaQuery,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import SearchIcon from "@mui/icons-material/Search";
@@ -31,18 +33,71 @@ import { useTaskEvents } from "../TaskEventsContext";
 import { Sidebar } from "./Sidebar";
 
 function TaskStatusButton({ onClick }: { onClick: () => void }) {
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const { activeTasks } = useTaskEvents();
   const activeCount = activeTasks.filter(
     (t) => t.status === "running" || t.status === "pending"
   ).length;
+  const hasActive = activeCount > 0;
+
+  if (isMobile) {
+    return (
+      <Tooltip title="Tasks & Processing — run scans, tagging, cleanup, and other jobs">
+        <IconButton
+          onClick={onClick}
+          color={hasActive ? "primary" : "default"}
+          size="large"
+          sx={{ p: 1 }}
+        >
+          <Badge badgeContent={activeCount} color="error">
+            <AssignmentIcon />
+          </Badge>
+        </IconButton>
+      </Tooltip>
+    );
+  }
 
   return (
-    <Tooltip title="Tasks & Processing">
-      <IconButton onClick={onClick} color={activeCount > 0 ? "primary" : "default"}>
-        <Badge badgeContent={activeCount} color="primary">
-          <AssignmentIcon />
+    <Tooltip title="Tasks & Processing — run scans, tagging, cleanup, and other jobs">
+      <Button
+        onClick={onClick}
+        variant={hasActive ? "contained" : "outlined"}
+        color="primary"
+        size="small"
+        disableElevation
+        sx={{
+          textTransform: "none",
+          borderRadius: 2,
+          px: 1.5,
+          py: 0.75,
+          gap: 1,
+          minHeight: 42,
+          boxShadow: hasActive ? 2 : 0,
+          bgcolor: hasActive ? "primary.main" : "background.paper",
+          color: hasActive ? "primary.contrastText" : "text.primary",
+          "&:hover": {
+            bgcolor: hasActive ? "primary.dark" : undefined,
+          },
+        }}
+      >
+        <Badge
+          badgeContent={activeCount}
+          color="error"
+          overlap="circular"
+          sx={{ "& .MuiBadge-badge": { fontWeight: 700, minWidth: 18 } }}
+        >
+          <AssignmentIcon fontSize="small" />
         </Badge>
-      </IconButton>
+        <Box sx={{ textAlign: "left", lineHeight: 1.1 }}>
+          <Typography variant="body2" sx={{ fontWeight: 700 }}>
+            Tasks & Processing
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.8 }}>
+            Run scans & jobs
+          </Typography>
+        </Box>
+      </Button>
     </Tooltip>
   );
 }
